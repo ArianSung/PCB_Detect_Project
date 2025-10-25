@@ -53,6 +53,11 @@ csharp_winforms/**/obj/
 *.dll
 *.pdb
 
+# 환경 변수 파일 (개인 설정)
+.env
+*.env
+!.env.example
+
 # 기타
 *.zip
 *.tar.gz

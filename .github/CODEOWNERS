@@ -1,0 +1,40 @@
+# CODEOWNERS - PCB 불량 검사 시스템
+# 각 디렉토리별 담당 팀원 지정
+# 형식: 경로 @github사용자명1 @github사용자명2
+
+# 전체 프로젝트 리드 (모든 PR 리뷰 필요)
+* @팀리더
+
+# Flask 서버 및 추론 엔진 (Flask 팀 2명)
+/src/server/ @flask팀원1 @flask팀원2
+/src/inference/ @flask팀원1 @flask팀원2
+
+# AI 모델 학습 및 평가 (AI 모델 팀 2명)
+/src/models/ @ai모델팀원1 @ai모델팀원2
+/src/training/ @ai모델팀원1 @ai모델팀원2
+/src/evaluation/ @ai모델팀원1 @ai모델팀원2
+/configs/yolo_config.yaml @ai모델팀원1 @ai모델팀원2
+
+# 라즈베리파이 클라이언트 및 GPIO (라즈베리파이 팀 2명)
+/raspberry_pi/ @라즈베리파이팀원1 @라즈베리파이팀원2
+/configs/camera_config.yaml @라즈베리파이팀원1 @라즈베리파이팀원2
+
+# C# WinForms 모니터링 앱 (C# 팀 1~2명)
+/csharp_winforms/ @csharp팀원1 @csharp팀원2
+
+# 데이터베이스 스키마 (Flask 팀 또는 공통)
+/database/ @flask팀원1 @flask팀원2
+
+# API 계약 및 공통 설정 (전체 팀 리뷰 필요)
+/docs/API_Contract.md @flask팀원1 @라즈베리파이팀원1 @csharp팀원1
+/configs/server_config.yaml @flask팀원1 @flask팀원2
+
+# 문서 (해당 분야 담당자)
+/docs/Flask_Server_Setup.md @flask팀원1
+/docs/RaspberryPi_Setup.md @라즈베리파이팀원1
+/docs/CSharp_WinForms_Guide.md @csharp팀원1
+/docs/Dataset_Guide.md @ai모델팀원1
+/docs/Phase1_YOLO_Setup.md @ai모델팀원1
+
+# 설정 파일 템플릿 (전체 팀 알림 필요)
+**/.env.example @팀리더 @flask팀원1 @라즈베리파이팀원1 @csharp팀원1
