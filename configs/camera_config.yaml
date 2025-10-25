@@ -1,0 +1,43 @@
+# 웹캠 클라이언트 설정 (라즈베리파이)
+
+# 카메라 설정
+camera:
+  camera_id: left  # left 또는 right
+  camera_index: 0  # OpenCV 카메라 인덱스
+  resolution:
+    width: 640
+    height: 480
+  fps: 10  # 프레임 전송 속도
+  jpeg_quality: 85  # JPEG 압축 품질 (1-100)
+
+# 서버 설정
+server:
+  url: http://192.168.0.10:5000  # Flask 서버 주소 (로컬)
+  # url: http://100.x.x.x:5000  # Tailscale VPN 주소 (원격)
+  endpoint: /predict  # 추론 API 엔드포인트
+  timeout: 5.0  # 요청 타임아웃 (초)
+  retry_count: 3  # 실패 시 재시도 횟수
+  retry_delay: 1.0  # 재시도 대기 시간 (초)
+
+# GPIO 설정 (라즈베리파이 1만 해당)
+gpio:
+  enabled: true  # GPIO 제어 활성화 (라즈베리파이 1: true, 2: false)
+  mode: BCM  # BCM 또는 BOARD
+  pins:
+    component_defect: 17  # 부품 불량 (BCM 17)
+    solder_defect: 27     # 납땜 불량 (BCM 27)
+    discard: 22           # 폐기 (BCM 22)
+    normal: 23            # 정상 (BCM 23)
+  pulse_duration: 0.5  # GPIO HIGH 유지 시간 (초)
+
+# 로깅 설정
+logging:
+  level: INFO  # DEBUG, INFO, WARNING, ERROR
+  log_file: logs/camera_logs/camera_left.log  # left 또는 right에 맞게 변경
+  max_bytes: 5242880  # 5MB
+  backup_count: 3
+
+# 성능 모니터링
+monitoring:
+  show_fps: true  # FPS 콘솔 출력
+  stats_interval: 100  # 통계 출력 간격 (프레임 수)

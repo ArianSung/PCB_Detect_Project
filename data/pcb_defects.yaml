@@ -1,0 +1,30 @@
+# PCB 불량 데이터셋 설정 (YOLO 형식)
+# 데이터 준비 후 경로 업데이트 필요
+
+# 데이터셋 경로 (프로젝트 루트 기준)
+path: data/processed  # 데이터셋 루트 경로
+train: train/images  # 학습 이미지 경로
+val: val/images  # 검증 이미지 경로
+test: test/images  # 테스트 이미지 경로 (선택)
+
+# 클래스 정의
+# 납땜 불량 (Soldering Defects)
+# 부품 불량 (Component Defects)
+# PCB 기판 불량 (Board Defects)
+names:
+  0: cold_joint  # 불완전 납땜
+  1: solder_bridge  # 납땜 브릿지
+  2: insufficient_solder  # 납 부족
+  3: excess_solder  # 과다 납
+  4: missing_component  # 부품 누락
+  5: misalignment  # 부품 오장착
+  6: wrong_component  # 잘못된 부품
+  7: damaged_component  # 부품 손상
+  8: trace_damage  # 트레이스 손상
+  9: pad_damage  # 패드 손상
+  10: scratch  # 긁힘
+
+# 클래스 수
+nc: 11
+
+# 참고: 실제 데이터셋 준비 후 클래스 목록 및 개수 업데이트 필요

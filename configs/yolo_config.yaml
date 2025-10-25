@@ -1,0 +1,71 @@
+# YOLO 학습 설정
+# YOLOv8l (Large) 모델 권장 - RTX 4080 Super 최적화
+
+# 모델 설정
+model: yolov8l.pt  # 사전 학습 모델 (nano: n, small: s, medium: m, large: l)
+device: 0  # GPU ID (0: 첫 번째 GPU, cpu: CPU 사용)
+
+# 데이터셋 경로
+data: data/pcb_defects.yaml  # 데이터셋 설정 파일 경로
+
+# 학습 하이퍼파라미터
+epochs: 150  # 학습 epoch 수
+batch_size: 32  # RTX 4080 Super (16GB VRAM) - 기본 16에서 증가 가능
+image_size: 640  # 입력 이미지 크기 (640x640)
+workers: 8  # 데이터 로딩 워커 수
+
+# Optimizer 설정
+optimizer: AdamW  # AdamW, SGD, Adam 등
+lr0: 0.001  # 초기 learning rate
+lrf: 0.01  # 최종 learning rate (lr0 * lrf)
+momentum: 0.937  # SGD momentum
+weight_decay: 0.0005  # 가중치 감쇠 (L2 regularization)
+
+# 학습 기법
+warmup_epochs: 3.0  # Warm-up epoch 수
+warmup_momentum: 0.8  # Warm-up momentum
+warmup_bias_lr: 0.1  # Warm-up bias learning rate
+
+# 조기 종료
+patience: 50  # 성능 향상 없을 시 중단 (epoch)
+
+# 데이터 증강
+hsv_h: 0.015  # Hue augmentation
+hsv_s: 0.7    # Saturation augmentation
+hsv_v: 0.4    # Value augmentation
+degrees: 0.0  # 회전 각도 (+-degrees)
+translate: 0.1  # 이동 (0.1 = 10%)
+scale: 0.5  # 스케일링 (0.5 = 50%)
+shear: 0.0  # 전단 변환
+perspective: 0.0  # 원근 변환
+flipud: 0.0  # 상하 반전 확률
+fliplr: 0.5  # 좌우 반전 확률
+mosaic: 1.0  # Mosaic augmentation 확률
+mixup: 0.0  # MixUp augmentation 확률
+copy_paste: 0.0  # Copy-paste augmentation 확률
+
+# NMS (Non-Maximum Suppression)
+iou: 0.7  # NMS IoU threshold
+conf: 0.25  # Confidence threshold
+
+# 저장 설정
+save: true  # 모델 저장 여부
+save_period: -1  # 모델 저장 주기 (-1: 마지막만 저장)
+project: models/yolo/experiments  # 실험 결과 저장 경로
+name: exp  # 실험 이름 (자동으로 exp1, exp2, ... 증가)
+
+# 기타
+verbose: true  # 상세 출력
+seed: 0  # 랜덤 시드 (재현성)
+deterministic: true  # 결정적 동작 (재현성)
+single_cls: false  # 단일 클래스 여부
+rect: false  # Rectangular training (속도 향상)
+cos_lr: false  # Cosine learning rate scheduler
+close_mosaic: 10  # 마지막 N epoch에서 mosaic 비활성화
+amp: true  # AMP (Automatic Mixed Precision) - FP16 사용
+fraction: 1.0  # 데이터셋 사용 비율 (1.0 = 100%)
+profile: false  # 프로파일링 활성화
+freeze: null  # 동결할 레이어 수 (null: 동결 안함)
+
+# 로깅
+plots: true  # 학습 그래프 생성

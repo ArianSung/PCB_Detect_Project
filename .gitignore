@@ -18,6 +18,14 @@ models/*.pt
 models/*.pth
 *.weights
 
+# YOLO 모델 파일 (루트 및 프로젝트 전체)
+*.pt
+!tests/phase1_yolo_basic/models_backup/*.pt  # 백업 모델은 보관
+
+# YOLO 실행 결과 및 테스트 데이터셋
+runs/
+datasets/coco128/
+
 # Jupyter Notebook
 .ipynb_checkpoints/
 *.ipynb
