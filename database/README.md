@@ -27,11 +27,11 @@ PCB 불량 검사 시스템 MySQL 데이터베이스 설정 및 사용 가이드
 **생성되는 사용자:**
 | Username | Password | 권한 | 용도 |
 |----------|----------|------|------|
-| `pcb_admin` | `Admin_PCB_2025!` | ALL | 관리자 (테이블 생성/삭제) |
-| `pcb_server` | `Server_PCB_2025!` | SELECT, INSERT, UPDATE | Flask 서버 |
-| `pcb_viewer` | `Viewer_PCB_2025!` | SELECT only | C# 모니터링 앱 |
-| `pcb_data` | `Data_PCB_2025!` | SELECT, INSERT, UPDATE | AI 모델 팀 |
-| `pcb_test` | `Test_PCB_2025!` | SELECT, INSERT | 테스트용 |
+| `pcb_admin` | `1234` | ALL | 관리자 (테이블 생성/삭제) |
+| `pcb_server` | `1234` | SELECT, INSERT, UPDATE | Flask 서버 |
+| `pcb_viewer` | `1234` | SELECT only | C# 모니터링 앱 |
+| `pcb_data` | `1234` | SELECT, INSERT, UPDATE | AI 모델 팀 |
+| `pcb_test` | `1234` | SELECT, INSERT | 테스트용 |
 
 ---
 
@@ -160,7 +160,7 @@ DB_HOST=100.x.x.x          # Windows PC의 Tailscale IP
 DB_PORT=3306
 DB_NAME=pcb_inspection
 DB_USER=pcb_server
-DB_PASSWORD=Server_PCB_2025!
+DB_PASSWORD=1234
 ```
 
 **연결 코드 예시:**
@@ -171,7 +171,7 @@ conn = pymysql.connect(
     host='100.x.x.x',
     port=3306,
     user='pcb_server',
-    password='Server_PCB_2025!',
+    password='1234',
     database='pcb_inspection',
     charset='utf8mb4'
 )
@@ -187,7 +187,7 @@ print(cursor.fetchone())
 
 **연결 문자열:**
 ```csharp
-string connectionString = "Server=100.x.x.x;Port=3306;Database=pcb_inspection;Uid=pcb_viewer;Pwd=Viewer_PCB_2025!;";
+string connectionString = "Server=100.x.x.x;Port=3306;Database=pcb_inspection;Uid=pcb_viewer;Pwd=1234;";
 
 using (MySqlConnection conn = new MySqlConnection(connectionString))
 {

@@ -19,31 +19,31 @@ USE pcb_inspection;
 -- 2-1. 관리자 계정 (프로젝트 리더)
 -- 모든 권한, 데이터베이스 구조 변경 가능
 DROP USER IF EXISTS 'pcb_admin'@'%';
-CREATE USER 'pcb_admin'@'%' IDENTIFIED BY 'Admin_PCB_2025!';
+CREATE USER 'pcb_admin'@'%' IDENTIFIED BY '1234';
 GRANT ALL PRIVILEGES ON pcb_inspection.* TO 'pcb_admin'@'%';
 
 -- 2-2. Flask 서버용 계정
 -- 읽기, 쓰기, 업데이트 가능 (DELETE 제외 - 안전성)
 DROP USER IF EXISTS 'pcb_server'@'%';
-CREATE USER 'pcb_server'@'%' IDENTIFIED BY 'Server_PCB_2025!';
+CREATE USER 'pcb_server'@'%' IDENTIFIED BY '1234';
 GRANT SELECT, INSERT, UPDATE ON pcb_inspection.* TO 'pcb_server'@'%';
 
 -- 2-3. C# 앱 조회 전용 계정 (C# 모니터링 앱)
 -- 읽기만 가능
 DROP USER IF EXISTS 'pcb_viewer'@'%';
-CREATE USER 'pcb_viewer'@'%' IDENTIFIED BY 'Viewer_PCB_2025!';
+CREATE USER 'pcb_viewer'@'%' IDENTIFIED BY '1234';
 GRANT SELECT ON pcb_inspection.* TO 'pcb_viewer'@'%';
 
 -- 2-4. AI 모델 팀 계정 (데이터 입력 및 분석)
 -- 읽기, 쓰기, 업데이트 가능
 DROP USER IF EXISTS 'pcb_data'@'%';
-CREATE USER 'pcb_data'@'%' IDENTIFIED BY 'Data_PCB_2025!';
+CREATE USER 'pcb_data'@'%' IDENTIFIED BY '1234';
 GRANT SELECT, INSERT, UPDATE ON pcb_inspection.* TO 'pcb_data'@'%';
 
 -- 2-5. 라즈베리파이 팀 개발용 계정 (선택)
 -- 테스트 데이터 입력용
 DROP USER IF EXISTS 'pcb_test'@'%';
-CREATE USER 'pcb_test'@'%' IDENTIFIED BY 'Test_PCB_2025!';
+CREATE USER 'pcb_test'@'%' IDENTIFIED BY '1234';
 GRANT SELECT, INSERT ON pcb_inspection.* TO 'pcb_test'@'%';
 
 -- ========================================
@@ -89,7 +89,7 @@ ORDER BY user;
 1. Flask 팀 (서버 개발)
 ----------------------------------------------
 Username: pcb_server
-Password: Server_PCB_2025!
+Password: 1234
 권한: SELECT, INSERT, UPDATE
 용도: Flask 서버에서 사용 (src/server/.env에 입력)
 
@@ -97,7 +97,7 @@ Password: Server_PCB_2025!
 2. Flask 팀 리더 (관리자)
 ----------------------------------------------
 Username: pcb_admin
-Password: Admin_PCB_2025!
+Password: 1234
 권한: ALL PRIVILEGES
 용도: 테이블 생성, 스키마 변경, 전체 관리
 
@@ -105,7 +105,7 @@ Password: Admin_PCB_2025!
 3. AI 모델 팀 (데이터 분석)
 ----------------------------------------------
 Username: pcb_data
-Password: Data_PCB_2025!
+Password: 1234
 권한: SELECT, INSERT, UPDATE
 용도: 학습 데이터 입력, 분석용 조회
 
@@ -113,7 +113,7 @@ Password: Data_PCB_2025!
 4. C# 앱 팀 (모니터링)
 ----------------------------------------------
 Username: pcb_viewer
-Password: Viewer_PCB_2025!
+Password: 1234
 권한: SELECT only (읽기 전용)
 용도: C# WinForms 앱에서 데이터 조회
 
@@ -121,7 +121,7 @@ Password: Viewer_PCB_2025!
 5. 라즈베리파이 팀 (테스트)
 ----------------------------------------------
 Username: pcb_test
-Password: Test_PCB_2025!
+Password: 1234
 권한: SELECT, INSERT
 용도: 테스트 데이터 입력 (개발용)
 
@@ -129,7 +129,7 @@ Password: Test_PCB_2025!
 
 연결 테스트:
 mysql -h 100.x.x.x -u pcb_admin -p
-Password: Admin_PCB_2025!
+Password: 1234
 
 ==============================================
 */
