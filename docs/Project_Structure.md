@@ -1,5 +1,19 @@
 # PCB 불량 검사 프로젝트 구조 가이드
 
+## 프로젝트 구조 철학
+
+이 프로젝트는 **플랫폼 기반 구조**를 채택합니다:
+- **기술 스택별 독립성**: 각 플랫폼(Flask, YOLO, C#, Raspberry Pi, Arduino)은 독립적인 폴더에서 관리
+- **명확한 역할 분리**: 팀원들이 자신의 담당 플랫폼 폴더에서만 작업 가능
+- **src/ 폴더 제거**: 범용 src/ 대신 플랫폼별 폴더 사용 (`server/`, `yolo/`, `raspberry_pi/`, `arduino/`, `csharp_winforms/`)
+
+**주요 폴더**:
+- `server/` - Flask 추론 서버 (GPU PC)
+- `yolo/` - YOLO 학습 및 평가 스크립트
+- `raspberry_pi/` - 라즈베리파이 클라이언트 (웹캠 + GPIO)
+- `arduino/` - Arduino 로봇팔 제어
+- `csharp_winforms/` - C# WinForms 모니터링 앱
+
 ## 권장 프로젝트 폴더 구조
 
 ```
@@ -109,74 +123,29 @@ C:\work_project\                         # Windows 경로
 │   ├── 06_hybrid_system.ipynb          # 하이브리드 시스템 통합
 │   └── 07_final_results.ipynb          # 최종 결과 정리
 │
-├── src/                                 # 💻 소스 코드
-│   ├── __init__.py
-│   │
-│   ├── data/                           # 데이터 처리
-│   │   ├── __init__.py
-│   │   ├── download_data.py            # 데이터셋 다운로드
-│   │   ├── preprocess.py               # 전처리 (리사이징, 정규화)
-│   │   ├── augmentation.py             # 데이터 증강
-│   │   ├── convert_voc_to_yolo.py      # 어노테이션 변환
-│   │   ├── split_dataset.py            # Train/Val/Test 분할
-│   │   └── visualize.py                # 데이터 시각화
-│   │
-│   ├── models/                         # 모델 정의
-│   │   ├── __init__.py
-│   │   ├── yolo_detector.py            # YOLO 래퍼 클래스
-│   │   ├── anomaly_detector.py         # 이상 탐지 모델 래퍼
-│   │   ├── padim_model.py              # PaDiM 구현
-│   │   ├── patchcore_model.py          # PatchCore 구현
-│   │   ├── autoencoder_model.py        # AutoEncoder 구현
-│   │   └── hybrid_model.py             # 하이브리드 시스템
-│   │
-│   ├── training/                       # 학습 관련
-│   │   ├── __init__.py
-│   │   ├── train_yolo.py               # YOLO 학습 스크립트
-│   │   ├── train_anomaly.py            # 이상 탐지 학습
-│   │   ├── callbacks.py                # 커스텀 콜백 (로깅 등)
-│   │   └── schedulers.py               # Learning rate scheduler
-│   │
-│   ├── evaluation/                     # 평가 관련
-│   │   ├── __init__.py
-│   │   ├── metrics.py                  # 평가 지표 (mAP, Precision, Recall)
-│   │   ├── evaluate_yolo.py            # YOLO 평가
-│   │   ├── evaluate_anomaly.py         # 이상 탐지 평가
-│   │   └── compare_models.py           # 모델 비교
-│   │
-│   ├── inference/                      # 추론 관련
-│   │   ├── __init__.py
+├── yolo/                                # 🎯 YOLO 학습 및 평가
+│   ├── train_yolo.py                   # YOLO 학습 스크립트
+│   ├── evaluate_yolo.py                # YOLO 평가 스크립트
+│   ├── datasets/                       # YOLO 데이터셋 (자동 생성)
+│   ├── runs/                           # 학습 결과 (자동 생성)
+│   │   └── train/
+│   │       └── pcb_defect/
+│   │           ├── weights/
+│   │           │   ├── best.pt
+│   │           │   └── last.pt
+│   │           └── results.png
+│   └── test_images/                    # 테스트 이미지 (선택)
+│
+├── server/                              # 🌐 Flask 추론 서버 (GPU PC)
+│   ├── app.py                          # Flask 메인 애플리케이션
+│   ├── README.md                       # 서버 실행 가이드
+│   ├── inference/                      # 추론 엔진 (TODO)
 │   │   ├── yolo_inference.py           # YOLO 추론
-│   │   ├── anomaly_inference.py        # 이상 탐지 추론
-│   │   ├── hybrid_inference.py         # 하이브리드 추론
-│   │   └── postprocess.py              # 후처리 (NMS, 결과 융합)
-│   │
-│   ├── server/                         # 🌐 Flask 웹서버 (실시간 추론)
-│   │   ├── __init__.py
-│   │   ├── app.py                      # Flask 메인 애플리케이션
-│   │   ├── inference.py                # AI 추론 엔진
-│   │   ├── config.py                   # 서버 설정
-│   │   ├── routes/                     # API 라우트
-│   │   │   ├── __init__.py
-│   │   │   ├── predict.py              # 추론 API
-│   │   │   └── health.py               # 헬스 체크 API
-│   │   └── database.py                 # 데이터베이스 (검사 이력)
-│   │
-│   ├── client/                         # 📹 웹캠 클라이언트
-│   │   ├── __init__.py
-│   │   ├── camera_client.py            # 웹캠 프레임 전송
-│   │   ├── config.py                   # 클라이언트 설정
-│   │   └── frame_processor.py          # 프레임 전처리
-│   │
-│   ├── utils/                          # 유틸리티
-│   │   ├── __init__.py
-│   │   ├── config.py                   # 설정 관리
-│   │   ├── logger.py                   # 로깅
-│   │   ├── visualize.py                # 결과 시각화
-│   │   ├── file_utils.py               # 파일 입출력
-│   │   └── metrics_utils.py            # 지표 계산 헬퍼
-│   │
-│   └── main.py                         # 메인 실행 스크립트
+│   │   └── anomaly_detection.py        # 이상 탐지 추론
+│   ├── database/                       # DB 연동 (TODO)
+│   │   └── mysql_client.py             # MySQL 클라이언트
+│   └── utils/                          # 유틸리티 (TODO)
+│       └── image_processing.py         # 이미지 전처리
 │
 ├── scripts/                             # 🔧 실행 스크립트
 │   ├── setup_environment.sh            # 환경 구축 스크립트
@@ -371,34 +340,50 @@ C:\work_project\                         # Windows 경로
   6. `06_hybrid_system.ipynb`: 하이브리드 통합
   7. `07_final_results.ipynb`: 최종 결과 정리
 
-### 5. `src/` - 소스 코드
-- **모듈화된 코드**: 재사용 가능한 함수와 클래스
-- **하위 폴더**:
-  - `data/`: 데이터 처리
-  - `models/`: 모델 정의
-  - `training/`: 학습 로직
-  - `evaluation/`: 평가 로직
-  - `inference/`: 추론 로직
-  - `utils/`: 유틸리티 함수
+### 5. `yolo/` - YOLO 학습 및 평가
+- **목적**: YOLO 모델 학습 및 평가 스크립트 (플랫폼 독립)
+- **주요 파일**:
+  - `train_yolo.py`: YOLO 학습 스크립트
+  - `evaluate_yolo.py`: YOLO 평가 스크립트
+  - `datasets/`: YOLO가 자동 생성하는 데이터셋 캐시
+  - `runs/`: 학습 결과 및 체크포인트
+- **사용법**:
+  ```bash
+  # YOLO 학습
+  python yolo/train_yolo.py --data data/pcb_defects.yaml --epochs 150 --batch 32
 
-**Best Practice**: Jupyter 노트북에서 프로토타이핑 → 검증된 코드는 `src/`로 이동
+  # YOLO 평가
+  python yolo/evaluate_yolo.py --model models/yolo/final/yolo_best.pt --data data/pcb_defects.yaml
+  ```
 
-### 6. `scripts/` - 실행 스크립트
+**Best Practice**: Jupyter 노트북에서 프로토타이핑 → 검증된 학습 설정은 `yolo/` 스크립트로 이동
+
+### 6. `server/` - Flask 추론 서버
+- **목적**: GPU PC에서 실행되는 실시간 추론 서버
+- **프레임워크**: Flask + YOLO + MySQL
+- **주요 파일**:
+  - `app.py`: Flask 메인 애플리케이션
+  - `inference/`: 추론 엔진 모듈
+  - `database/`: MySQL 연동
+  - `utils/`: 이미지 전처리 유틸리티
+- **참고 문서**: `docs/Flask_Server_Setup.md`
+
+### 7. `scripts/` - 실행 스크립트
 - **bash 스크립트**: 반복 작업 자동화
 - **예시**:
   ```bash
   # scripts/train_yolo.sh
   #!/bin/bash
-  python src/training/train_yolo.py \
+  python yolo/train_yolo.py \
       --data data/pcb_defects.yaml \
-      --model yolov8s.pt \
-      --epochs 100 \
-      --batch 16 \
+      --model yolov8l.pt \
+      --epochs 150 \
+      --batch 32 \
       --imgsz 640 \
-      --name exp_yolov8s_100epochs
+      --device 0
   ```
 
-### 7. `configs/` - 설정 파일
+### 8. `configs/` - 설정 파일
 - **YAML 형식**: 하이퍼파라미터 및 설정 관리
 - **장점**: 코드 수정 없이 설정만 변경 가능
 
@@ -414,7 +399,7 @@ optimizer: SGD
 device: 0  # GPU ID
 ```
 
-### 8. `results/` - 실험 결과
+### 9. `results/` - 실험 결과
 - **figures/**: 모든 시각화 저장
 - **metrics/**: CSV, Excel 형식의 성능 지표
 - **predictions/**: 테스트 이미지에 대한 예측 결과
@@ -422,7 +407,7 @@ device: 0  # GPU ID
 
 **팁**: 실험마다 날짜와 버전을 파일명에 포함 (예: `yolo_metrics_20251022_v1.csv`)
 
-### 9. `tests/` - 테스트 코드
+### 10. `tests/` - 테스트 코드
 - **단위 테스트**: 각 모듈의 정확성 검증
 - **pytest** 사용 권장
 
@@ -437,11 +422,11 @@ def test_resize_image():
     pass
 ```
 
-### 10. `logs/` - 로그
+### 11. `logs/` - 로그
 - **학습 로그**: 학습 과정 기록
 - **추론 로그**: 추론 시 발생한 이벤트 기록
 
-### 11. `csharp_winforms/` - C# WinForms 모니터링 앱
+### 12. `csharp_winforms/` - C# WinForms 모니터링 앱
 - **목적**: Windows PC에서 실행되는 실시간 모니터링 대시보드
 - **프레임워크**: .NET 6+
 - **주요 기능**:
@@ -451,7 +436,7 @@ def test_resize_image():
   - 불량 이미지 뷰어
 - **참고 문서**: `CSharp_WinForms_Guide.md`
 
-### 12. `raspberry_pi/` - 라즈베리파이 클라이언트
+### 13. `raspberry_pi/` - 라즈베리파이 클라이언트
 - **목적**: 웹캠 프레임 캡처, GPIO 제어, Arduino 로봇팔 제어
 - **하드웨어**: Raspberry Pi 4 Model B
 - **주요 기능**:
@@ -462,7 +447,7 @@ def test_resize_image():
   - systemd 서비스로 자동 시작
 - **참고 문서**: `RaspberryPi_Setup.md`
 
-### 13. `arduino/` - Arduino 로봇팔 제어 ⭐ 신규
+### 14. `arduino/` - Arduino 로봇팔 제어 ⭐ 신규
 - **목적**: 5-6축 로봇팔 제어 및 PCB 분류
 - **하드웨어**: Arduino Mega 2560 + 서보 모터 6개
 - **주요 기능**:
@@ -475,7 +460,7 @@ def test_resize_image():
   - ArduinoJson.h - JSON 파싱
 - **참고 문서**: `Arduino_RobotArm_Setup.md` (신규 작성 필요)
 
-### 14. `database/` - MySQL 데이터베이스
+### 15. `database/` - MySQL 데이터베이스
 - **목적**: 검사 이력, 통계, 시스템 로그 저장
 - **데이터베이스**: MySQL 8.0
 - **schemas/**: 테이블, 뷰, 프로시저, 트리거 SQL 스크립트
@@ -516,15 +501,11 @@ mkdir -p models/hybrid
 # 노트북 폴더
 mkdir -p notebooks
 
-# 소스 코드 폴더
-mkdir -p src/{data,models,training,evaluation,inference,utils}
-touch src/__init__.py
-touch src/data/__init__.py
-touch src/models/__init__.py
-touch src/training/__init__.py
-touch src/evaluation/__init__.py
-touch src/inference/__init__.py
-touch src/utils/__init__.py
+# YOLO 학습 폴더
+mkdir -p yolo/{datasets,runs,test_images}
+
+# Flask 서버 폴더
+mkdir -p server/{inference,database,utils}
 
 # 스크립트 폴더
 mkdir -p scripts
