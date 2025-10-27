@@ -32,6 +32,10 @@ CREATE TABLE IF NOT EXISTS inspection_history (
     gpio_pin INT COMMENT 'GPIO 핀 번호',
     gpio_action VARCHAR(20) COMMENT 'GPIO 동작 (activate/none)',
 
+    -- 로봇팔 및 박스 정보
+    box_id VARCHAR(30) COMMENT '저장된 박스 ID (예: NORMAL_A)',
+    slot_number INT COMMENT '박스 내 슬롯 번호 (0-4)',
+
     -- 이미지 저장 경로 (선택)
     image_path VARCHAR(255) COMMENT '원본 이미지 경로',
     annotated_image_path VARCHAR(255) COMMENT '결과 표시 이미지 경로',
@@ -133,25 +137,60 @@ CREATE TABLE IF NOT EXISTS system_logs (
 COMMENT='시스템 로그 테이블 (에러 추적용)';
 
 -- ========================================
--- 5. 샘플 데이터 삽입 (테스트용)
+-- 5. 박스 상태 테이블 (box_status)
 -- ========================================
 
--- 샘플 검사 이력 (정상)
+CREATE TABLE IF NOT EXISTS box_status (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+
+    -- 박스 정보
+    box_id VARCHAR(20) NOT NULL UNIQUE COMMENT '박스 ID (NORMAL, COMPONENT_DEFECT, SOLDER_DEFECT)',
+    category VARCHAR(50) NOT NULL COMMENT '분류 카테고리 (normal/component_defect/solder_defect)',
+
+    -- 슬롯 상태
+    current_slot INT NOT NULL DEFAULT 0 COMMENT '현재 사용 중인 슬롯 번호 (0-1)',
+    max_slots INT NOT NULL DEFAULT 2 COMMENT '최대 슬롯 개수 (2개, 수직 2단)',
+    is_full BOOLEAN NOT NULL DEFAULT FALSE COMMENT '박스 가득참 여부',
+
+    -- 통계
+    total_pcb_count INT NOT NULL DEFAULT 0 COMMENT '박스에 저장된 총 PCB 개수',
+
+    -- 타임스탬프
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '박스 생성 시각',
+    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '마지막 업데이트 시각',
+
+    -- 인덱스
+    INDEX idx_category (category),
+    INDEX idx_is_full (is_full)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='로봇팔 박스 슬롯 상태 관리 테이블 (3개 박스 × 2개 슬롯 = 6개 슬롯, 폐기는 슬롯 관리 안 함)';
+
+-- 3개 박스 초기 데이터 삽입 (폐기는 제외)
+INSERT INTO box_status (box_id, category, max_slots) VALUES
+    ('NORMAL', 'normal', 2),
+    ('COMPONENT_DEFECT', 'component_defect', 2),
+    ('SOLDER_DEFECT', 'solder_defect', 2);
+
+-- ========================================
+-- 6. 샘플 데이터 삽입 (테스트용)
+-- ========================================
+
+-- 샘플 검사 이력 (정상 - NORMAL 박스 슬롯 0)
 INSERT INTO inspection_history (
     camera_id, classification, confidence, total_defects,
     defects_json, anomaly_score, inference_time_ms,
-    gpio_pin, gpio_action
+    gpio_pin, gpio_action, box_id, slot_number
 ) VALUES (
     'left', 'normal', 0.9850, 0,
     '[]', 0.1200, 95.23,
-    23, 'activate'
+    23, 'activate', 'NORMAL', 0
 );
 
--- 샘플 검사 이력 (납땜 불량)
+-- 샘플 검사 이력 (납땜 불량 - SOLDER_DEFECT 박스 슬롯 1)
 INSERT INTO inspection_history (
     camera_id, classification, confidence, total_defects,
     defects_json, anomaly_score, inference_time_ms,
-    gpio_pin, gpio_action
+    gpio_pin, gpio_action, box_id, slot_number
 ) VALUES (
     'right', 'solder_defect', 0.8720, 2,
     '[
@@ -159,7 +198,7 @@ INSERT INTO inspection_history (
         {"type": "solder_bridge", "bbox": [300, 200, 380, 260], "confidence": 0.72, "severity": "low"}
     ]',
     0.6500, 120.45,
-    27, 'activate'
+    27, 'activate', 'SOLDER_DEFECT', 1
 );
 
 -- 샘플 일별 통계
@@ -176,7 +215,7 @@ INSERT INTO daily_statistics (
 );
 
 -- ========================================
--- 6. 테이블 목록 및 구조 확인
+-- 7. 테이블 목록 및 구조 확인
 -- ========================================
 
 SHOW TABLES;
@@ -186,10 +225,12 @@ DESCRIBE inspection_history;
 DESCRIBE daily_statistics;
 DESCRIBE defect_type_statistics;
 DESCRIBE system_logs;
+DESCRIBE box_status;
 
 -- 샘플 데이터 조회
 SELECT * FROM inspection_history LIMIT 5;
 SELECT * FROM daily_statistics LIMIT 5;
+SELECT * FROM box_status ORDER BY box_id;
 
 -- ========================================
 -- 완료 메시지

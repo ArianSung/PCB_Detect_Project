@@ -169,7 +169,7 @@ COMMENT='사용자 계정';
 ```sql
 CREATE TABLE alerts (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    alert_type ENUM('defect_rate_high', 'system_error', 'camera_offline', 'server_offline') NOT NULL,
+    alert_type ENUM('defect_rate_high', 'system_error', 'camera_offline', 'server_offline', 'box_full') NOT NULL,
     severity ENUM('low', 'medium', 'high', 'critical') NOT NULL DEFAULT 'medium',
     message TEXT NOT NULL COMMENT '알람 메시지',
     details JSON NULL COMMENT '상세 정보',
@@ -183,8 +183,53 @@ CREATE TABLE alerts (
     INDEX idx_is_resolved (is_resolved),
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='알람 및 알림';
+COMMENT='알람 및 알림 (box_full 추가)';
 ```
+
+### 9. box_status (로봇팔 박스 상태 관리) ⭐ 신규
+
+```sql
+CREATE TABLE box_status (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+
+    -- 박스 정보
+    box_id VARCHAR(20) NOT NULL UNIQUE COMMENT '박스 ID (NORMAL, COMPONENT_DEFECT, SOLDER_DEFECT)',
+    category VARCHAR(50) NOT NULL COMMENT '분류 카테고리 (normal/component_defect/solder_defect)',
+
+    -- 슬롯 상태
+    current_slot INT NOT NULL DEFAULT 0 COMMENT '현재 사용 중인 슬롯 번호 (0-1, 수직 2단)',
+    max_slots INT NOT NULL DEFAULT 2 COMMENT '최대 슬롯 개수 (2개, 수직 2단 적재)',
+    is_full BOOLEAN NOT NULL DEFAULT FALSE COMMENT '박스 가득참 여부',
+
+    -- 통계
+    total_pcb_count INT NOT NULL DEFAULT 0 COMMENT '박스에 저장된 총 PCB 개수',
+
+    -- 타임스탬프
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '박스 생성 시각',
+    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '마지막 업데이트 시각',
+
+    -- 인덱스
+    INDEX idx_category (category),
+    INDEX idx_is_full (is_full)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='로봇팔 박스 슬롯 상태 관리 테이블 (3개 박스 × 2개 슬롯 = 6개 슬롯, 폐기는 슬롯 관리 안 함)';
+```
+
+**설명**:
+- **총 3개 박스**: 정상, 부품불량, 납땜불량
+- **각 박스: 2개 슬롯** (수직 2단 적재, slot 0 = 하단, slot 1 = 상단)
+- **총 6개 슬롯** = 3 카테고리 × 2 슬롯
+- **DISCARD 처리**: 슬롯 관리 없이 고정 위치에 떨어뜨리기 (프로젝트 데모용)
+- **슬롯 할당 로직**:
+  1. 각 박스는 slot 0(하단)부터 채움
+  2. slot 0 사용 → slot 1(상단) 사용 → 박스 가득참
+  3. 박스가 가득 차면: LED 알림 + WinForms 알림 + 해당 카테고리 정지
+
+**박스 ID 구조**:
+- `NORMAL`: 정상 PCB (2개 슬롯)
+- `COMPONENT_DEFECT`: 부품 불량 (2개 슬롯)
+- `SOLDER_DEFECT`: 납땜 불량 (2개 슬롯)
+- `DISCARD`: 폐기 (슬롯 관리 안 함, box_status 테이블에 저장 안 함)
 
 ---
 
@@ -211,6 +256,34 @@ INSERT INTO users (username, password_hash, full_name, role) VALUES
 ('admin', '$2b$12$examplehashedpassword', '관리자', 'admin'),
 ('operator1', '$2b$12$examplehashedpassword', '작업자1', 'operator'),
 ('viewer1', '$2b$12$examplehashedpassword', '조회자1', 'viewer');
+```
+
+### 박스 상태 초기화 ⭐ 신규
+
+```sql
+-- 3개 박스 초기 데이터 삽입 (DISCARD는 제외)
+INSERT INTO box_status (box_id, category, max_slots) VALUES
+    ('NORMAL', 'normal', 2),
+    ('COMPONENT_DEFECT', 'component_defect', 2),
+    ('SOLDER_DEFECT', 'solder_defect', 2);
+```
+
+**박스 상태 확인 쿼리**:
+```sql
+-- 전체 박스 상태 조회
+SELECT box_id, category, current_slot, max_slots, is_full, total_pcb_count
+FROM box_status
+ORDER BY box_id;
+
+-- 가득 찬 박스 조회
+SELECT box_id, category, total_pcb_count
+FROM box_status
+WHERE is_full = TRUE;
+
+-- 특정 카테고리의 박스 상태 조회
+SELECT box_id, current_slot, max_slots, is_full
+FROM box_status
+WHERE category = 'normal';
 ```
 
 ---

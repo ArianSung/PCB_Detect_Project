@@ -741,9 +741,613 @@ class CameraClient:
 
 ---
 
-## Phase 5: 모니터링 및 로깅
+## Phase 5: 로봇팔 및 박스 관리 시스템
 
-### 5-1. 실시간 대시보드 (선택)
+### 5-1. 로봇팔 제어 모듈 (server/robot_arm.py)
+
+```python
+import serial
+import json
+import logging
+import time
+from threading import Lock
+
+logger = logging.getLogger(__name__)
+
+class RobotArmController:
+    def __init__(self, port='/dev/ttyACM0', baudrate=115200, timeout=5):
+        """
+        로봇팔 컨트롤러 초기화
+
+        Args:
+            port: Arduino 시리얼 포트
+            baudrate: 통신 속도
+            timeout: 읽기 타임아웃 (초)
+        """
+        self.port = port
+        self.baudrate = baudrate
+        self.timeout = timeout
+        self.serial = None
+        self.lock = Lock()  # 스레드 안전성
+
+        self.connect()
+
+    def connect(self):
+        """Arduino와 시리얼 연결"""
+        try:
+            self.serial = serial.Serial(
+                port=self.port,
+                baudrate=self.baudrate,
+                timeout=self.timeout,
+                write_timeout=2
+            )
+            time.sleep(2)  # Arduino 리셋 대기
+            logger.info(f"Arduino 연결 성공: {self.port}")
+
+            # 연결 확인 (status 명령)
+            response = self.send_command('status')
+            if response and response.get('status') == 'ok':
+                logger.info("Arduino 상태 정상")
+            else:
+                logger.warning("Arduino 응답 없음")
+
+        except serial.SerialException as e:
+            logger.error(f"Arduino 연결 실패: {str(e)}")
+            raise
+
+    def send_command(self, command, **kwargs):
+        """
+        Arduino에 JSON 명령 전송
+
+        Args:
+            command: 명령어 ('place_pcb', 'home', 'status' 등)
+            **kwargs: 명령어 파라미터
+
+        Returns:
+            dict: Arduino 응답 (JSON)
+        """
+        with self.lock:
+            try:
+                # JSON 명령 생성
+                cmd_data = {'command': command, **kwargs}
+                cmd_json = json.dumps(cmd_data) + '\n'
+
+                # 전송
+                self.serial.write(cmd_json.encode('utf-8'))
+                logger.debug(f"명령 전송: {cmd_json.strip()}")
+
+                # 응답 대기 (타임아웃 내)
+                response_line = self.serial.readline().decode('utf-8').strip()
+
+                if not response_line:
+                    logger.warning("Arduino 응답 없음 (타임아웃)")
+                    return None
+
+                # JSON 파싱
+                response = json.loads(response_line)
+                logger.debug(f"Arduino 응답: {response}")
+
+                return response
+
+            except serial.SerialTimeoutException:
+                logger.error("시리얼 타임아웃")
+                return None
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON 파싱 실패: {str(e)}")
+                return None
+            except Exception as e:
+                logger.error(f"시리얼 통신 오류: {str(e)}")
+                return None
+
+    def place_pcb(self, box_id, slot_index):
+        """
+        PCB 배치 명령
+
+        Args:
+            box_id: 박스 ID ('NORMAL_A', 'COMPONENT_DEFECT_B' 등)
+            slot_index: 슬롯 인덱스 (0-4)
+
+        Returns:
+            bool: 성공 여부
+        """
+        response = self.send_command('place_pcb', box_id=box_id, slot_index=slot_index)
+
+        if response and response.get('status') == 'ok':
+            logger.info(f"PCB 배치 성공: {box_id} slot {slot_index}")
+            return True
+        else:
+            error_msg = response.get('message', 'Unknown error') if response else 'No response'
+            logger.error(f"PCB 배치 실패: {error_msg}")
+            return False
+
+    def move_home(self):
+        """홈 포지션으로 이동"""
+        response = self.send_command('home')
+        return response and response.get('status') == 'ok'
+
+    def get_status(self):
+        """Arduino 상태 조회"""
+        return self.send_command('status')
+
+    def close(self):
+        """시리얼 연결 종료"""
+        if self.serial and self.serial.is_open:
+            self.serial.close()
+            logger.info("Arduino 연결 종료")
+```
+
+### 5-2. 박스 관리 모듈 (server/box_manager.py)
+
+```python
+import logging
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+class BoxManager:
+    def __init__(self, db_service):
+        """
+        박스 관리자 초기화
+
+        Args:
+            db_service: DatabaseService 인스턴스
+        """
+        self.db = db_service
+        self.max_slots = 2  # 박스당 최대 슬롯 수 (수직 2단)
+
+    def get_next_available_slot(self, category):
+        """
+        지정된 카테고리의 다음 사용 가능한 슬롯 조회
+
+        Args:
+            category: 불량 카테고리 ('normal', 'component_defect', 'solder_defect', 'discard')
+
+        Returns:
+            tuple: (box_id, slot_index) 또는 (None, None) if 박스 꽉 참
+                   DISCARD의 경우 (box_id, 0) 반환 (슬롯 관리 안 함)
+        """
+        try:
+            # DISCARD는 슬롯 관리 안 함 (항상 같은 위치에 떨어뜨리기)
+            if category == 'discard':
+                return 'DISCARD', 0
+
+            conn = self.db.get_connection()
+            with conn.cursor() as cursor:
+                # 박스 ID 생성 (더 이상 A/B 구분 없음)
+                box_id = category.upper()
+                sql = "SELECT current_slot, is_full FROM box_status WHERE box_id = %s"
+                cursor.execute(sql, (box_id,))
+                box = cursor.fetchone()
+
+                if box and not box['is_full']:
+                    return box_id, box['current_slot']
+
+                # 박스가 꽉 참
+                logger.warning(f"카테고리 {category} 박스가 꽉 참! (2개 슬롯 모두 사용됨)")
+                return None, None
+
+        except Exception as e:
+            logger.error(f"슬롯 조회 실패: {str(e)}")
+            return None, None
+        finally:
+            conn.close()
+
+    def update_box_status(self, box_id, slot_index):
+        """
+        PCB 배치 후 박스 상태 업데이트
+
+        Args:
+            box_id: 박스 ID ('NORMAL', 'COMPONENT_DEFECT', 'SOLDER_DEFECT', 'DISCARD')
+            slot_index: 사용된 슬롯 인덱스
+
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            # DISCARD는 슬롯 관리 안 함 (상태 업데이트 안 함)
+            if box_id == 'DISCARD':
+                logger.info(f"DISCARD 박스는 슬롯 관리 안 함 (상태 업데이트 생략)")
+                return True
+
+            conn = self.db.get_connection()
+            with conn.cursor() as cursor:
+                # 다음 슬롯 계산
+                next_slot = slot_index + 1
+                is_full = (next_slot >= self.max_slots)
+
+                # 박스 상태 업데이트
+                sql = """UPDATE box_status
+                         SET current_slot = %s,
+                             is_full = %s,
+                             total_pcb_count = total_pcb_count + 1,
+                             last_updated = NOW()
+                         WHERE box_id = %s"""
+
+                cursor.execute(sql, (next_slot, is_full, box_id))
+
+                # 박스가 꽉 찼으면 알림
+                if is_full:
+                    logger.warning(f"박스 {box_id}가 꽉 참! (2개 슬롯 모두 사용됨)")
+                    self.send_box_full_alert(box_id)
+
+            conn.commit()
+            logger.info(f"박스 상태 업데이트: {box_id}, 다음 슬롯: {next_slot}, 꽉 참: {is_full}")
+            return True
+
+        except Exception as e:
+            logger.error(f"박스 상태 업데이트 실패: {str(e)}")
+            return False
+        finally:
+            conn.close()
+
+    def reset_box(self, box_id):
+        """
+        박스 리셋 (OHT가 박스를 교체한 후)
+
+        Args:
+            box_id: 박스 ID
+
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            conn = self.db.get_connection()
+            with conn.cursor() as cursor:
+                sql = """UPDATE box_status
+                         SET current_slot = 0,
+                             is_full = FALSE,
+                             total_pcb_count = 0,
+                             last_updated = NOW()
+                         WHERE box_id = %s"""
+
+                cursor.execute(sql, (box_id,))
+
+            conn.commit()
+            logger.info(f"박스 리셋 완료: {box_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"박스 리셋 실패: {str(e)}")
+            return False
+        finally:
+            conn.close()
+
+    def get_all_box_status(self):
+        """모든 박스 상태 조회 (3개 박스만)"""
+        try:
+            conn = self.db.get_connection()
+            with conn.cursor() as cursor:
+                sql = """SELECT box_id, category, current_slot, max_slots,
+                               is_full, total_pcb_count, last_updated
+                         FROM box_status
+                         ORDER BY box_id"""
+
+                cursor.execute(sql)
+                boxes = cursor.fetchall()
+
+                # 이용률 계산
+                for box in boxes:
+                    box['utilization_rate'] = (box['current_slot'] / box['max_slots'] * 100)
+
+                return boxes
+
+        except Exception as e:
+            logger.error(f"박스 상태 조회 실패: {str(e)}")
+            return []
+        finally:
+            conn.close()
+
+    def send_box_full_alert(self, box_id):
+        """
+        박스 꽉 참 알림 전송
+
+        Args:
+            box_id: 박스 ID
+        """
+        # 시스템 로그 기록
+        self.db.log_system_event(
+            log_level='WARNING',
+            source='box_manager',
+            message=f'박스 {box_id}가 꽉 찼습니다. OHT 호출 필요',
+            details={'box_id': box_id, 'timestamp': datetime.now().isoformat()}
+        )
+
+        # 실제 프로젝트에서는 LED 점멸, 알림음, WinForms 알림 등 추가
+        logger.warning(f"📦 박스 {box_id} 꽉 참! OHT 알림 발송")
+
+    def check_system_capacity(self):
+        """
+        시스템 전체 박스 용량 확인
+
+        Returns:
+            dict: 시스템 상태 정보
+        """
+        boxes = self.get_all_box_status()
+
+        total_boxes = len(boxes)
+        full_boxes = sum(1 for box in boxes if box['is_full'])
+        empty_boxes = sum(1 for box in boxes if box['current_slot'] == 0)
+
+        # 카테고리별 꽉 참 여부
+        categories_full = {}
+        for category in ['normal', 'component_defect', 'solder_defect', 'discard']:
+            cat_boxes = [box for box in boxes if box['category'] == category]
+            categories_full[category] = all(box['is_full'] for box in cat_boxes)
+
+        # 전체 시스템 정지 여부
+        system_stopped = all(categories_full.values())
+
+        return {
+            'total_boxes': total_boxes,
+            'full_boxes': full_boxes,
+            'empty_boxes': empty_boxes,
+            'categories_full': categories_full,
+            'system_stopped': system_stopped,
+            'boxes': boxes
+        }
+```
+
+### 5-3. Flask 서버 통합 (server/app.py 업데이트)
+
+```python
+# 기존 import에 추가
+from robot_arm import RobotArmController
+from box_manager import BoxManager
+
+# 로봇팔 및 박스 관리자 초기화
+robot_arm = RobotArmController(port='/dev/ttyACM0', baudrate=115200)
+box_manager = BoxManager(db_service)
+
+@app.route('/predict', methods=['POST'])
+def predict():
+    """PCB 불량 검사 추론 (로봇팔 제어 통합)"""
+    try:
+        # ... 기존 프레임 디코딩 및 추론 코드 ...
+
+        # AI 추론 실행
+        result = inference_engine.predict(frame, camera_id)
+
+        # 불량 유형에 따라 박스 할당
+        defect_type_map = {
+            '정상': 'normal',
+            '부품불량': 'component_defect',
+            '납땜불량': 'solder_defect',
+            '폐기': 'discard'
+        }
+
+        category = defect_type_map.get(result['defect_type'], 'normal')
+
+        # 다음 사용 가능한 슬롯 조회
+        box_id, slot_index = box_manager.get_next_available_slot(category)
+
+        if box_id is None:
+            # 박스가 모두 꽉 참 - 시스템 정지
+            logger.error(f"카테고리 {category} 박스 꽉 참! 시스템 정지")
+            return jsonify({
+                'status': 'error',
+                'error': 'BOX_FULL',
+                'message': f'{result["defect_type"]} 박스가 모두 꽉 찼습니다. OHT 호출 필요',
+                'defect_type': result['defect_type'],
+                'category': category
+            }), 503  # Service Unavailable
+
+        # 로봇팔 PCB 배치 명령
+        place_success = robot_arm.place_pcb(box_id, slot_index)
+
+        if not place_success:
+            logger.error("로봇팔 PCB 배치 실패")
+            return jsonify({
+                'status': 'error',
+                'error': 'ROBOT_ARM_FAILURE',
+                'message': '로봇팔 동작 실패'
+            }), 500
+
+        # 박스 상태 업데이트
+        box_manager.update_box_status(box_id, slot_index)
+
+        # 불량 이미지 저장 (기존 코드)
+        image_path = None
+        if result['defect_type'] != '정상':
+            save_dir = 'results/defect_images'
+            os.makedirs(save_dir, exist_ok=True)
+            filename = f"{camera_id}_{result['defect_type']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+            image_path = os.path.join(save_dir, filename)
+            cv2.imwrite(image_path, frame)
+
+        # GPIO 핀 매핑 (기존 코드)
+        gpio_pin_map = {'부품불량': 17, '납땜불량': 27, '폐기': 22, '정상': 23}
+        gpio_pin = gpio_pin_map.get(result['defect_type'], 23)
+        gpio_duration_ms = 500
+
+        # MySQL에 검사 결과 저장 (기존 코드)
+        inspection_id = db_service.save_inspection_result(
+            camera_id=camera_id,
+            defect_type=result['defect_type'],
+            confidence=result['confidence'],
+            image_path=image_path,
+            boxes=result['boxes'],
+            gpio_pin=gpio_pin,
+            gpio_duration_ms=gpio_duration_ms
+        )
+
+        # 응답 생성 (로봇팔 정보 추가)
+        response = {
+            'status': 'ok',
+            'camera_id': camera_id,
+            'timestamp': timestamp,
+            'defect_type': result['defect_type'],
+            'confidence': float(result['confidence']),
+            'boxes': result['boxes'],
+            'box_placement': {
+                'box_id': box_id,
+                'slot_index': slot_index,
+                'category': category
+            },
+            'gpio_signal': {
+                'pin': gpio_pin,
+                'action': 'HIGH',
+                'duration_ms': gpio_duration_ms
+            },
+            'inspection_id': inspection_id,
+            'inference_time_ms': float(result['inference_time_ms'])
+        }
+
+        return jsonify(response)
+
+    except Exception as e:
+        logger.error(f"추론 오류: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/v1/box_status', methods=['GET'])
+def get_box_status():
+    """모든 박스 상태 조회"""
+    try:
+        capacity_info = box_manager.check_system_capacity()
+
+        return jsonify({
+            'status': 'ok',
+            'boxes': capacity_info['boxes'],
+            'summary': {
+                'total_boxes': capacity_info['total_boxes'],
+                'full_boxes': capacity_info['full_boxes'],
+                'empty_boxes': capacity_info['empty_boxes'],
+                'system_stopped': capacity_info['system_stopped']
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"박스 상태 조회 실패: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/v1/box_status/<box_id>', methods=['GET'])
+def get_box_status_by_id(box_id):
+    """특정 박스 상태 조회"""
+    try:
+        conn = db_service.get_connection()
+        with conn.cursor() as cursor:
+            sql = """SELECT box_id, category, current_slot, max_slots,
+                           is_full, total_pcb_count, last_updated
+                     FROM box_status
+                     WHERE box_id = %s"""
+
+            cursor.execute(sql, (box_id,))
+            box = cursor.fetchone()
+
+        if not box:
+            return jsonify({'error': 'Box not found'}), 404
+
+        box['utilization_rate'] = (box['current_slot'] / box['max_slots'] * 100)
+
+        return jsonify({
+            'status': 'ok',
+            'box': box
+        })
+
+    except Exception as e:
+        logger.error(f"박스 상태 조회 실패: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/api/v1/box_status/reset', methods=['POST'])
+def reset_box_status():
+    """박스 리셋 (OHT 교체 후)"""
+    try:
+        data = request.get_json()
+        box_id = data.get('box_id')
+
+        if not box_id:
+            return jsonify({'error': 'Missing box_id'}), 400
+
+        success = box_manager.reset_box(box_id)
+
+        if success:
+            return jsonify({
+                'status': 'ok',
+                'message': f'Box {box_id} reset successfully'
+            })
+        else:
+            return jsonify({'error': 'Failed to reset box'}), 500
+
+    except Exception as e:
+        logger.error(f"박스 리셋 실패: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/v1/robot_arm/status', methods=['GET'])
+def get_robot_arm_status():
+    """로봇팔 상태 조회"""
+    try:
+        status = robot_arm.get_status()
+
+        if status:
+            return jsonify({
+                'status': 'ok',
+                'robot_arm': status
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'Robot arm not responding'
+            }), 503
+
+    except Exception as e:
+        logger.error(f"로봇팔 상태 조회 실패: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/v1/robot_arm/home', methods=['POST'])
+def move_robot_arm_home():
+    """로봇팔 홈 포지션으로 이동"""
+    try:
+        success = robot_arm.move_home()
+
+        if success:
+            return jsonify({
+                'status': 'ok',
+                'message': 'Robot arm moved to home position'
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to move robot arm'
+            }), 500
+
+    except Exception as e:
+        logger.error(f"로봇팔 홈 이동 실패: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+```
+
+### 5-4. 박스 꽉 참 감지 및 시스템 정지 로직
+
+시스템은 다음과 같이 동작합니다:
+
+1. **정상 동작**: 각 박스의 슬롯 0 → 슬롯 1 순서로 채움 (수직 2단 적재)
+2. **박스 꽉 참 감지**:
+   - 슬롯 0 사용 → 슬롯 1 사용 → `is_full = TRUE`, 해당 카테고리 정지
+   - 각 박스당 2개 슬롯만 있으므로 2개 PCB 배치 후 꽉 참
+3. **시스템 정지**:
+   - 해당 카테고리 박스가 꽉 차면 503 에러 반환
+   - WinForms 앱에서 빨간 LED 표시 및 알림
+   - 수동 박스 교체 필요
+4. **박스 교체 후 재시작**:
+   - 작업자가 박스 교체 완료
+   - WinForms 앱에서 "박스 리셋" 버튼 클릭
+   - `/api/v1/box_status/reset` API 호출
+   - 박스 상태 초기화 → 시스템 재가동
+5. **DISCARD 처리**:
+   - DISCARD는 슬롯 관리 안 함
+   - 로봇팔이 고정 위치에서 PCB를 박스에 떨어뜨리기만 함
+   - 박스 꽉 참 감지 없음 (프로젝트 데모용 단순화)
+
+---
+
+## Phase 6: 모니터링 및 로깅
+
+### 6-1. 실시간 대시보드 (선택)
 
 ```python
 # server/dashboard.py
@@ -781,7 +1385,7 @@ if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5001)
 ```
 
-### 5-2. 로그 기록
+### 6-2. 로그 기록
 
 ```python
 # server/app.py에 로깅 추가

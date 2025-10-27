@@ -122,6 +122,14 @@ private async void btnLogin_Click(object sender, EventArgs e)
 **최근 검사 이력:**
 - DataGridView (최근 10건)
 
+**박스 상태 모니터링:** ⭐ 로봇팔 시스템
+- 3개 박스(정상/부품불량/납땜불량) 실시간 상태 표시
+- 각 박스의 슬롯 사용 현황 (2/2 표시, 수직 2단 적재)
+- DISCARD는 슬롯 관리 안 함 (고정 위치에 떨어뜨리기)
+- 꽉 찬 박스 빨간색 LED 경고
+- "박스 리셋" 버튼 (박스 교체 후)
+- 2초마다 자동 새로고침
+
 #### 권한별 메뉴 표시
 
 ```csharp
@@ -135,6 +143,541 @@ private void InitializeMenuByRole()
     // Operator 이상만 표시
     menuSettings.Visible = currentUser.Role == UserRole.Admin ||
                             currentUser.Role == UserRole.Operator;
+}
+```
+
+#### 박스 상태 모니터링 UI
+
+3개 박스(정상/부품불량/납땜불량)의 실시간 상태를 표시합니다.
+DISCARD는 슬롯 관리 없이 고정 위치에 떨어뜨리므로 UI에 표시하지 않습니다.
+
+**UI 레이아웃:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 박스 상태 모니터링 (로봇팔 시스템)                           │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│  [정상]  ●●  2/2  [꽉 참!] [리셋]                            │
+│                                                               │
+│  [부품불량]  ●○  1/2                                         │
+│                                                               │
+│  [납땜불량]  ○○  0/2                                         │
+│                                                               │
+│  [전체 박스 상태] 꽉 참: 1개 | 사용 중: 1개 | 빈 박스: 1개    │
+│                                                               │
+│  참고: 폐기(DISCARD)는 슬롯 관리 없음 (고정 위치 떨어뜨리기)  │
+│                                                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**BoxStatusPanel 커스텀 컨트롤:**
+
+```csharp
+public class BoxStatusPanel : Panel
+{
+    private Label lblBoxId;
+    private Panel pnlSlots;
+    private Label lblCount;
+    private Button btnReset;
+    private Label lblFullAlert;
+
+    private string boxId;
+    private int currentSlot;
+    private int maxSlots = 2;  // 수직 2단 적재
+    private bool isFull;
+
+    public BoxStatusPanel(string boxId)
+    {
+        this.boxId = boxId;
+        InitializeComponents();
+    }
+
+    private void InitializeComponents()
+    {
+        this.Size = new Size(400, 50);
+        this.BorderStyle = BorderStyle.FixedSingle;
+
+        // 박스 ID 라벨
+        lblBoxId = new Label
+        {
+            Text = GetBoxDisplayName(boxId),
+            Font = new Font("맑은 고딕", 10, FontStyle.Bold),
+            Location = new Point(10, 15),
+            AutoSize = true
+        };
+        this.Controls.Add(lblBoxId);
+
+        // 슬롯 표시 패널 (동그라미 2개)
+        pnlSlots = new Panel
+        {
+            Location = new Point(120, 10),
+            Size = new Size(60, 30)  // 2개만 표시하므로 너비 줄임
+        };
+        pnlSlots.Paint += PnlSlots_Paint;
+        this.Controls.Add(pnlSlots);
+
+        // 슬롯 카운트 라벨
+        lblCount = new Label
+        {
+            Text = "0/2",
+            Font = new Font("맑은 고딕", 10),
+            Location = new Point(200, 15),  // 위치 조정
+            AutoSize = true
+        };
+        this.Controls.Add(lblCount);
+
+        // 꽉 참 경고
+        lblFullAlert = new Label
+        {
+            Text = "꽉 참!",
+            Font = new Font("맑은 고딕", 9, FontStyle.Bold),
+            ForeColor = Color.White,
+            BackColor = Color.Red,
+            Location = new Point(260, 12),  // 위치 조정
+            Size = new Size(50, 25),
+            TextAlign = ContentAlignment.MiddleCenter,
+            Visible = false
+        };
+        this.Controls.Add(lblFullAlert);
+
+        // 리셋 버튼 (Admin/Operator만)
+        btnReset = new Button
+        {
+            Text = "리셋",
+            Location = new Point(320, 12),  // 위치 조정
+            Size = new Size(50, 25),
+            Enabled = false,
+            Visible = false
+        };
+        btnReset.Click += BtnReset_Click;
+        this.Controls.Add(btnReset);
+    }
+
+    public void UpdateStatus(int currentSlot, bool isFull)
+    {
+        this.currentSlot = currentSlot;
+        this.isFull = isFull;
+
+        lblCount.Text = $"{currentSlot}/{maxSlots}";
+        pnlSlots.Invalidate();
+
+        // 꽉 참 표시
+        if (isFull)
+        {
+            lblFullAlert.Visible = true;
+            btnReset.Visible = true;
+            btnReset.Enabled = true;
+            this.BackColor = Color.FromArgb(255, 230, 230);  // 연한 빨강
+        }
+        else
+        {
+            lblFullAlert.Visible = false;
+            btnReset.Visible = false;
+            this.BackColor = Color.White;
+        }
+    }
+
+    private void PnlSlots_Paint(object sender, PaintEventArgs e)
+    {
+        Graphics g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+
+        int circleSize = 18;
+        int spacing = 25;
+        int startX = 10;
+        int startY = 5;
+
+        // 2개 슬롯 동그라미 그리기 (수직 2단)
+        for (int i = 0; i < maxSlots; i++)
+        {
+            int x = startX + (i * spacing);
+            int y = startY;
+
+            Color fillColor;
+            if (i < currentSlot)
+            {
+                // 사용 중인 슬롯 (채워진 동그라미)
+                fillColor = GetCategoryColor(boxId);
+            }
+            else
+            {
+                // 빈 슬롯 (빈 동그라미)
+                fillColor = Color.LightGray;
+            }
+
+            using (SolidBrush brush = new SolidBrush(fillColor))
+            {
+                g.FillEllipse(brush, x, y, circleSize, circleSize);
+            }
+
+            // 테두리
+            using (Pen pen = new Pen(Color.Gray, 1))
+            {
+                g.DrawEllipse(pen, x, y, circleSize, circleSize);
+            }
+        }
+    }
+
+    private Color GetCategoryColor(string boxId)
+    {
+        if (boxId.Contains("NORMAL")) return Color.Green;
+        if (boxId.Contains("COMPONENT")) return Color.Orange;
+        if (boxId.Contains("SOLDER")) return Color.Blue;
+        if (boxId.Contains("DISCARD")) return Color.Red;
+        return Color.Gray;
+    }
+
+    private string GetBoxDisplayName(string boxId)
+    {
+        return boxId.Replace("_", " ");
+    }
+
+    private async void BtnReset_Click(object sender, EventArgs e)
+    {
+        // 확인 대화상자
+        var result = MessageBox.Show(
+            $"박스 {boxId}를 리셋하시겠습니까?\n(OHT가 박스를 교체한 후에만 리셋하세요)",
+            "박스 리셋 확인",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+
+        if (result == DialogResult.Yes)
+        {
+            // API 호출
+            bool success = await ApiClient.ResetBoxAsync(boxId);
+
+            if (success)
+            {
+                MessageBox.Show($"박스 {boxId}가 리셋되었습니다.", "성공",
+                               MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                // 상태 갱신
+                UpdateStatus(0, false);
+            }
+            else
+            {
+                MessageBox.Show("박스 리셋 실패", "오류",
+                               MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+    }
+}
+```
+
+**MainForm에 박스 모니터링 통합:**
+
+```csharp
+public partial class MainForm : Form
+{
+    private System.Windows.Forms.Timer timerBoxStatus;
+    private Dictionary<string, BoxStatusPanel> boxPanels = new Dictionary<string, BoxStatusPanel>();
+
+    private void InitializeBoxStatusMonitoring()
+    {
+        // 3개 박스 ID (DISCARD는 슬롯 관리 안 함)
+        string[] boxIds = {
+            "NORMAL",
+            "COMPONENT_DEFECT",
+            "SOLDER_DEFECT"
+        };
+
+        // GroupBox에 박스 패널 추가
+        GroupBox grpBoxStatus = new GroupBox
+        {
+            Text = "박스 상태 모니터링 (로봇팔 시스템)",
+            Location = new Point(20, 400),
+            Size = new Size(450, 300),  // 높이 조정 (3개 박스만)
+            Font = new Font("맑은 고딕", 10, FontStyle.Bold)
+        };
+
+        int yPos = 30;
+        foreach (string boxId in boxIds)
+        {
+            BoxStatusPanel panel = new BoxStatusPanel(boxId)
+            {
+                Location = new Point(10, yPos)
+            };
+
+            boxPanels[boxId] = panel;
+            grpBoxStatus.Controls.Add(panel);
+
+            yPos += 55;
+        }
+
+        this.Controls.Add(grpBoxStatus);
+
+        // 요약 라벨 추가
+        Label lblSummary = new Label
+        {
+            Name = "lblBoxSummary",
+            Location = new Point(20, yPos + 10),
+            Size = new Size(420, 30),
+            Font = new Font("맑은 고딕", 9),
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        grpBoxStatus.Controls.Add(lblSummary);
+
+        // 2초마다 갱신 타이머
+        timerBoxStatus = new System.Windows.Forms.Timer();
+        timerBoxStatus.Interval = 2000;  // 2초
+        timerBoxStatus.Tick += TimerBoxStatus_Tick;
+        timerBoxStatus.Start();
+
+        // 초기 로드
+        LoadBoxStatus();
+    }
+
+    private async void TimerBoxStatus_Tick(object sender, EventArgs e)
+    {
+        await LoadBoxStatus();
+    }
+
+    private async Task LoadBoxStatus()
+    {
+        try
+        {
+            // API 호출: /api/v1/box_status
+            var response = await ApiClient.GetBoxStatusAsync();
+
+            if (response != null && response.Status == "ok")
+            {
+                // 각 박스 패널 업데이트
+                foreach (var box in response.Boxes)
+                {
+                    if (boxPanels.ContainsKey(box.BoxId))
+                    {
+                        boxPanels[box.BoxId].UpdateStatus(box.CurrentSlot, box.IsFull);
+                    }
+                }
+
+                // 요약 정보 업데이트
+                UpdateBoxSummary(response.Summary);
+
+                // 박스 꽉 참 알림
+                CheckBoxFullAlert(response.Boxes);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError("박스 상태 조회 실패", ex);
+        }
+    }
+
+    private void UpdateBoxSummary(BoxSummary summary)
+    {
+        Label lblSummary = this.Controls.Find("lblBoxSummary", true).FirstOrDefault() as Label;
+        if (lblSummary != null)
+        {
+            lblSummary.Text = $"[전체 박스 상태] 꽉 참: {summary.FullBoxes}개 | " +
+                             $"사용 중: {summary.TotalBoxes - summary.EmptyBoxes - summary.FullBoxes}개 | " +
+                             $"빈 박스: {summary.EmptyBoxes}개";
+
+            // 시스템 정지 경고
+            if (summary.SystemStopped)
+            {
+                lblSummary.ForeColor = Color.Red;
+                lblSummary.Font = new Font(lblSummary.Font, FontStyle.Bold);
+
+                // 알림 표시
+                ShowSystemStoppedAlert();
+            }
+            else
+            {
+                lblSummary.ForeColor = Color.Black;
+                lblSummary.Font = new Font(lblSummary.Font, FontStyle.Regular);
+            }
+        }
+    }
+
+    private void CheckBoxFullAlert(List<BoxInfo> boxes)
+    {
+        // 꽉 찬 박스가 있으면 경고음 (한 번만)
+        var fullBoxes = boxes.Where(b => b.IsFull).ToList();
+
+        if (fullBoxes.Any() && !alertShown)
+        {
+            alertShown = true;
+            System.Media.SystemSounds.Exclamation.Play();
+
+            // 토스트 알림 (선택)
+            ShowBoxFullNotification(fullBoxes);
+        }
+        else if (!fullBoxes.Any())
+        {
+            alertShown = false;
+        }
+    }
+
+    private bool alertShown = false;
+
+    private void ShowBoxFullNotification(List<BoxInfo> fullBoxes)
+    {
+        string message = "다음 박스가 꽉 찼습니다:\n" +
+                        string.Join(", ", fullBoxes.Select(b => b.BoxId));
+
+        // 우측 하단에 토스트 알림 표시 (3초 후 자동 사라짐)
+        Form toastForm = new Form
+        {
+            FormBorderStyle = FormBorderStyle.None,
+            BackColor = Color.FromArgb(255, 200, 200),
+            Size = new Size(300, 100),
+            StartPosition = FormStartPosition.Manual,
+            Location = new Point(
+                Screen.PrimaryScreen.WorkingArea.Right - 320,
+                Screen.PrimaryScreen.WorkingArea.Bottom - 120),
+            TopMost = true,
+            ShowInTaskbar = false
+        };
+
+        Label lblMessage = new Label
+        {
+            Text = message,
+            Font = new Font("맑은 고딕", 10),
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+
+        toastForm.Controls.Add(lblMessage);
+        toastForm.Show();
+
+        // 3초 후 자동 닫기
+        System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
+        timer.Interval = 3000;
+        timer.Tick += (s, e) => {
+            toastForm.Close();
+            timer.Stop();
+        };
+        timer.Start();
+    }
+
+    private void ShowSystemStoppedAlert()
+    {
+        // 시스템 정지 대화상자 (한 번만 표시)
+        if (!systemStopAlertShown)
+        {
+            systemStopAlertShown = true;
+
+            MessageBox.Show(
+                "모든 박스가 꽉 찼습니다!\n" +
+                "시스템이 정지되었습니다.\n\n" +
+                "OHT를 호출하여 박스를 교체한 후\n" +
+                "박스 리셋 버튼을 눌러주세요.",
+                "시스템 정지",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Stop);
+        }
+    }
+
+    private bool systemStopAlertShown = false;
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        // 타이머 정지
+        timerBoxStatus?.Stop();
+        base.OnFormClosing(e);
+    }
+}
+```
+
+**ApiClient 클래스 (박스 상태 API):**
+
+```csharp
+public static class ApiClient
+{
+    private static readonly HttpClient client = new HttpClient();
+    private const string BASE_URL = "http://192.168.0.10:5000/api/v1";  // Flask 서버
+
+    public static async Task<BoxStatusResponse> GetBoxStatusAsync()
+    {
+        try
+        {
+            var response = await client.GetAsync($"{BASE_URL}/box_status");
+            response.EnsureSuccessStatusCode();
+
+            string jsonResponse = await response.Content.ReadAsStringAsync();
+            return JsonConvert.DeserializeObject<BoxStatusResponse>(jsonResponse);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError("박스 상태 조회 API 오류", ex);
+            return null;
+        }
+    }
+
+    public static async Task<bool> ResetBoxAsync(string boxId)
+    {
+        try
+        {
+            var requestData = new { box_id = boxId };
+            string jsonContent = JsonConvert.SerializeObject(requestData);
+            var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+            var response = await client.PostAsync($"{BASE_URL}/box_status/reset", content);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError("박스 리셋 API 오류", ex);
+            return false;
+        }
+    }
+}
+
+// DTO 클래스
+public class BoxStatusResponse
+{
+    [JsonProperty("status")]
+    public string Status { get; set; }
+
+    [JsonProperty("boxes")]
+    public List<BoxInfo> Boxes { get; set; }
+
+    [JsonProperty("summary")]
+    public BoxSummary Summary { get; set; }
+}
+
+public class BoxInfo
+{
+    [JsonProperty("box_id")]
+    public string BoxId { get; set; }
+
+    [JsonProperty("category")]
+    public string Category { get; set; }
+
+    [JsonProperty("box_type")]
+    public string BoxType { get; set; }
+
+    [JsonProperty("current_slot")]
+    public int CurrentSlot { get; set; }
+
+    [JsonProperty("max_slots")]
+    public int MaxSlots { get; set; }
+
+    [JsonProperty("is_full")]
+    public bool IsFull { get; set; }
+
+    [JsonProperty("total_pcb_count")]
+    public int TotalPcbCount { get; set; }
+
+    [JsonProperty("utilization_rate")]
+    public double UtilizationRate { get; set; }
+}
+
+public class BoxSummary
+{
+    [JsonProperty("total_boxes")]
+    public int TotalBoxes { get; set; }
+
+    [JsonProperty("full_boxes")]
+    public int FullBoxes { get; set; }
+
+    [JsonProperty("empty_boxes")]
+    public int EmptyBoxes { get; set; }
+
+    [JsonProperty("system_stopped")]
+    public bool SystemStopped { get; set; }
 }
 ```
 

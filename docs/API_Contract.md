@@ -31,6 +31,9 @@ PCB 불량 검사 시스템의 Flask 서버 REST API 공식 명세서입니다.
 | `/history/<id>` | GET | 특정 검사 결과 상세 조회 | Flask + DB |
 | `/statistics` | GET | 통계 데이터 조회 | Flask + DB |
 | `/export` | GET | Excel 내보내기용 데이터 | Flask + DB |
+| `/box_status` | GET | 전체 박스 상태 조회 ⭐ | Flask + DB |
+| `/box_status/<box_id>` | GET | 특정 박스 상태 조회 ⭐ | Flask + DB |
+| `/box_status/reset` | POST | 박스 상태 리셋 ⭐ | Flask + DB |
 
 ---
 
@@ -588,10 +591,216 @@ public async Task<List<InspectionRecord>> GetHistoryAsync(int page, int limit)
 
 ---
 
+### 7. 전체 박스 상태 조회 ⭐ 신규
+
+**엔드포인트**: `/api/v1/box_status`
+**메서드**: `GET`
+**설명**: 3개 박스(정상/부품불량/납땜불량)의 상태 조회 (DISCARD는 슬롯 관리 안 함)
+
+#### 요청 (Request)
+```http
+GET /api/v1/box_status HTTP/1.1
+Host: 192.168.0.10:5000
+```
+
+#### 응답 (Response)
+**성공 (200 OK)**:
+```json
+{
+  "status": "ok",
+  "timestamp": "2025-10-27T10:30:00",
+  "boxes": [
+    {
+      "box_id": "NORMAL",
+      "category": "normal",
+      "current_slot": 1,
+      "max_slots": 2,
+      "is_full": false,
+      "total_pcb_count": 1,
+      "utilization_rate": 50.0,
+      "last_updated": "2025-10-27T10:25:00"
+    },
+    {
+      "box_id": "COMPONENT_DEFECT",
+      "category": "component_defect",
+      "current_slot": 2,
+      "max_slots": 2,
+      "is_full": true,
+      "total_pcb_count": 2,
+      "utilization_rate": 100.0,
+      "last_updated": "2025-10-27T10:20:00"
+    },
+    {
+      "box_id": "SOLDER_DEFECT",
+      "category": "solder_defect",
+      "current_slot": 0,
+      "max_slots": 2,
+      "is_full": false,
+      "total_pcb_count": 0,
+      "utilization_rate": 0.0,
+      "last_updated": "2025-10-27T09:00:00"
+    }
+  ],
+  "summary": {
+    "total_boxes": 3,
+    "full_boxes": 1,
+    "empty_boxes": 1,
+    "total_pcb_stored": 3
+  }
+}
+```
+
+**필드 설명:**
+- `box_id` (string): 박스 ID (예: "NORMAL", "COMPONENT_DEFECT", "SOLDER_DEFECT")
+- `category` (string): 카테고리 (normal/component_defect/solder_defect)
+- `current_slot` (int): 현재 사용 중인 슬롯 번호 (0-1, 수직 2단)
+- `max_slots` (int): 최대 슬롯 개수 (2개, 수직 2단 적재)
+- `is_full` (boolean): 박스 가득참 여부
+- `total_pcb_count` (int): 박스에 저장된 총 PCB 개수
+- `utilization_rate` (float): 사용률 (0.0 ~ 100.0)
+- `last_updated` (string): 마지막 업데이트 시각
+
+**참고**: DISCARD 카테고리는 슬롯 관리를 하지 않으므로 box_status에 포함되지 않습니다.
+
+---
+
+### 8. 특정 박스 상태 조회 ⭐ 신규
+
+**엔드포인트**: `/api/v1/box_status/<box_id>`
+**메서드**: `GET`
+**설명**: 특정 박스의 상태 조회
+
+#### 요청 (Request)
+```http
+GET /api/v1/box_status/NORMAL HTTP/1.1
+Host: 192.168.0.10:5000
+```
+
+#### 응답 (Response)
+**성공 (200 OK)**:
+```json
+{
+  "status": "ok",
+  "timestamp": "2025-10-27T10:30:00",
+  "box": {
+    "box_id": "NORMAL",
+    "category": "normal",
+    "current_slot": 1,
+    "max_slots": 2,
+    "is_full": false,
+    "total_pcb_count": 1,
+    "utilization_rate": 50.0,
+    "created_at": "2025-10-27T08:00:00",
+    "last_updated": "2025-10-27T10:25:00",
+    "recent_inspections": [
+      {
+        "inspection_id": 12345,
+        "slot_number": 0,
+        "classification": "normal",
+        "confidence": 0.985,
+        "timestamp": "2025-10-27T10:25:00"
+      }
+    ]
+  }
+}
+```
+
+**실패 (404 Not Found)**:
+```json
+{
+  "status": "error",
+  "error": "Box not found",
+  "message": "Box ID 'INVALID_ID' does not exist",
+  "timestamp": "2025-10-27T10:30:00"
+}
+```
+
+---
+
+### 9. 박스 상태 리셋 ⭐ 신규
+
+**엔드포인트**: `/api/v1/box_status/reset`
+**메서드**: `POST`
+**설명**: 특정 박스 또는 전체 박스 상태 리셋 (비우기)
+
+#### 요청 (Request)
+
+**특정 박스 리셋:**
+```http
+POST /api/v1/box_status/reset HTTP/1.1
+Host: 192.168.0.10:5000
+Content-Type: application/json
+
+{
+  "box_id": "NORMAL",
+  "reason": "Box replaced",
+  "operator": "admin"
+}
+```
+
+**전체 박스 리셋:**
+```http
+POST /api/v1/box_status/reset HTTP/1.1
+Host: 192.168.0.10:5000
+Content-Type: application/json
+
+{
+  "reset_all": true,
+  "reason": "System maintenance",
+  "operator": "admin"
+}
+```
+
+**필드 설명:**
+- `box_id` (string, 선택): 리셋할 박스 ID (지정 시 해당 박스만 리셋)
+- `reset_all` (boolean, 선택): true일 경우 모든 박스 리셋 (3개)
+- `reason` (string, 필수): 리셋 사유
+- `operator` (string, 필수): 작업자 ID
+
+#### 응답 (Response)
+**성공 (200 OK)**:
+```json
+{
+  "status": "ok",
+  "message": "Box NORMAL has been reset",
+  "box_id": "NORMAL",
+  "reset_count": 1,
+  "timestamp": "2025-10-27T10:30:00"
+}
+```
+
+**전체 리셋 성공:**
+```json
+{
+  "status": "ok",
+  "message": "All boxes have been reset",
+  "reset_count": 3,
+  "boxes_reset": [
+    "NORMAL",
+    "COMPONENT_DEFECT",
+    "SOLDER_DEFECT"
+  ],
+  "timestamp": "2025-10-27T10:30:00"
+}
+```
+
+**실패 (400 Bad Request)**:
+```json
+{
+  "status": "error",
+  "error": "Invalid request",
+  "message": "Either 'box_id' or 'reset_all' must be specified",
+  "timestamp": "2025-10-27T10:30:00"
+}
+```
+
+---
+
 ## 📝 변경 이력
 
 | 버전 | 날짜 | 변경 내용 | 변경자 |
 |------|------|-----------|--------|
+| 1.1.0 | 2025-10-27 | 박스 상태 관리 API 추가 (로봇팔 시스템) | 팀 리더 |
 | 1.0.0 | 2025-10-25 | 초기 API 명세서 작성 | 팀 리더 |
 
 ---
