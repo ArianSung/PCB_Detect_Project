@@ -587,6 +587,8 @@ public partial class MainForm : Form
 public static class ApiClient
 {
     private static readonly HttpClient client = new HttpClient();
+    // 로컬: http://192.168.0.10:5000/api/v1 (선택)
+    // 원격: http://100.x.x.x:5000/api/v1 (Tailscale VPN - 프로젝트 환경)
     private const string BASE_URL = "http://192.168.0.10:5000/api/v1";  // Flask 서버
 
     public static async Task<BoxStatusResponse> GetBoxStatusAsync()

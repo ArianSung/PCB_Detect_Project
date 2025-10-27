@@ -40,13 +40,13 @@
 - **GPU PC (추론 서버)**
   - GPU: NVIDIA RTX 4080 Super (16GB VRAM)
   - Windows 11 + WSL2 (Ubuntu) 또는 Linux
-  - Python 3.8+ (Miniconda)
+  - Python 3.10 (Miniconda)
   - PyTorch + YOLO v8l (Large 모델)
   - Flask 웹 서버
   - MySQL 8.0 데이터베이스
 - **라즈베리파이** (카메라 + GPIO)
   - Raspberry Pi OS (64-bit)
-  - Python 3.9+
+  - Python 3.10+
   - OpenCV + RPi.GPIO
 - **Windows PC** (모니터링)
   - C# WinForms (.NET 6+)
@@ -297,36 +297,41 @@
               └─────────┬───────────┘
                         │ 로봇팔 명령
                         ↓
-              [분류 박스 시스템 - 수평 슬롯]
+              [분류 박스 시스템 - 수직 2단 적재]
                         │
-        ┌───────┬───────┼───────┬───────┐
+        ┌───────┬───────┬───────┬───────┐
         │       │       │       │       │
-    [정상 A/B]  │  [부품불량 A/B]  │  [폐기 A/B]
-          [납땜불량 A/B]        │
-                                └─→ 가득 참 → LED 알림 + WinForms 알림
+      [정상]  [부품불량] [납땜불량] [폐기]
+     (슬롯2개) (슬롯2개) (슬롯2개) (슬롯없음)
+        │       │       │       │
+        └───────┴───────┴───────┴─→ 가득 참 → LED 알림 + WinForms 알림
                                              → 시스템 자동 정지
                                              → OHT 수동 트리거 (가득 찬 박스 교체)
 
-[박스 시스템 구조] ⭐
-- 총 8개 박스: 4개 카테고리 × 2개 박스(A/B)
-- 각 박스: 5개 슬롯 (수평 배치)
-- 총 40개 슬롯 = 4 카테고리 × 2 박스 × 5 슬롯
+[박스 시스템 구조] ⭐ 물리적 제약 반영 (2025-10 업데이트)
+- 총 3개 박스 + 1개 폐기 위치
+- 각 박스: 2개 슬롯 (수직 2단 적재)
+- 총 6개 슬롯 = 3 박스 × 2 슬롯
+- DISCARD: 슬롯 관리 없음 (고정 위치에 떨어뜨림)
 - 로봇팔: 각 슬롯별 정확한 좌표 설정 (Arduino 좌표 테이블)
 
 카테고리별 박스:
-1. NORMAL_A, NORMAL_B (정상)
-2. COMPONENT_DEFECT_A, COMPONENT_DEFECT_B (부품 불량)
-3. SOLDER_DEFECT_A, SOLDER_DEFECT_B (납땜 불량)
-4. DISCARD_A, DISCARD_B (폐기)
+1. NORMAL (정상) - 2 슬롯 (수직 2단)
+2. COMPONENT_DEFECT (부품 불량) - 2 슬롯 (수직 2단)
+3. SOLDER_DEFECT (납땜 불량) - 2 슬롯 (수직 2단)
+4. DISCARD (폐기) - 슬롯 관리 없음 (고정 위치)
 
 슬롯 할당 로직:
-1. 각 카테고리는 A 박스부터 채움
-2. A 박스가 가득 차면 자동으로 B 박스로 전환
-3. A, B 둘 다 가득 차면:
+1. 각 박스는 슬롯 1번(하단)부터 채움
+2. 슬롯 1번이 가득 차면 자동으로 슬롯 2번(상단)으로 전환
+3. 박스가 가득 차면 (2/2):
    - LED 알림 (라즈베리파이 GPIO)
-   - WinForms 화면 알림
-   - 시스템 자동 정지
+   - WinForms 화면 알림 (빨간색 경고)
+   - 해당 박스 is_full = TRUE
+4. 모든 박스가 가득 차면:
+   - 시스템 자동 정지 (system_stopped = TRUE)
    - OHT(Overhead Hoist Transport) 수동 트리거로 가득 찬 박스 픽업
+   - 박스 교체 후 관리자가 "박스 리셋" 버튼 클릭
 
 [GPIO + Arduino 병렬 사용] ⭐ 라즈베리파이 1 전용
 양면 통합 판정 → Flask 서버 → HTTP 응답 (라즈베리파이 1만)
@@ -341,11 +346,14 @@
       └─ Arduino Mega 2560 ─→ 5-6축 로봇팔 (servo)
           │
           ├─ 픽업 좌표: (X, Y, Z) - 컨베이어 벨트 위치
-          └─ 배치 좌표: 40개 슬롯별 좌표 테이블
-              - NORMAL_A_SLOT_0: (x1, y1, z1)
-              - NORMAL_A_SLOT_1: (x2, y2, z2)
-              - ...
-              - DISCARD_B_SLOT_4: (x40, y40, z40)
+          └─ 배치 좌표: 6개 슬롯 + 1개 폐기 위치 좌표 테이블
+              - NORMAL_SLOT_1 (하단): (x1, y1, z1)
+              - NORMAL_SLOT_2 (상단): (x2, y2, z2)
+              - COMPONENT_DEFECT_SLOT_1 (하단): (x3, y3, z3)
+              - COMPONENT_DEFECT_SLOT_2 (상단): (x4, y4, z4)
+              - SOLDER_DEFECT_SLOT_1 (하단): (x5, y5, z5)
+              - SOLDER_DEFECT_SLOT_2 (상단): (x6, y6, z6)
+              - DISCARD (고정 위치): (xd, yd, zd)
 
 참고: 라즈베리파이 2는 카메라 전용이며, GPIO 및 로봇팔 제어를 수행하지 않음
 ```
