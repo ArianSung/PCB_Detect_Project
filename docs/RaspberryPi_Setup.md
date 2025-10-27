@@ -30,7 +30,7 @@
 
 ### 운영체제
 - **Raspberry Pi OS (64-bit)** - Bullseye 또는 Bookworm
-- Python 3.9+
+- Python 3.10+
 
 ### 주요 라이브러리
 - OpenCV
@@ -88,7 +88,7 @@ sudo reboot
 
 ```bash
 python3 --version
-# 출력: Python 3.9.x 이상
+# 출력: Python 3.10.x
 ```
 
 ### 2-2. 필수 패키지 설치

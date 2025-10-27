@@ -21,7 +21,7 @@
 | **VRAM** | 8GB 이상 | 16GB 이상 |
 | **RAM** | 16GB 이상 | 32GB 이상 |
 | **저장공간** | 50GB 이상 | 100GB 이상 (SSD) |
-| **Python** | 3.8 ~ 3.10 | Python 3.10 |
+| **Python** | Python 3.10 | Python 3.10 |
 | **CUDA** | 11.8 이상 | CUDA 11.8 |
 
 ### AI 모델 팀 (GPU PC 공유 또는 개별)
@@ -260,7 +260,7 @@ ssh pi@pcb-pi-left.local  # 또는 IP 주소
 sudo apt update && sudo apt upgrade -y
 
 # 3. Python 버전 확인
-python3 --version  # Python 3.9 이상
+python3 --version  # Python 3.10.x
 
 # 4. pip 설치
 sudo apt install python3-pip -y

@@ -84,7 +84,7 @@ ssh pi@pcb-pi-left.local  # 또는 IP 주소
 sudo apt update && sudo apt upgrade -y
 
 # Python 버전 확인
-python3 --version  # Python 3.9 이상
+python3 --version  # Python 3.10.x
 
 # pip 설치
 sudo apt install python3-pip -y

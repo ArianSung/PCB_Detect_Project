@@ -1,7 +1,7 @@
 # 🔍 PCB 불량 검사 시스템 (PCB Defect Detection System)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![YOLOv8](https://img.shields.io/badge/YOLO-v8-00FFFF.svg)](https://github.com/ultralytics/ultralytics)
 [![Flask](https://img.shields.io/badge/Flask-2.0+-000000.svg)](https://flask.palletsprojects.com/)
 
@@ -109,7 +109,7 @@ git clone https://github.com/ArianSung/PCB_Detect_Project.git
 cd PCB_Detect_Project
 
 # Conda 가상환경 생성
-conda create -n pcb_defect python=3.9
+conda create -n pcb_defect python=3.10
 conda activate pcb_defect
 
 # 필수 패키지 설치
