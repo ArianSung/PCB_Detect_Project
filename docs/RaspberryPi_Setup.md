@@ -845,12 +845,273 @@ curl http://100.64.1.1:5000/health
 
 ---
 
+## Phase 6: USB 시리얼 통신 (Arduino 로봇팔 제어) ⭐ 신규 - 라즈베리파이 1 전용
+
+### 6-1. pyserial 라이브러리 설치
+
+```bash
+# pyserial 설치
+pip3 install pyserial
+
+# 설치 확인
+python3 -c "import serial; print(serial.__version__)"
+```
+
+### 6-2. USB 포트 확인
+
+```bash
+# 연결된 USB 장치 확인
+ls /dev/ttyUSB* /dev/ttyACM*
+
+# Arduino Mega는 보통 /dev/ttyACM0 또는 /dev/ttyUSB0로 인식
+# 장치 정보 확인
+dmesg | grep tty
+```
+
+### 6-3. 시리얼 권한 설정
+
+```bash
+# 사용자를 dialout 그룹에 추가
+sudo usermod -a -G dialout $USER
+
+# 재부팅 필요
+sudo reboot
+```
+
+### 6-4. Arduino 시리얼 컨트롤러 모듈
+
+**serial_controller.py**
+
+```python
+import serial
+import json
+import time
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class ArduinoSerialController:
+    """Arduino Mega와 USB 시리얼 통신 클래스"""
+
+    def __init__(self, port='/dev/ttyACM0', baudrate=115200, timeout=5):
+        """
+        Arduino 시리얼 포트 초기화
+
+        Args:
+            port: 시리얼 포트 경로 (기본: /dev/ttyACM0)
+            baudrate: 보드레이트 (기본: 115200)
+            timeout: 읽기 타임아웃 (초)
+        """
+        self.port = port
+        self.baudrate = baudrate
+        self.timeout = timeout
+        self.serial_connection = None
+
+        try:
+            self.serial_connection = serial.Serial(
+                port=self.port,
+                baudrate=self.baudrate,
+                timeout=self.timeout
+            )
+            time.sleep(2)  # Arduino 리셋 대기
+            logger.info(f"Arduino 연결 성공: {self.port} at {self.baudrate} baud")
+        except serial.SerialException as e:
+            logger.error(f"Arduino 연결 실패: {str(e)}")
+            raise
+
+    def send_command(self, command_dict):
+        """
+        Arduino에 JSON 명령 전송
+
+        Args:
+            command_dict: 명령 딕셔너리
+                {
+                    "command": "place_pcb",
+                    "box_id": "NORMAL_A",
+                    "slot_number": 2,
+                    "coordinates": {"x": 120.5, "y": 85.3, "z": 30.0}
+                }
+
+        Returns:
+            dict: Arduino 응답
+                {
+                    "status": "success",
+                    "message": "PCB placed successfully",
+                    "execution_time_ms": 2350
+                }
+        """
+        try:
+            # JSON 문자열로 변환 후 전송
+            json_str = json.dumps(command_dict) + '\n'
+            self.serial_connection.write(json_str.encode('utf-8'))
+            logger.info(f"Arduino 명령 전송: {command_dict}")
+
+            # 응답 대기 (최대 timeout 초)
+            response_line = self.serial_connection.readline().decode('utf-8').strip()
+
+            if response_line:
+                response = json.loads(response_line)
+                logger.info(f"Arduino 응답: {response}")
+                return response
+            else:
+                logger.warning("Arduino 응답 없음 (timeout)")
+                return {"status": "error", "message": "No response from Arduino"}
+
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON 디코딩 오류: {str(e)}")
+            return {"status": "error", "message": f"JSON decode error: {str(e)}"}
+        except Exception as e:
+            logger.error(f"시리얼 통신 오류: {str(e)}")
+            return {"status": "error", "message": str(e)}
+
+    def is_connected(self):
+        """Arduino 연결 상태 확인"""
+        return self.serial_connection and self.serial_connection.is_open
+
+    def close(self):
+        """시리얼 연결 종료"""
+        if self.serial_connection and self.serial_connection.is_open:
+            self.serial_connection.close()
+            logger.info("Arduino 연결 종료")
+
+# 전역 Arduino 컨트롤러 인스턴스
+_arduino_controller = None
+
+def get_arduino_controller(port='/dev/ttyACM0', baudrate=115200):
+    """Arduino 컨트롤러 싱글톤 인스턴스 반환"""
+    global _arduino_controller
+    if _arduino_controller is None or not _arduino_controller.is_connected():
+        _arduino_controller = ArduinoSerialController(port, baudrate)
+    return _arduino_controller
+```
+
+### 6-5. 통합 클라이언트 업데이트 (camera_client.py에 추가)
+
+기존 `camera_client.py`에 Arduino 제어를 통합:
+
+```python
+# camera_client.py 상단에 import 추가
+from serial_controller import get_arduino_controller
+
+# 메인 루프에서 Flask 응답 처리 부분에 추가
+def process_flask_response(response_json):
+    """Flask 서버 응답 처리"""
+
+    # GPIO 제어 (기존 코드)
+    if 'gpio_signal' in response_json:
+        gpio_controller = get_gpio_controller()
+        gpio_controller.trigger(
+            response_json['defect_type'],
+            duration_ms=response_json['gpio_signal'].get('duration_ms', 500)
+        )
+
+    # 로봇팔 제어 (신규) ⭐
+    if 'robot_arm_command' in response_json:
+        arduino_controller = get_arduino_controller()
+        robot_command = response_json['robot_arm_command']
+
+        # Arduino에 명령 전송
+        arduino_response = arduino_controller.send_command(robot_command)
+
+        if arduino_response.get('status') == 'success':
+            logger.info(f"로봇팔 동작 완료: {arduino_response.get('execution_time_ms')}ms")
+        else:
+            logger.error(f"로봇팔 동작 실패: {arduino_response.get('message')}")
+```
+
+### 6-6. 시리얼 통신 테스트
+
+**test_serial.py**
+
+```python
+import time
+from serial_controller import get_arduino_controller
+
+def test_arduino_communication():
+    """Arduino 통신 테스트"""
+    try:
+        arduino = get_arduino_controller('/dev/ttyACM0', 115200)
+
+        # 테스트 명령 전송
+        test_command = {
+            "command": "place_pcb",
+            "box_id": "NORMAL_A",
+            "slot_number": 0,
+            "coordinates": {"x": 100.0, "y": 80.0, "z": 30.0}
+        }
+
+        print(f"테스트 명령 전송: {test_command}")
+        response = arduino.send_command(test_command)
+
+        print(f"Arduino 응답: {response}")
+
+        if response.get('status') == 'success':
+            print("✅ 통신 성공!")
+        else:
+            print("❌ 통신 실패:", response.get('message'))
+
+        arduino.close()
+
+    except Exception as e:
+        print(f"❌ 오류 발생: {str(e)}")
+
+if __name__ == '__main__':
+    test_arduino_communication()
+```
+
+### 6-7. 실행
+
+```bash
+# 테스트 실행
+python3 test_serial.py
+
+# 정상 출력 예시:
+# 테스트 명령 전송: {'command': 'place_pcb', 'box_id': 'NORMAL_A', 'slot_number': 0, ...}
+# Arduino 응답: {'status': 'success', 'message': 'PCB placed successfully', 'execution_time_ms': 2350}
+# ✅ 통신 성공!
+```
+
+### 6-8. 프로젝트 구조 업데이트
+
+```
+~/pcb_inspection_client/
+├── camera_client.py       # 웹캠 + GPIO + 로봇팔 통합 클라이언트 ⭐ 업데이트
+├── gpio_controller.py     # GPIO 제어 모듈
+├── serial_controller.py   # Arduino 시리얼 통신 모듈 ⭐ 신규
+├── config.py              # 설정 파일
+├── test_serial.py         # 시리얼 통신 테스트 ⭐ 신규
+└── start.sh               # 자동 시작 스크립트
+```
+
+### 6-9. 주의사항
+
+1. **Arduino 포트 자동 인식**:
+   - Arduino Mega는 `/dev/ttyACM0` 또는 `/dev/ttyUSB0`로 인식
+   - 연결 순서에 따라 포트 번호가 변경될 수 있음
+   - `dmesg | grep tty`로 정확한 포트 확인
+
+2. **시리얼 권한**:
+   - `dialout` 그룹에 사용자 추가 필수
+   - 추가 후 재부팅 필요
+
+3. **타임아웃 설정**:
+   - 로봇팔 동작 시간(2-3초)을 고려하여 timeout 5초 설정
+   - Arduino 응답이 없으면 timeout 후 error 반환
+
+4. **에러 처리**:
+   - Arduino 연결 끊김 시 재연결 로직 필요
+   - 명령 전송 실패 시 재시도 로직 구현 권장
+
+---
+
 ## 다음 단계
 
-1. **원격 네트워크 설정**: `Remote_Network_Setup.md` ⭐
-2. **MySQL 데이터베이스 설계**: `MySQL_Database_Design.md`
-3. **Flask 서버 업데이트**: `Flask_Server_Setup.md`
-4. **C# WinForms 연동**: `CSharp_WinForms_Guide.md`
+1. **Arduino 로봇팔 설정**: `Arduino_RobotArm_Setup.md` ⭐ 신규
+2. **원격 네트워크 설정**: `Remote_Network_Setup.md`
+3. **MySQL 데이터베이스 설계**: `MySQL_Database_Design.md`
+4. **Flask 서버 업데이트**: `Flask_Server_Setup.md`
+5. **C# WinForms 연동**: `CSharp_WinForms_Guide.md`
 
 ---
 

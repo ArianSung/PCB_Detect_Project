@@ -83,17 +83,17 @@
 #### 체크리스트
 - [x] WSL2 설치
 - [x] Miniconda 설치 및 가상환경 구축
-- [ ] YOLO v8 설치
-  - [ ] PyTorch 설치
-  - [ ] Ultralytics 패키지 설치
-  - [ ] 설치 확인 테스트
-- [ ] YOLO v8 기본 튜토리얼 실습
-  - [ ] 이미지 추론 테스트
-  - [ ] 비디오 추론 테스트
-  - [ ] 사전 학습 모델 테스트
-- [ ] 공개 데이터셋으로 학습 테스트
-  - [ ] COCO dataset 샘플 학습
-  - [ ] 커스텀 데이터 학습 연습
+- [x] YOLO v8 설치
+  - [x] PyTorch 설치
+  - [x] Ultralytics 패키지 설치
+  - [x] 설치 확인 테스트
+- [x] YOLO v8 기본 튜토리얼 실습
+  - [x] 이미지 추론 테스트
+  - [x] 비디오 추론 테스트
+  - [x] 사전 학습 모델 테스트
+- [x] 공개 데이터셋으로 학습 테스트
+  - [x] COCO dataset 샘플 학습
+  - [x] 커스텀 데이터 학습 연습
 
 **참고 문서**: `Phase1_YOLO_Setup.md`
 
@@ -111,14 +111,14 @@
   - [ ] 이미지 해상도 확인
   - [ ] 불량 유형별 개수 파악
   - [ ] 클래스 불균형 확인
-- [ ] YOLO 형식으로 전처리
-  - [ ] 이미지 리사이징
-  - [ ] 어노테이션 변환 (YOLO format)
-  - [ ] 데이터 증강 (Augmentation) 적용
-- [ ] 데이터 분할
-  - [ ] Train: 70%
-  - [ ] Validation: 20%
-  - [ ] Test: 10%
+- [x] YOLO 형식으로 전처리
+  - [x] 이미지 리사이징
+  - [x] 어노테이션 변환 (YOLO format)
+  - [x] 데이터 증강 (Augmentation) 적용
+- [x] 데이터 분할
+  - [x] Train: 70%
+  - [x] Validation: 20%
+  - [x] Test: 10%
 
 **참고 문서**: `Dataset_Guide.md`
 
@@ -127,25 +127,25 @@
 ### Phase 3: YOLO 모델 학습 및 최적화 (3-4주)
 
 #### 체크리스트
-- [ ] 기본 YOLO v8 모델 선택
-  - [ ] YOLOv8n (nano - 경량)
+- [x] 기본 YOLO v8 모델 선택
+  - [x] YOLOv8n (nano - 경량)
   - [ ] YOLOv8s (small)
   - [ ] YOLOv8m (medium)
   - [ ] 성능/속도 비교 실험
-- [ ] 초기 학습 실행
-  - [ ] 기본 하이퍼파라미터로 학습
-  - [ ] 학습 과정 모니터링 (loss, mAP)
+- [x] 초기 학습 실행
+  - [x] 기본 하이퍼파라미터로 학습
+  - [x] 학습 과정 모니터링 (loss, mAP)
   - [ ] TensorBoard 활용
 - [ ] 하이퍼파라미터 튜닝
   - [ ] Learning rate 조정
   - [ ] Batch size 최적화
   - [ ] Epoch 수 결정
   - [ ] Augmentation 파라미터 조정
-- [ ] 성능 평가
-  - [ ] mAP@0.5 측정
-  - [ ] mAP@0.5:0.95 측정
-  - [ ] Precision/Recall 분석
-  - [ ] 클래스별 성능 분석
+- [x] 성능 평가
+  - [x] mAP@0.5 측정
+  - [x] mAP@0.5:0.95 측정
+  - [x] Precision/Recall 분석
+  - [x] 클래스별 성능 분석
 - [ ] 모델 개선
   - [ ] Hard negative mining
   - [ ] 클래스 불균형 해결 (가중치 조정)
@@ -223,7 +223,8 @@
     ├─ 웹캠 1 (좌측) ──→ [라즈베리파이 1] (192.168.0.20)
     │                      │
     │                      ├──→ Flask Client (프레임 전송)
-    │                      └──→ GPIO 제어 모듈 (릴레이 제어) ⭐
+    │                      ├──→ GPIO 제어 모듈 (LED/릴레이) ⭐
+    │                      └──→ USB 시리얼 통신 (Arduino Mega 제어) ⭐ 신규
     │                             │
     └─ 웹캠 2 (우측) ──→ [라즈베리파이 2] (192.168.0.21)
                          │        │
@@ -245,12 +246,15 @@
         │  │  좌측+우측 결과 통합     │   │
         │  │  ↓                       │   │
         │  │  최종 불량 분류 판정     │   │
+        │  │  ↓                       │   │
+        │  │  박스 슬롯 할당 로직 ⭐  │   │
         │  └──────────────────────────┘   │
         │           │                      │
         │           ↓                      │
         │  ┌──────────────────────────┐   │
         │  │  MySQL 데이터베이스      │   │
         │  │  - 검사 이력 저장        │   │
+        │  │  - 박스 상태 관리 ⭐     │   │
         │  │  - 불량 이미지 경로      │   │
         │  │  - 통계 데이터           │   │
         │  └──────────────────────────┘   │
@@ -260,6 +264,7 @@
         │  │  REST API 서버           │   │
         │  │  - /api/inspections      │   │
         │  │  - /api/statistics       │   │
+        │  │  - /api/box_status ⭐    │   │
         │  │  - /gpio/control         │   │
         │  └──────────────────────────┘   │
         └─────────────────────────────────┘
@@ -269,20 +274,80 @@
         ┌─────────────────────────────────┐
         │  C# WinForms (Windows PC)       │
         │  - 실시간 모니터링 대시보드     │
+        │  - 박스 상태 모니터링 ⭐        │
         │  - 검사 이력 조회 (MySQL)       │
         │  - 불량 이미지 뷰어             │
         │  - 시스템 설정 관리             │
         └─────────────────────────────────┘
 
-[GPIO 제어 흐름] ⭐ 라즈베리파이 1만 제어
-양면 통합 판정 → Flask 서버 → HTTP 응답 (라즈베리파이 1만) → GPIO HIGH → 릴레이 → 분류 게이트
-  │
-  ├─ 부품 불량 → GPIO 핀 17 (BCM) → 부품 재작업 라인
-  ├─ 납땜 불량 → GPIO 핀 27 (BCM) → 납땜 재작업 라인
-  ├─ 폐기      → GPIO 핀 22 (BCM) → 폐기 라인
-  └─ 정상      → GPIO 핀 23 (BCM) → 다음 공정
+[로봇팔 시스템 아키텍처] ⭐ 신규 추가
 
-참고: 라즈베리파이 2는 카메라 전용이며, GPIO 제어를 수행하지 않음
+                 [컨베이어 벨트]
+                        │
+                        ↓ PCB 도착
+              ┌─────────────────────┐
+              │   5-6축 로봇팔      │
+              │  (Arduino Mega 제어) │
+              └─────────┬───────────┘
+                        │ USB 시리얼
+                        ↓
+              ┌─────────────────────┐
+              │  라즈베리파이 1     │
+              │  (시리얼 컨트롤러)   │
+              └─────────┬───────────┘
+                        │ 로봇팔 명령
+                        ↓
+              [분류 박스 시스템 - 수평 슬롯]
+                        │
+        ┌───────┬───────┼───────┬───────┐
+        │       │       │       │       │
+    [정상 A/B]  │  [부품불량 A/B]  │  [폐기 A/B]
+          [납땜불량 A/B]        │
+                                └─→ 가득 참 → LED 알림 + WinForms 알림
+                                             → 시스템 자동 정지
+                                             → OHT 수동 트리거 (가득 찬 박스 교체)
+
+[박스 시스템 구조] ⭐
+- 총 8개 박스: 4개 카테고리 × 2개 박스(A/B)
+- 각 박스: 5개 슬롯 (수평 배치)
+- 총 40개 슬롯 = 4 카테고리 × 2 박스 × 5 슬롯
+- 로봇팔: 각 슬롯별 정확한 좌표 설정 (Arduino 좌표 테이블)
+
+카테고리별 박스:
+1. NORMAL_A, NORMAL_B (정상)
+2. COMPONENT_DEFECT_A, COMPONENT_DEFECT_B (부품 불량)
+3. SOLDER_DEFECT_A, SOLDER_DEFECT_B (납땜 불량)
+4. DISCARD_A, DISCARD_B (폐기)
+
+슬롯 할당 로직:
+1. 각 카테고리는 A 박스부터 채움
+2. A 박스가 가득 차면 자동으로 B 박스로 전환
+3. A, B 둘 다 가득 차면:
+   - LED 알림 (라즈베리파이 GPIO)
+   - WinForms 화면 알림
+   - 시스템 자동 정지
+   - OHT(Overhead Hoist Transport) 수동 트리거로 가득 찬 박스 픽업
+
+[GPIO + Arduino 병렬 사용] ⭐ 라즈베리파이 1 전용
+양면 통합 판정 → Flask 서버 → HTTP 응답 (라즈베리파이 1만)
+  │
+  ├─ GPIO 제어 (LED/릴레이)
+  │   ├─ 부품 불량 → GPIO 핀 17 (BCM) → LED/릴레이
+  │   ├─ 납땜 불량 → GPIO 핀 27 (BCM) → LED/릴레이
+  │   ├─ 폐기      → GPIO 핀 22 (BCM) → LED/릴레이
+  │   └─ 정상      → GPIO 핀 23 (BCM) → LED/릴레이
+  │
+  └─ USB 시리얼 통신 (로봇팔 제어) ⭐
+      └─ Arduino Mega 2560 ─→ 5-6축 로봇팔 (servo)
+          │
+          ├─ 픽업 좌표: (X, Y, Z) - 컨베이어 벨트 위치
+          └─ 배치 좌표: 40개 슬롯별 좌표 테이블
+              - NORMAL_A_SLOT_0: (x1, y1, z1)
+              - NORMAL_A_SLOT_1: (x2, y2, z2)
+              - ...
+              - DISCARD_B_SLOT_4: (x40, y40, z40)
+
+참고: 라즈베리파이 2는 카메라 전용이며, GPIO 및 로봇팔 제어를 수행하지 않음
 ```
 
 #### 웹서버 통신 프로토콜
@@ -309,18 +374,53 @@
     "action": "HIGH",
     "duration_ms": 500
   },
+  "robot_arm_command": {
+    "action": "place_pcb",
+    "box_id": "NORMAL_A",
+    "slot_number": 2,
+    "coordinates": {"x": 120.5, "y": 85.3, "z": 30.0}
+  },
+  "box_status": {
+    "box_id": "NORMAL_A",
+    "current_slot": 3,
+    "is_full": false
+  },
   "inspection_id": 12345
 }
 ```
 
 **2. Flask 서버 → MySQL (데이터 저장)**
-- 검사 결과 INSERT
+- 검사 결과 INSERT (box_id, slot_number 포함) ⭐
+- 박스 상태 업데이트 (current_slot, is_full) ⭐
 - 불량 이미지 경로 저장
 - 통계 업데이트
 
-**3. C# WinForms → Flask 서버 (API 호출)**
+**3. 라즈베리파이 1 → Arduino Mega (USB 시리얼)** ⭐ 신규
+- **프로토콜**: JSON over Serial (115200 baud)
+- **명령 예시**:
+```json
+{
+  "command": "place_pcb",
+  "box_id": "NORMAL_A",
+  "slot_number": 2,
+  "coordinates": {"x": 120.5, "y": 85.3, "z": 30.0}
+}
+```
+- **Arduino 응답**:
+```json
+{
+  "status": "success",
+  "message": "PCB placed successfully",
+  "execution_time_ms": 2350
+}
+```
+
+**4. C# WinForms → Flask 서버 (API 호출)**
 - **GET** `/api/inspections?page=1&limit=50` - 검사 이력 조회
 - **GET** `/api/statistics?start_date=2025-10-01&end_date=2025-10-22` - 통계 조회
+- **GET** `/api/box_status` - 박스 상태 조회 (8개 박스) ⭐ 신규
+- **GET** `/api/box_status/{box_id}` - 특정 박스 상태 조회 ⭐ 신규
+- **POST** `/api/box_status/reset` - 박스 상태 리셋 (비우기) ⭐ 신규
 - **GET** `/api/defect-images/{id}` - 불량 이미지 다운로드
 - **GET** `/api/system-status` - 시스템 상태 확인
 - **POST** `/api/config` - 시스템 설정 변경
@@ -333,18 +433,33 @@
   - [ ] MySQL 데이터베이스 연동
   - [ ] REST API 엔드포인트 개발 (/api/*)
   - [ ] GPIO 제어 응답 로직
+  - [ ] 박스 상태 관리 로직 (BoxManager) ⭐ 신규
+  - [ ] 슬롯 할당 알고리즘 ⭐ 신규
+  - [ ] 박스 가득 찬 경우 알림 시스템 ⭐ 신규
 - [ ] 라즈베리파이 클라이언트 개발 (상세: `RaspberryPi_Setup.md`)
   - [ ] 웹캠 프레임 캡처 및 전송
   - [ ] Base64 인코딩/디코딩
   - [ ] GPIO 제어 모듈 (RPi.GPIO)
   - [ ] 릴레이 제어 로직
+  - [ ] USB 시리얼 통신 모듈 (pyserial) ⭐ 신규
+  - [ ] Arduino Mega 명령 전송 ⭐ 신규
+  - [ ] 로봇팔 응답 처리 ⭐ 신규
   - [ ] 자동 시작 스크립트
+- [ ] Arduino 로봇팔 시스템 개발 (상세: `Arduino_RobotArm_Setup.md`) ⭐ 신규
+  - [ ] Arduino Mega 2560 설정 ⭐ 신규
+  - [ ] 5-6축 서보 제어 코드 ⭐ 신규
+  - [ ] USB 시리얼 통신 핸들러 ⭐ 신규
+  - [ ] 40개 슬롯 좌표 테이블 설정 ⭐ 신규
+  - [ ] 픽업 및 배치 동작 구현 ⭐ 신규
+  - [ ] 안전 기능 (충돌 방지, 리미트 스위치) ⭐ 신규
 - [ ] C# WinForms 애플리케이션 개발 (상세: `CSharp_WinForms_Guide.md`, UI 설계: `CSharp_WinForms_Design_Specification.md`)
   - [ ] Visual Studio 프로젝트 생성
   - [ ] 사용자 인증 시스템 (로그인/권한 관리)
   - [ ] MySQL 연동 (MySql.Data)
   - [ ] REST API 통신 (HttpClient)
   - [ ] 실시간 모니터링 대시보드 UI
+  - [ ] 박스 상태 모니터링 UI ⭐ 신규
+  - [ ] 박스 가득 찬 경우 알림 팝업 ⭐ 신규
   - [ ] 검사 이력 조회 화면
   - [ ] 불량 이미지 뷰어
   - [ ] 통계 화면 (Excel 내보내기 포함)
@@ -352,9 +467,10 @@
   - [ ] 시스템 설정 화면
   - [ ] LiveCharts 통계 그래프
 - [ ] MySQL 데이터베이스 설계 및 구축 (상세: `MySQL_Database_Design.md`)
-  - [ ] 테이블 스키마 설계
-  - [ ] 인덱스 최적화
-  - [ ] 초기 데이터 및 저장 프로시저
+  - [x] 테이블 스키마 설계
+  - [x] 인덱스 최적화
+  - [x] 초기 데이터 및 저장 프로시저
+  - [x] 박스 상태 관리 테이블 (box_status) ⭐ 신규
   - [ ] 백업 전략 수립
 - [ ] 병렬 처리 파이프라인 구현
   - [ ] 멀티프로세싱/멀티스레딩 설계
@@ -499,21 +615,21 @@
 ### Phase 6: 문서화 및 발표 준비 (2주)
 
 #### 체크리스트
-- [ ] 프로젝트 문서 작성
-  - [ ] README.md 작성
-  - [ ] 설치 가이드
-  - [ ] 사용법 가이드
-  - [ ] API 문서
+- [x] 프로젝트 문서 작성
+  - [x] README.md 작성
+  - [x] 설치 가이드
+  - [x] 사용법 가이드
+  - [x] API 문서
 - [ ] 코드 정리 및 리팩토링
   - [ ] 주석 추가
   - [ ] 함수 모듈화
-  - [ ] 설정 파일 분리
+  - [x] 설정 파일 분리
   - [ ] 에러 처리 강화
-- [ ] 실험 결과 정리
-  - [ ] 학습 그래프 저장
+- [x] 실험 결과 정리
+  - [x] 학습 그래프 저장
   - [ ] 성능 비교표
   - [ ] 불량 검출 예시 이미지
-  - [ ] Confusion Matrix
+  - [x] Confusion Matrix
 - [ ] 졸업 논문/보고서 작성
   - [ ] 서론 (연구 배경 및 목적)
   - [ ] 관련 연구 (YOLO, 이상 탐지 문헌 조사)

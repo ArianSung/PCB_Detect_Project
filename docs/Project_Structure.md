@@ -197,7 +197,8 @@ C:\work_project\                         # Windows 경로
 │   ├── hybrid_config.yaml              # 하이브리드 시스템 설정
 │   ├── data_config.yaml                # 데이터 관련 설정
 │   ├── server_config.yaml              # Flask 서버 설정
-│   └── camera_config.yaml              # 웹캠 클라이언트 설정
+│   ├── camera_config.yaml              # 웹캠 클라이언트 설정
+│   └── robot_arm_config.yaml           # 로봇팔 좌표 설정 ⭐ 신규
 │
 ├── results/                             # 📈 실험 결과
 │   ├── figures/                        # 그래프 및 시각화
@@ -274,14 +275,31 @@ C:\work_project\                         # Windows 경로
 │       └── packages.config             # NuGet 패키지
 │
 ├── raspberry_pi/                        # 🍓 라즈베리파이 클라이언트
-│   ├── camera_client.py                # 웹캠 + GPIO 통합 클라이언트
+│   ├── camera_client.py                # 웹캠 + GPIO + 로봇팔 통합 클라이언트
 │   ├── gpio_controller.py              # GPIO 제어 모듈
+│   ├── serial_controller.py            # Arduino 시리얼 통신 모듈 ⭐ 신규
 │   ├── config.py                       # 설정 파일
 │   ├── test_camera.py                  # 카메라 테스트
 │   ├── test_gpio.py                    # GPIO 테스트
+│   ├── test_serial.py                  # 시리얼 통신 테스트 ⭐ 신규
 │   ├── start.sh                        # 자동 시작 스크립트
 │   ├── camera-client.service           # systemd 서비스 파일
 │   └── requirements_rpi.txt            # 라즈베리파이용 패키지
+│
+├── arduino/                             # 🤖 Arduino 로봇팔 제어 ⭐ 신규
+│   ├── robot_arm_controller/           # Arduino 스케치
+│   │   ├── robot_arm_controller.ino    # 메인 스케치 파일
+│   │   ├── config.h                    # 설정 (핀, 좌표 테이블)
+│   │   ├── servo_control.h             # 서보 모터 제어
+│   │   ├── serial_handler.h            # 시리얼 통신 핸들러
+│   │   └── box_manager.h               # 박스 좌표 관리
+│   ├── libraries/                      # 필요한 라이브러리
+│   │   ├── Servo/                      # 서보 라이브러리
+│   │   └── ArduinoJson/                # JSON 파싱 라이브러리
+│   ├── test_sketches/                  # 테스트용 스케치
+│   │   ├── test_servo.ino              # 서보 테스트
+│   │   └── test_serial.ino             # 시리얼 테스트
+│   └── README.md                       # Arduino 설정 가이드
 │
 ├── database/                            # 🗄️ MySQL 데이터베이스
 │   ├── schemas/                        # 스키마 정의
@@ -434,16 +452,30 @@ def test_resize_image():
 - **참고 문서**: `CSharp_WinForms_Guide.md`
 
 ### 12. `raspberry_pi/` - 라즈베리파이 클라이언트
-- **목적**: 웹캠 프레임 캡처 및 GPIO 제어
+- **목적**: 웹캠 프레임 캡처, GPIO 제어, Arduino 로봇팔 제어
 - **하드웨어**: Raspberry Pi 4 Model B
 - **주요 기능**:
   - 웹캠 프레임 캡처 및 Flask 서버로 전송
   - Flask 서버 응답 기반 GPIO 신호 출력
   - 4채널 릴레이 모듈 제어
+  - USB 시리얼 통신 (Arduino Mega 제어) ⭐ 신규
   - systemd 서비스로 자동 시작
 - **참고 문서**: `RaspberryPi_Setup.md`
 
-### 13. `database/` - MySQL 데이터베이스
+### 13. `arduino/` - Arduino 로봇팔 제어 ⭐ 신규
+- **목적**: 5-6축 로봇팔 제어 및 PCB 분류
+- **하드웨어**: Arduino Mega 2560 + 서보 모터 6개
+- **주요 기능**:
+  - USB 시리얼 통신 (JSON 프로토콜)
+  - 40개 박스 슬롯 좌표 관리
+  - PCB 픽업 및 배치 자동화
+  - 안전 기능 (충돌 방지, 리미트 스위치)
+- **라이브러리**:
+  - Servo.h - 서보 모터 제어
+  - ArduinoJson.h - JSON 파싱
+- **참고 문서**: `Arduino_RobotArm_Setup.md` (신규 작성 필요)
+
+### 14. `database/` - MySQL 데이터베이스
 - **목적**: 검사 이력, 통계, 시스템 로그 저장
 - **데이터베이스**: MySQL 8.0
 - **schemas/**: 테이블, 뷰, 프로시저, 트리거 SQL 스크립트
