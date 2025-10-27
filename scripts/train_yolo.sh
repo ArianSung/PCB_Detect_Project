@@ -1,46 +1,130 @@
 #!/bin/bash
-# YOLO 모델 학습 스크립트
+# YOLO v8 Large 모델 학습 스크립트
+#
+# 사용법:
+#   bash scripts/train_yolo.sh
+#
+# 필수 조건:
+#   - conda activate pcb_defect
+#   - 데이터셋 다운로드 완료 (bash scripts/download_pcb_dataset.sh)
 
-# 가상환경 활성화
-source ~/miniconda3/etc/profile.d/conda.sh
-conda activate pcb_defect
+set -e  # 에러 발생 시 중단
+
+echo "======================================"
+echo "YOLO v8 Large 모델 학습 시작"
+echo "======================================"
 
 # 프로젝트 루트로 이동
 cd "$(dirname "$0")/.."
+PROJECT_ROOT=$(pwd)
 
-echo "========================================="
-echo "YOLO 모델 학습 시작"
-echo "========================================="
+echo "프로젝트 루트: $PROJECT_ROOT"
 
-# 설정 파일 경로
-CONFIG_FILE="configs/yolo_config.yaml"
+# 환경 확인
+echo ""
+echo "[1/4] 환경 확인..."
 
-# 설정 파일 존재 확인
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo "❌ 오류: 설정 파일을 찾을 수 없습니다: $CONFIG_FILE"
+# Conda 환경 확인
+if [ -z "$CONDA_DEFAULT_ENV" ]; then
+    echo "✗ Conda 환경이 활성화되지 않았습니다."
+    echo "실행: conda activate pcb_defect"
     exit 1
+else
+    echo "✓ Conda 환경: $CONDA_DEFAULT_ENV"
+fi
+
+# CUDA 확인
+if command -v nvidia-smi &> /dev/null; then
+    echo "✓ CUDA 사용 가능"
+    nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv,noheader
+else
+    echo "✗ CUDA 없음 (CPU 모드로 학습)"
 fi
 
 # 데이터셋 확인
-DATA_FILE="data/pcb_defects.yaml"
-if [ ! -f "$DATA_FILE" ]; then
-    echo "❌ 오류: 데이터셋 설정 파일을 찾을 수 없습니다: $DATA_FILE"
-    echo "💡 데이터셋을 먼저 준비해주세요."
+echo ""
+echo "[2/4] 데이터셋 확인..."
+
+DATA_YAML=""
+if [ -f "data/pcb_defects_roboflow.yaml" ]; then
+    DATA_YAML="data/pcb_defects_roboflow.yaml"
+    echo "✓ 데이터셋 설정 파일: $DATA_YAML"
+else
+    echo "✗ 데이터셋 설정 파일 없음"
+    echo "먼저 데이터셋을 다운로드하세요:"
+    echo "  bash scripts/download_pcb_dataset.sh"
     exit 1
 fi
 
-# 학습 실행
-echo "📚 학습 시작..."
-echo "설정 파일: $CONFIG_FILE"
-echo "데이터셋: $DATA_FILE"
+# 학습 파라미터 설정
+echo ""
+echo "[3/4] 학습 파라미터 설정..."
+
+MODEL="yolov8l.pt"       # YOLOv8 Large 모델
+EPOCHS=150               # 에포크 수
+BATCH=32                 # 배치 사이즈 (RTX 4080 Super 최적화)
+IMGSZ=640                # 이미지 크기
+DEVICE=0                 # GPU 디바이스 ID (0 = 첫 번째 GPU)
+
+echo "  모델: $MODEL"
+echo "  에포크: $EPOCHS"
+echo "  배치 사이즈: $BATCH"
+echo "  이미지 크기: $IMGSZ"
+echo "  디바이스: GPU $DEVICE"
+
+# 사용자 확인
+echo ""
+read -p "학습을 시작하시겠습니까? (y/n): " CONFIRM
+
+if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
+    echo "학습 취소"
+    exit 0
+fi
+
+# 학습 시작
+echo ""
+echo "[4/4] 학습 시작..."
+echo "======================================"
+echo ""
+echo "주의사항:"
+echo "  - 학습은 약 1-2시간 소요됩니다"
+echo "  - 학습 중 GPU 사용률을 모니터링하려면:"
+echo "    watch -n 1 nvidia-smi"
+echo "  - 학습 중단: Ctrl+C"
+echo ""
+echo "======================================"
 echo ""
 
-python src/training/train_yolo.py \
-    --config "$CONFIG_FILE" \
-    "$@"
+# YOLO 학습 실행
+python yolo/train_yolo.py \
+    --data "$DATA_YAML" \
+    --model "$MODEL" \
+    --epochs "$EPOCHS" \
+    --batch "$BATCH" \
+    --imgsz "$IMGSZ" \
+    --device "$DEVICE"
 
+# 학습 완료 후 결과 확인
 echo ""
-echo "========================================="
-echo "✅ 학습 완료!"
-echo "========================================="
-echo "결과 저장 위치: models/yolo/experiments/"
+echo "======================================"
+echo "학습 완료!"
+echo "======================================"
+echo ""
+
+# 최신 학습 결과 폴더 찾기
+LATEST_RUN=$(ls -td yolo/runs/train/pcb_defect* 2>/dev/null | head -1)
+
+if [ -n "$LATEST_RUN" ]; then
+    echo "결과 폴더: $LATEST_RUN"
+    echo ""
+    echo "생성된 파일:"
+    ls -lh "$LATEST_RUN/weights/"
+    echo ""
+    echo "다음 단계:"
+    echo "  1. 학습 그래프 확인: $LATEST_RUN/results.png"
+    echo "  2. 모델 평가:"
+    echo "     python yolo/evaluate_yolo.py --model $LATEST_RUN/weights/best.pt --data $DATA_YAML"
+    echo ""
+else
+    echo "✗ 학습 결과를 찾을 수 없습니다"
+fi
