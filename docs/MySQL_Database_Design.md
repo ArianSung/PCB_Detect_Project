@@ -994,7 +994,7 @@ mysql -u pcb_admin -p pcb_inspection < /home/pcb_user/mysql_backups/pcb_inspecti
 
 ---
 
-**작성일**: 2025-10-22
+**작성일**: 2025-10-28
 **최종 수정일**: 2025-10-23
 **버전**: 1.1
 **데이터베이스**: MySQL 8.0

@@ -778,7 +778,7 @@ namespace PCB_Inspection_Monitor
 
 ---
 
-**작성일**: 2025-10-22
+**작성일**: 2025-10-28
 **버전**: 1.1
 **관련 문서**:
 - `PCB_Defect_Detection_Project.md` - 전체 시스템 아키텍처
