@@ -61,8 +61,8 @@ echo ""
 echo "[3/4] 학습 파라미터 설정..."
 
 MODEL="yolov8l.pt"       # YOLOv8 Large 모델
-EPOCHS=150               # 에포크 수
-BATCH=32                 # 배치 사이즈 (RTX 4080 Super 최적화)
+EPOCHS=200               # 에포크 수 (전략 3: 150 → 200)
+BATCH=24                 # 배치 사이즈 (전략 3: 32 → 24, VRAM 안정화)
 IMGSZ=640                # 이미지 크기
 DEVICE=0                 # GPU 디바이스 ID (0 = 첫 번째 GPU)
 

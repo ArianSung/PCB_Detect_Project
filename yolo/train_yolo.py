@@ -61,16 +61,16 @@ def train_yolo(data_yaml, model='yolov8l.pt', epochs=150, batch=32, imgsz=640, d
         save=True,                # 체크포인트 저장
         save_period=10,           # 10 에포크마다 저장
         cache=True,               # 데이터셋 캐싱
-        # 증강 설정
+        # 증강 설정 (전략 3: 강화된 증강)
         augment=True,
         hsv_h=0.015,              # HSV-Hue 증강
         hsv_s=0.7,                # HSV-Saturation 증강
         hsv_v=0.4,                # HSV-Value 증강
-        degrees=0.0,              # 회전 (±degrees)
+        degrees=10.0,             # 회전 (±10도) - 강화!
         translate=0.1,            # 이동 (±fraction)
         scale=0.5,                # 스케일 (gain)
-        shear=0.0,                # 전단 (degrees)
-        perspective=0.0,          # 원근 변환
+        shear=2.0,                # 전단 (±2도) - 강화!
+        perspective=0.0001,       # 원근 변환 - 추가!
         flipud=0.0,               # 상하 반전 확률
         fliplr=0.5,               # 좌우 반전 확률
         mosaic=1.0,               # Mosaic 증강 확률
