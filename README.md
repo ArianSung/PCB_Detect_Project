@@ -77,6 +77,9 @@
     └─────────────────────────────────┘
 ```
 
+> 💡 **OHT 컨트롤용 라즈베리파이 3**  
+> 라즈베리파이 1·2는 좌/우 웹캠 전송과 GPIO를 담당하고, 별도의 라즈베리파이 3가 OHT(Overhead Hoist Transport) 시스템을 제어하며 동일한 Tailscale VPN 네트워크(100.x.x.x 대역)에 연결됩니다.
+
 ## 🛠️ 기술 스택
 
 ### AI & Deep Learning
@@ -91,7 +94,7 @@
 - **Tailscale VPN** - 원격 네트워크
 
 ### Hardware & Embedded
-- **Raspberry Pi 4** (2대) - 웹캠 클라이언트
+- **Raspberry Pi 4** (3대) - 좌/우 웹캠 + OHT 컨트롤러
 - **RPi.GPIO** - GPIO 제어
 - **NVIDIA RTX 4080 Super** - GPU 추론
 
@@ -117,7 +120,7 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 pip install ultralytics opencv-python flask flask-cors pymysql
 
 # Flask 서버 실행
-cd src/server
+cd server
 python app.py
 ```
 
@@ -145,7 +148,7 @@ Visual Studio 2022에서 `csharp_winforms/PCB_Inspection_Monitor.sln` 열기 후
 
 ```bash
 conda activate pcb_defect
-cd src/server
+cd server
 python app.py
 ```
 
@@ -178,27 +181,24 @@ PCB_Detect_Project/
 │   ├── RaspberryPi_Setup.md
 │   └── ...
 │
-├── src/                     # 💻 소스 코드
-│   ├── server/              # Flask 추론 서버
-│   ├── models/              # AI 모델 정의
-│   └── training/            # 모델 학습 스크립트
+├── server/                  # 🌐 Flask 추론 서버
+│   ├── app.py
+│   └── README.md
 │
-├── raspberry_pi/            # 🍓 라즈베리파이 클라이언트
-│   └── camera_client.py
+├── raspberry_pi/            # 🍓 라즈베리파이 클라이언트 가이드 및 스크립트
+│   └── GETTING_STARTED.md
+│
+├── yolo/                    # 🎯 YOLO 학습 및 평가 스크립트
+│   ├── train_yolo.py
+│   └── evaluate_yolo.py
 │
 ├── csharp_winforms/         # 🖥️ C# 모니터링 앱
 │
-├── data/                    # 📊 데이터셋
-│   ├── raw/
-│   └── processed/
-│
-├── models/                  # 🤖 학습된 모델
-│   ├── yolo/
-│   └── anomaly/
-│
 ├── database/                # 🗄️ MySQL 스키마
 │
-└── configs/                 # ⚙️ 설정 파일
+├── configs/                 # ⚙️ 설정 파일
+│
+└── scripts/                 # 🔧 공통 스크립트
 ```
 
 ## 📊 성능

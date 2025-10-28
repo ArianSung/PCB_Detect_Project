@@ -2,11 +2,12 @@
 
 ## 개요
 
-이 가이드는 라즈베리파이 4를 사용하여 웹캠 프레임 캡처 및 GPIO 제어를 수행하는 방법을 설명합니다.
+이 가이드는 라즈베리파이 4를 사용하여 웹캠 프레임 캡처, GPIO 제어, OHT 시스템 제어를 수행하는 방법을 설명합니다.
 
-**중요**: 이 시스템에서는 **라즈베리파이 1 (IP: 192.168.0.20)만** GPIO 제어를 수행합니다.
-- **라즈베리파이 1**: 좌측 웹캠 + GPIO 출력 (분류 게이트, LED 제어)
-- **라즈베리파이 2 (IP: 192.168.0.21)**: 우측 웹캠 전용 (GPIO 제어 없음)
+**시스템 구성**:
+- **라즈베리파이 1 (Tailscale: 100.64.1.2)**: 좌측 웹캠 + GPIO 출력 (분류 게이트, LED 제어)
+- **라즈베리파이 2 (Tailscale: 100.64.1.3)**: 우측 웹캠 전용 (GPIO 제어 없음)
+- **라즈베리파이 3 (Tailscale: 100.64.1.4)**: OHT 시스템 전용 제어기 ⭐
 
 ---
 
@@ -53,7 +54,7 @@
 
 3. **설정**
    - 톱니바퀴 아이콘 클릭 → 고급 옵션
-   - 호스트명: `raspberrypi-left` (좌측 카메라) 또는 `raspberrypi-right` (우측 카메라)
+   - 호스트명: `raspberrypi-left`, `raspberrypi-right`, `raspberrypi-oht`
    - SSH 활성화: ✅
    - 사용자명: `pi`
    - 비밀번호: 원하는 비밀번호
@@ -68,8 +69,8 @@
 # Windows에서 (PowerShell 또는 PuTTY)
 ssh pi@raspberrypi-left.local
 
-# 또는 IP 주소로 접속
-ssh pi@192.168.0.20
+# 또는 Tailscale IP로 접속
+ssh pi@100.64.1.2
 ```
 
 ### 1-3. 시스템 업데이트
@@ -186,10 +187,10 @@ python3 test_camera.py 0
 
 ## Phase 4: GPIO 설정 및 릴레이 제어 ⭐ 라즈베리파이 1 전용
 
-**중요**: GPIO 제어는 **라즈베리파이 1 (192.168.0.20)에만** 적용됩니다.
+**중요**: GPIO 제어는 **라즈베리파이 1 (100.64.1.2)에만** 적용됩니다.
 - Flask 서버가 양면(좌측+우측) 검사 결과를 통합 판정
 - 최종 불량 분류 결과를 라즈베리파이 1에만 전송
-- 라즈베리파이 2 (192.168.0.21)는 카메라 전용 (GPIO 사용 안 함)
+- 라즈베리파이 2 (100.64.1.3)와 라즈베리파이 3 (100.64.1.4)는 카메라/OHT 전용 (GPIO 사용 안 함)
 
 ### 4-1. GPIO 핀 매핑 (BCM 모드)
 
@@ -522,7 +523,7 @@ if __name__ == '__main__':
 
 ### 6-1. systemd 서비스 생성 (2가지 버전)
 
-#### 버전 1: 라즈베리파이 1 (좌측 카메라 + GPIO 제어) - IP: 192.168.0.20
+#### 버전 1: 라즈베리파이 1 (좌측 카메라 + GPIO 제어) - Tailscale: 100.64.1.2
 
 **camera-client-left.service**
 
@@ -554,7 +555,7 @@ WantedBy=multi-user.target
 
 ---
 
-#### 버전 2: 라즈베리파이 2 (우측 카메라 전용) - IP: 192.168.0.21
+#### 버전 2: 라즈베리파이 2 (우측 카메라 전용) - Tailscale: 100.64.1.3
 
 **camera-client-right.service**
 
@@ -630,7 +631,7 @@ sudo journalctl -u camera-client-right.service -f
 
 ### 7-1. 고정 IP 설정
 
-#### 라즈베리파이 1 (좌측 카메라 + GPIO) - IP: 192.168.0.20
+#### 라즈베리파이 1 (좌측 카메라 + GPIO) - 로컬 고정 IP 예시: 192.168.0.20 (Tailscale 사용 시 생략)
 
 ```bash
 sudo nano /etc/dhcpcd.conf
@@ -654,7 +655,7 @@ sudo reboot
 
 ---
 
-#### 라즈베리파이 2 (우측 카메라 전용) - IP: 192.168.0.21
+#### 라즈베리파이 2 (우측 카메라 전용) - 로컬 고정 IP 예시: 192.168.0.21 (Tailscale 사용 시 생략)
 
 ```bash
 sudo nano /etc/dhcpcd.conf
@@ -1105,13 +1106,213 @@ python3 test_serial.py
 
 ---
 
+## Phase 7: 라즈베리파이 3 - OHT 시스템 제어기 설정 ⭐ 신규
+
+### 7-1. 개요
+
+라즈베리파이 3은 OHT (Overhead Hoist Transport) 시스템 전용 제어기로 사용됩니다.
+
+**주요 기능**:
+- X축 스텝모터 제어 (레일 이동)
+- Z축 서보모터 제어 (박스 상하 이동)
+- 리미트 스위치 및 홀 효과 센서 읽기
+- Flask 서버와 HTTP 통신 (OHT 요청 폴링)
+- 긴급 정지 버튼 처리
+
+### 7-2. 필수 패키지 설치
+
+```bash
+# 기본 패키지 (Phase 2와 동일)
+sudo apt update
+sudo apt upgrade -y
+sudo apt install -y python3-pip python3-dev
+
+# OHT 전용 패키지
+pip3 install RPi.GPIO
+pip3 install requests
+```
+
+### 7-3. GPIO 핀맵 (BCM 모드)
+
+**OHT 모터 및 센서 핀맵**
+
+```python
+# oht_controller_config.py
+
+# X축 스텝모터 (A4988 드라이버)
+STEP_PIN_X = 18        # 스텝 신호
+DIR_PIN_X = 23         # 방향 신호
+ENABLE_PIN_X = 24      # 활성화 신호
+
+# Z축 서보모터
+SERVO_PIN_Z = 12       # PWM 제어 (GPIO 12)
+
+# 리미트 스위치 (X축)
+LIMIT_SW_WAREHOUSE = 5      # 창고 위치
+LIMIT_SW_NORMAL = 6         # 정상 박스 위치
+LIMIT_SW_COMPONENT = 13     # 부품불량 박스 위치
+LIMIT_SW_SOLDER = 19        # 납땜불량 박스 위치
+
+# 홀 효과 센서 (Z축)
+HALL_SENSOR_LAYER3 = 16     # 3층 (정상)
+HALL_SENSOR_LAYER2 = 20     # 2층 (부품불량)
+HALL_SENSOR_LAYER1 = 21     # 1층 (납땜불량)
+
+# 긴급 정지 버튼
+EMERGENCY_STOP_PIN = 26
+```
+
+### 7-4. OHT 컨트롤러 설치
+
+**프로젝트 폴더 생성**
+
+```bash
+mkdir -p ~/oht_controller
+cd ~/oht_controller
+```
+
+**파일 복사** (OHT_System_Setup.md 참조)
+
+```bash
+# OHT 제어 스크립트를 작성하거나 복사
+# 상세 코드는 docs/OHT_System_Setup.md 참조
+```
+
+**핵심 파일**:
+- `oht_controller.py` - 메인 컨트롤러
+- `oht_motor_control.py` - 모터 제어 클래스
+- `oht_controller_config.py` - GPIO 핀 설정
+
+### 7-5. systemd 서비스 등록
+
+```bash
+sudo nano /etc/systemd/system/oht-controller.service
+```
+
+```ini
+[Unit]
+Description=OHT Controller Service
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/oht_controller
+Environment="FLASK_SERVER_URL=http://100.64.1.1:5000"
+ExecStart=/usr/bin/python3 /home/pi/oht_controller/oht_controller.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 7-6. 서비스 활성화
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable oht-controller.service
+sudo systemctl start oht-controller.service
+sudo systemctl status oht-controller.service
+```
+
+### 7-7. 로그 확인
+
+```bash
+# 실시간 로그 확인
+sudo journalctl -u oht-controller.service -f
+
+# 최근 100줄
+sudo journalctl -u oht-controller.service -n 100
+```
+
+### 7-8. IP 주소 설정 (로컬 LAN 사용 시 선택)
+
+```bash
+sudo nano /etc/dhcpcd.conf
+```
+
+추가:
+```ini
+# 라즈베리파이 3 (OHT 전용) - 로컬 고정 IP 예시
+interface eth0
+static ip_address=192.168.0.22/24
+static routers=192.168.0.1
+static domain_name_servers=8.8.8.8 8.8.4.4
+```
+
+재부팅:
+```bash
+sudo reboot
+```
+
+### 7-9. 테스트
+
+**수동 테스트**
+
+```bash
+cd ~/oht_controller
+python3 oht_controller.py
+```
+
+**Flask API 수동 호출 테스트**
+
+```bash
+# 정상 PCB OHT 호출
+curl -X POST http://100.64.1.1:5000/api/oht/request \
+  -H "Content-Type: application/json" \
+  -d '{"category":"NORMAL","user_id":"test","user_role":"Admin"}'
+
+# OHT 상태 확인
+curl http://100.64.1.1:5000/api/oht/status
+```
+
+### 7-10. 문제 해결
+
+**문제 1: GPIO 권한 오류**
+```bash
+# gpio 그룹 추가
+sudo usermod -a -G gpio $USER
+sudo reboot
+```
+
+**문제 2: 스텝모터가 움직이지 않음**
+```bash
+# ENABLE_PIN 상태 확인 (LOW = 활성화)
+# 드라이버 전원 확인 (12V 2A)
+```
+
+**문제 3: 서보모터 떨림**
+```bash
+# PWM duty cycle을 0으로 설정 후 대기
+# 별도 전원 공급 사용
+# 캐패시터 추가 (1000µF)
+```
+
+**문제 4: Flask API 타임아웃**
+```bash
+# 네트워크 연결 확인
+ping 100.64.1.1
+
+# 방화벽 포트 5000 오픈
+sudo ufw allow 5000/tcp
+```
+
+### 7-11. 상세 가이드
+
+OHT 시스템의 상세한 하드웨어 사양, 제어 로직, API 설계는 다음 문서를 참조하세요:
+- **docs/OHT_System_Setup.md** ⭐
+
+---
+
 ## 다음 단계
 
-1. **Arduino 로봇팔 설정**: `Arduino_RobotArm_Setup.md` ⭐ 신규
-2. **원격 네트워크 설정**: `Remote_Network_Setup.md`
-3. **MySQL 데이터베이스 설계**: `MySQL_Database_Design.md`
-4. **Flask 서버 업데이트**: `Flask_Server_Setup.md`
-5. **C# WinForms 연동**: `CSharp_WinForms_Guide.md`
+1. **OHT 시스템 설정**: `OHT_System_Setup.md` ⭐ 신규
+2. **Arduino 로봇팔 설정**: `Arduino_RobotArm_Setup.md` ⭐ 신규
+3. **원격 네트워크 설정**: `Remote_Network_Setup.md`
+4. **MySQL 데이터베이스 설계**: `MySQL_Database_Design.md`
+5. **Flask 서버 업데이트**: `Flask_Server_Setup.md`
+6. **C# WinForms 연동**: `CSharp_WinForms_Guide.md`
 
 ---
 

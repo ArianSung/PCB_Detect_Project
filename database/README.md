@@ -154,7 +154,7 @@ high_severity_count    INT          - 높은 심각도
 
 ### Flask 서버 (Python)
 
-**`src/server/.env` 파일:**
+**`server/.env` 파일:**
 ```bash
 DB_HOST=100.x.x.x          # Windows PC의 Tailscale IP
 DB_PORT=3306

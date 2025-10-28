@@ -14,16 +14,20 @@
   - AI 모델: YOLOv8l (Large) + 이상 탐지 하이브리드
   - 위치: 원격지 (같은 도시 내)
   - Flask 서버 실행:
-    - 로컬: 192.168.0.10:5000 (선택)
+    - 로컬: 100.64.1.1:5000 (선택)
     - 원격 (Tailscale): 100.x.x.x:5000 ⭐
 - **라즈베리파이 1**: 좌측 웹캠 연결 + GPIO 제어
 - **라즈베리파이 2**: 우측 웹캠 연결 전용
+- **라즈베리파이 3**: OHT 시스템 전용 제어기 ⭐
 - **Windows PC**: C# WinForms 모니터링 앱
 - **네트워크**:
   - 로컬 환경 (선택): LAN (192.168.0.x)
   - 원격 환경 (프로젝트): Tailscale VPN 메시 네트워크 ⭐
 
-**참고**: 상세한 라즈베리파이 설정은 `RaspberryPi_Setup.md`, 데이터베이스 설계는 `MySQL_Database_Design.md` 참조
+**참고**:
+- 상세한 라즈베리파이 설정: `RaspberryPi_Setup.md`
+- OHT 시스템 설정: `OHT_System_Setup.md` ⭐
+- 데이터베이스 설계: `MySQL_Database_Design.md`
 
 ### 소프트웨어 구성
 - **추론 서버**: Flask + PyTorch + YOLO v8
@@ -49,32 +53,34 @@ pip install requests
 
 ```
 ~/work_project/
-├── src/
-│   ├── server/                 # Flask 추론 서버 (GPU PC)
-│   │   ├── app.py              # Flask 메인 애플리케이션
-│   │   ├── inference.py        # AI 추론 로직
-│   │   └── config.py           # 서버 설정
-│   │
-│   └── client/                 # 웹캠 클라이언트 (라즈베리파이용)
-│       ├── camera_client.py    # 웹캠 프레임 전송
-│       └── config.py           # 클라이언트 설정
+├── server/                     # Flask 추론 서버 (GPU PC)
+│   ├── app.py                  # Flask 메인 애플리케이션
+│   └── routes/                 # API 모듈화 (필요 시)
+│
+├── raspberry_pi/               # 웹캠/GPIO 클라이언트 (라즈베리파이)
+│   └── GETTING_STARTED.md      # 카메라 클라이언트 가이드
+│
+├── yolo/                       # YOLO 학습 및 평가 스크립트
+│   ├── train_yolo.py
+│   └── tests/
 │
 ├── models/                     # 학습된 모델 파일
 │   ├── yolo/
-│   │   └── final/
-│   │       └── yolo_best.pt
 │   └── anomaly/
-│       └── padim/
-│           └── model.pth
 │
 ├── data/
 │   └── pcb_defects.yaml        # YOLO 클래스 정의 (통일된 참조)
 │
-└── configs/                    # 설정 파일
-    ├── server_config.yaml      # Flask 서버 설정
-    └── camera_config.yaml      # 카메라 클라이언트 설정
+├── configs/                    # 설정 파일
+│   ├── server_config.yaml      # Flask 서버 설정
+│   └── camera_config.yaml      # 카메라 클라이언트 설정
+│
+└── scripts/                    # 자동화 스크립트
+    ├── train_yolo.sh
+    ├── start_server.sh
+    └── setup_env.sh
 
-참고: routes/ 폴더는 사용하지 않음 (단순화)
+참고: 라즈베리파이 클라이언트 코드는 `raspberry_pi/` 디렉터리에 위치
 ```
 
 ### 1-3. Flask 추론 서버 코드 (server/app.py)
@@ -195,7 +201,7 @@ def predict_dual():
             'gpio_signal': gpio_signal,  # 라즈베리파이 1 전용 GPIO 제어 신호
             'left': result_left,
             'right': result_right,
-            'note': 'GPIO 제어는 라즈베리파이 1 (192.168.0.20)만 수행'
+            'note': 'GPIO 제어는 라즈베리파이 1 (100.64.1.2)만 수행'
         }
 
         return jsonify(response)
@@ -374,7 +380,7 @@ class PCBInferenceEngine:
 
 ## Phase 2: 웹캠 클라이언트 구축
 
-### 2-1. 웹캠 클라이언트 코드 (client/camera_client.py)
+### 2-1. 웹캠 클라이언트 코드 (raspberry_pi/camera_client.py)
 
 ```python
 import cv2
@@ -396,7 +402,7 @@ class CameraClient:
         Args:
             camera_id: 'left' or 'right'
             camera_index: 웹캠 인덱스 (0, 1, 2, ...)
-            server_url: Flask 서버 URL (예: http://192.168.0.10:5000)
+            server_url: Flask 서버 URL (예: http://100.64.1.1:5000)
             fps: 초당 전송 프레임 수
         """
         self.camera_id = camera_id
@@ -524,7 +530,7 @@ if __name__ == '__main__':
     # 설정
     CAMERA_ID = 'left'  # 'left' or 'right'
     CAMERA_INDEX = 0   # 웹캠 인덱스
-    SERVER_URL = 'http://192.168.0.10:5000'  # 추론 서버 IP
+    SERVER_URL = 'http://100.64.1.1:5000'  # 추론 서버 IP
     FPS = 10  # 초당 전송 프레임 수
 
     # 클라이언트 실행
@@ -563,12 +569,12 @@ cd ~/work_project/client
 python camera_client.py
 
 # 또는 파라미터 지정
-python camera_client.py --camera_id left --camera_index 0 --server_url http://192.168.0.10:5000 --fps 10
+python camera_client.py --camera_id left --camera_index 0 --server_url http://100.64.1.1:5000 --fps 10
 ```
 
 **라즈베리파이 2 (우측 웹캠)**
 ```bash
-python camera_client.py --camera_id right --camera_index 0 --server_url http://192.168.0.10:5000 --fps 10
+python camera_client.py --camera_id right --camera_index 0 --server_url http://100.64.1.1:5000 --fps 10
 ```
 
 ### 3-3. 네트워크 설정
@@ -580,7 +586,7 @@ python camera_client.py --camera_id right --camera_index 0 --server_url http://1
 # Linux/WSL
 ip addr show
 
-# 출력 예시: inet 192.168.0.10/24
+# 출력 예시: inet 100.64.1.1/24
 ```
 
 2. **방화벽 설정**
@@ -708,7 +714,7 @@ threading.Thread(target=batch_inference_worker, daemon=True).start()
 ### 4-3. 프레임 스킵 로직
 
 ```python
-# client/camera_client.py 수정
+# raspberry_pi/camera_client.py 수정
 
 class CameraClient:
     def __init__(self, camera_id, camera_index, server_url, fps=10, skip_on_delay=True):
@@ -881,19 +887,22 @@ class RobotArmController:
 ```python
 import logging
 from datetime import datetime
+import requests
 
 logger = logging.getLogger(__name__)
 
 class BoxManager:
-    def __init__(self, db_service):
+    def __init__(self, db_service, oht_api_url='http://localhost:5000'):
         """
         박스 관리자 초기화
 
         Args:
             db_service: DatabaseService 인스턴스
+            oht_api_url: OHT API 엔드포인트 URL
         """
         self.db = db_service
         self.max_slots = 2  # 박스당 최대 슬롯 수 (수직 2단)
+        self.oht_api_url = oht_api_url
 
     def get_next_available_slot(self, category):
         """
@@ -965,10 +974,12 @@ class BoxManager:
 
                 cursor.execute(sql, (next_slot, is_full, box_id))
 
-                # 박스가 꽉 찼으면 알림
+                # 박스가 꽉 찼으면 알림 및 자동 OHT 호출
                 if is_full:
                     logger.warning(f"박스 {box_id}가 꽉 참! (2개 슬롯 모두 사용됨)")
                     self.send_box_full_alert(box_id)
+                    # 자동 OHT 호출 (박스 2/2 꽉 참)
+                    self._trigger_auto_oht(box_id)
 
             conn.commit()
             logger.info(f"박스 상태 업데이트: {box_id}, 다음 슬롯: {next_slot}, 꽉 참: {is_full}")
@@ -1037,6 +1048,32 @@ class BoxManager:
         finally:
             conn.close()
 
+    def _trigger_auto_oht(self, box_id):
+        """
+        자동 OHT 호출 (박스 꽉 찬 경우)
+
+        Args:
+            box_id: 박스 ID ('NORMAL', 'COMPONENT_DEFECT', 'SOLDER_DEFECT')
+        """
+        try:
+            payload = {
+                'category': box_id,  # box_id가 이미 UPPERCASE 카테고리
+                'trigger_reason': 'box_full'
+            }
+            response = requests.post(
+                f"{self.oht_api_url}/api/oht/auto_trigger",
+                json=payload,
+                timeout=5
+            )
+
+            if response.status_code == 200:
+                logger.info(f"✅ 자동 OHT 호출 성공: {box_id} (박스 꽉 참)")
+            else:
+                logger.error(f"❌ 자동 OHT 호출 실패: HTTP {response.status_code}")
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"❌ 자동 OHT 호출 오류: {str(e)}")
+
     def send_box_full_alert(self, box_id):
         """
         박스 꽉 참 알림 전송
@@ -1048,12 +1085,12 @@ class BoxManager:
         self.db.log_system_event(
             log_level='WARNING',
             source='box_manager',
-            message=f'박스 {box_id}가 꽉 찼습니다. OHT 호출 필요',
+            message=f'박스 {box_id}가 꽉 찼습니다. OHT 호출됨',
             details={'box_id': box_id, 'timestamp': datetime.now().isoformat()}
         )
 
         # 실제 프로젝트에서는 LED 점멸, 알림음, WinForms 알림 등 추가
-        logger.warning(f"📦 박스 {box_id} 꽉 참! OHT 알림 발송")
+        logger.warning(f"📦 박스 {box_id} 꽉 참! OHT 자동 호출됨")
 
     def check_system_capacity(self):
         """
@@ -1199,7 +1236,7 @@ def predict():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/v1/box_status', methods=['GET'])
+@app.route('/box_status', methods=['GET'])
 def get_box_status():
     """모든 박스 상태 조회"""
     try:
@@ -1221,7 +1258,7 @@ def get_box_status():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/v1/box_status/<box_id>', methods=['GET'])
+@app.route('/box_status/<box_id>', methods=['GET'])
 def get_box_status_by_id(box_id):
     """특정 박스 상태 조회"""
     try:
@@ -1252,7 +1289,7 @@ def get_box_status_by_id(box_id):
         conn.close()
 
 
-@app.route('/api/v1/box_status/reset', methods=['POST'])
+@app.route('/box_status/reset', methods=['POST'])
 def reset_box_status():
     """박스 리셋 (OHT 교체 후)"""
     try:
@@ -1277,7 +1314,7 @@ def reset_box_status():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/v1/robot_arm/status', methods=['GET'])
+@app.route('/robot_arm/status', methods=['GET'])
 def get_robot_arm_status():
     """로봇팔 상태 조회"""
     try:
@@ -1299,7 +1336,7 @@ def get_robot_arm_status():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/v1/robot_arm/home', methods=['POST'])
+@app.route('/robot_arm/home', methods=['POST'])
 def move_robot_arm_home():
     """로봇팔 홈 포지션으로 이동"""
     try:
@@ -1336,7 +1373,7 @@ def move_robot_arm_home():
 4. **박스 교체 후 재시작**:
    - 작업자가 박스 교체 완료
    - WinForms 앱에서 "박스 리셋" 버튼 클릭
-   - `/api/v1/box_status/reset` API 호출
+   - `/box_status/reset` API 호출
    - 박스 상태 초기화 → 시스템 재가동
 5. **DISCARD 처리**:
    - DISCARD는 슬롯 관리 안 함
@@ -1666,6 +1703,979 @@ def predict():
 
 ---
 
+## Phase 5-5: OHT 시스템 API 통합 ⭐
+
+### 5-5-1. OHT API 엔드포인트 추가
+
+**server/oht_api.py** (신규 파일)
+
+```python
+from flask import Blueprint, request, jsonify
+from datetime import datetime
+import uuid
+import logging
+
+oht_bp = Blueprint('oht', __name__, url_prefix='/api/oht')
+logger = logging.getLogger(__name__)
+
+# OHT 요청 큐 (실제 구현 시 Redis 또는 RabbitMQ 사용 권장)
+oht_request_queue = []
+oht_request_status = {}  # {request_id: {'status': 'pending'|'processing'|'completed', ...}}
+
+
+@oht_bp.route('/request', methods=['POST'])
+def request_oht():
+    """
+    OHT 호출 요청 (수동)
+
+    요청:
+        {
+            "category": "NORMAL" | "COMPONENT_DEFECT" | "SOLDER_DEFECT",
+            "user_id": "user_uuid",
+            "user_role": "Admin" | "Operator"
+        }
+
+    응답:
+        {
+            "status": "ok",
+            "request_id": "uuid",
+            "message": "OHT request queued"
+        }
+    """
+    try:
+        data = request.get_json()
+        category = data.get('category')
+        user_id = data.get('user_id')
+        user_role = data.get('user_role')
+
+        # 권한 검증 ⭐
+        if user_role not in ['Admin', 'Operator']:
+            return jsonify({
+                'error': 'Insufficient permissions',
+                'message': 'Only Admin and Operator can call OHT'
+            }), 403
+
+        # 카테고리 검증
+        if category not in ['NORMAL', 'COMPONENT_DEFECT', 'SOLDER_DEFECT']:
+            return jsonify({'error': 'Invalid category'}), 400
+
+        # 요청 생성
+        request_id = str(uuid.uuid4())
+        oht_request = {
+            'request_id': request_id,
+            'category': category,
+            'user_id': user_id,
+            'user_role': user_role,
+            'is_auto': False,
+            'timestamp': datetime.now().isoformat()
+        }
+
+        # 큐에 추가
+        oht_request_queue.append(oht_request)
+        oht_request_status[request_id] = {
+            'status': 'pending',
+            'created_at': datetime.now().isoformat()
+        }
+
+        logger.info(f"OHT request {request_id} queued by {user_role} (category: {category})")
+
+        # MySQL에 기록 (실제 구현)
+        # db.insert_oht_request(...)
+
+        return jsonify({
+            'status': 'ok',
+            'request_id': request_id,
+            'message': 'OHT request queued'
+        }), 200
+
+    except Exception as e:
+        logger.error(f"OHT request failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@oht_bp.route('/check_pending', methods=['GET'])
+def check_pending_requests():
+    """
+    대기 중인 OHT 요청 확인 (라즈베리파이 3 폴링용)
+
+    응답:
+        {
+            "has_pending": true,
+            "request": {...}
+        }
+    """
+    if oht_request_queue:
+        request_data = oht_request_queue[0]  # FIFO
+        return jsonify({
+            'has_pending': True,
+            'request': request_data
+        }), 200
+    else:
+        return jsonify({
+            'has_pending': False
+        }), 200
+
+
+@oht_bp.route('/complete', methods=['POST'])
+def complete_request():
+    """
+    OHT 요청 완료 보고 (라즈베리파이 3에서 호출)
+
+    요청:
+        {
+            "request_id": "uuid",
+            "success": true,
+            "error": null
+        }
+    """
+    try:
+        data = request.get_json()
+        request_id = data.get('request_id')
+        success = data.get('success')
+        error = data.get('error')
+
+        # 큐에서 제거
+        if oht_request_queue and oht_request_queue[0]['request_id'] == request_id:
+            oht_request_queue.pop(0)
+
+        # 상태 업데이트
+        if request_id in oht_request_status:
+            oht_request_status[request_id]['status'] = 'completed' if success else 'failed'
+            oht_request_status[request_id]['completed_at'] = datetime.now().isoformat()
+            oht_request_status[request_id]['error'] = error
+
+        logger.info(f"OHT request {request_id} completed (success: {success})")
+
+        # MySQL 업데이트 (실제 구현)
+        # db.update_oht_request(request_id, success, error)
+
+        return jsonify({'status': 'ok'}), 200
+
+    except Exception as e:
+        logger.error(f"Failed to complete OHT request: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@oht_bp.route('/status', methods=['GET'])
+def get_oht_status():
+    """
+    OHT 시스템 상태 조회 (WinForms UI용)
+
+    응답:
+        {
+            "queue_length": 2,
+            "current_request": {...},
+            "recent_requests": [...]
+        }
+    """
+    current_request = oht_request_queue[0] if oht_request_queue else None
+
+    return jsonify({
+        'queue_length': len(oht_request_queue),
+        'current_request': current_request,
+        'recent_requests': list(oht_request_status.values())[-10:]  # 최근 10개
+    }), 200
+
+
+@oht_bp.route('/auto_trigger', methods=['POST'])
+def auto_trigger():
+    """
+    자동 OHT 호출 (박스 꽉 찬 경우)
+
+    요청:
+        {
+            "category": "NORMAL" | "COMPONENT_DEFECT" | "SOLDER_DEFECT",
+            "trigger_reason": "box_full"
+        }
+    """
+    try:
+        data = request.get_json()
+        category = data.get('category')
+
+        # 요청 생성 (자동)
+        request_id = str(uuid.uuid4())
+        oht_request = {
+            'request_id': request_id,
+            'category': category,
+            'user_id': 'system',
+            'user_role': 'System',
+            'is_auto': True,
+            'trigger_reason': 'box_full',
+            'timestamp': datetime.now().isoformat()
+        }
+
+        oht_request_queue.append(oht_request)
+        oht_request_status[request_id] = {
+            'status': 'pending',
+            'created_at': datetime.now().isoformat()
+        }
+
+        logger.info(f"Auto OHT request {request_id} triggered for {category} (box full)")
+
+        return jsonify({
+            'status': 'ok',
+            'request_id': request_id
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Auto OHT trigger failed: {e}")
+        return jsonify({'error': str(e)}), 500
+```
+
+### 5-5-2. Flask 서버에 OHT API 등록
+
+**server/app.py** (기존 파일 수정)
+
+```python
+# 기존 import에 추가
+from oht_api import oht_bp
+
+# Flask 앱 생성
+app = Flask(__name__)
+CORS(app)
+
+# OHT API 블루프린트 등록 ⭐
+app.register_blueprint(oht_bp)
+
+# ... (기존 코드)
+```
+
+---
+
+## Phase 5-6: 사용자 관리 API ⭐ 신규
+
+### 5-6-1. 사용자 관리 API 엔드포인트 추가
+
+**server/user_api.py** (신규 파일)
+
+```python
+from flask import Blueprint, request, jsonify
+from datetime import datetime
+import bcrypt
+import logging
+from functools import wraps
+
+user_bp = Blueprint('users', __name__, url_prefix='/api/users')
+auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
+logger = logging.getLogger(__name__)
+
+
+# 권한 검증 데코레이터
+def admin_required(f):
+    """Admin 권한 체크 데코레이터"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            # 요청에서 사용자 정보 가져오기 (실제로는 세션/토큰 검증)
+            user_role = request.headers.get('X-User-Role')
+
+            if user_role != 'Admin':
+                return jsonify({
+                    'error': 'Insufficient permissions',
+                    'message': 'Admin permission required'
+                }), 403
+
+            return f(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Permission check failed: {e}")
+            return jsonify({'error': 'Authorization failed'}), 401
+
+    return decorated_function
+
+
+@user_bp.route('', methods=['GET'])
+@admin_required
+def get_users():
+    """
+    사용자 목록 조회 (Admin만)
+
+    쿼리 파라미터:
+        - role: 권한 필터 (admin/operator/viewer)
+        - is_active: 활성화 상태 필터 (true/false)
+        - search: 사용자명 또는 이름 검색
+
+    응답:
+        {
+            "status": "ok",
+            "users": [
+                {
+                    "id": 1,
+                    "username": "admin",
+                    "full_name": "관리자",
+                    "role": "Admin",
+                    "is_active": true,
+                    "last_login": "2025-10-22T14:30:00",
+                    "created_at": "2025-10-01T09:00:00"
+                },
+                ...
+            ],
+            "total": 15
+        }
+    """
+    try:
+        # 필터 파라미터
+        role_filter = request.args.get('role')
+        is_active = request.args.get('is_active')
+        search_query = request.args.get('search')
+
+        # MySQL 연결 (db_service는 app.py에서 초기화된 것 사용)
+        from server.app import db_service
+        conn = db_service.get_connection()
+
+        with conn.cursor() as cursor:
+            # 기본 쿼리
+            query = "SELECT id, username, full_name, role, is_active, last_login, created_at FROM users WHERE 1=1"
+            params = []
+
+            # 필터 적용
+            if role_filter:
+                query += " AND role = %s"
+                params.append(role_filter)
+
+            if is_active is not None:
+                query += " AND is_active = %s"
+                params.append(is_active.lower() == 'true')
+
+            if search_query:
+                query += " AND (username LIKE %s OR full_name LIKE %s)"
+                search_pattern = f"%{search_query}%"
+                params.extend([search_pattern, search_pattern])
+
+            query += " ORDER BY created_at DESC"
+
+            cursor.execute(query, params)
+            users = cursor.fetchall()
+
+            # 비밀번호 해시 제거
+            for user in users:
+                user.pop('password_hash', None)
+
+            return jsonify({
+                'status': 'ok',
+                'users': users,
+                'total': len(users)
+            }), 200
+
+    except Exception as e:
+        logger.error(f"Failed to get users: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@user_bp.route('/<int:user_id>', methods=['GET'])
+def get_user(user_id):
+    """
+    특정 사용자 조회
+
+    응답:
+        {
+            "status": "ok",
+            "user": {
+                "id": 1,
+                "username": "operator1",
+                "full_name": "작업자1",
+                "role": "Operator",
+                "is_active": true,
+                "last_login": "2025-10-22T14:30:00",
+                "created_at": "2025-10-01T09:00:00"
+            }
+        }
+    """
+    try:
+        from server.app import db_service
+        conn = db_service.get_connection()
+
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT id, username, full_name, role, is_active, last_login, created_at
+                FROM users
+                WHERE id = %s
+            """, (user_id,))
+
+            user = cursor.fetchone()
+
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+
+            return jsonify({
+                'status': 'ok',
+                'user': user
+            }), 200
+
+    except Exception as e:
+        logger.error(f"Failed to get user {user_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@user_bp.route('', methods=['POST'])
+@admin_required
+def create_user():
+    """
+    새 사용자 생성 (Admin만)
+
+    요청:
+        {
+            "username": "operator2",
+            "password": "password123",
+            "full_name": "작업자2",
+            "role": "Operator",
+            "is_active": true
+        }
+
+    응답:
+        {
+            "status": "ok",
+            "user_id": 5,
+            "message": "User created successfully"
+        }
+    """
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        full_name = data.get('full_name')
+        role = data.get('role', 'Viewer')
+        is_active = data.get('is_active', True)
+
+        # 유효성 검사
+        if not username or not password:
+            return jsonify({'error': 'Username and password are required'}), 400
+
+        if role not in ['Admin', 'Operator', 'Viewer']:
+            return jsonify({'error': 'Invalid role'}), 400
+
+        # 비밀번호 해싱
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+        from server.app import db_service
+        conn = db_service.get_connection()
+
+        with conn.cursor() as cursor:
+            # 사용자명 중복 체크
+            cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
+            if cursor.fetchone():
+                return jsonify({'error': 'Username already exists'}), 409
+
+            # 사용자 생성
+            cursor.execute("""
+                INSERT INTO users (username, password_hash, full_name, role, is_active)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (username, password_hash, full_name, role, is_active))
+
+            conn.commit()
+            user_id = cursor.lastrowid
+
+            logger.info(f"User created: {username} (ID: {user_id}, Role: {role})")
+
+            # 활동 로그 기록
+            log_user_action(
+                user_id=request.headers.get('X-User-ID'),  # Admin ID
+                action_type='create_user',
+                action_description=f"사용자 '{username}' 생성 (권한: {role})",
+                details={'new_username': username, 'new_role': role}
+            )
+
+            return jsonify({
+                'status': 'ok',
+                'user_id': user_id,
+                'message': 'User created successfully'
+            }), 201
+
+    except Exception as e:
+        logger.error(f"Failed to create user: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@user_bp.route('/<int:user_id>', methods=['PUT'])
+@admin_required
+def update_user(user_id):
+    """
+    사용자 정보 수정 (Admin만)
+
+    요청:
+        {
+            "full_name": "작업자1 수정",
+            "role": "Admin",
+            "is_active": false
+        }
+
+    응답:
+        {
+            "status": "ok",
+            "message": "User updated successfully"
+        }
+    """
+    try:
+        data = request.get_json()
+        full_name = data.get('full_name')
+        role = data.get('role')
+        is_active = data.get('is_active')
+
+        # 유효성 검사
+        if role and role not in ['Admin', 'Operator', 'Viewer']:
+            return jsonify({'error': 'Invalid role'}), 400
+
+        from server.app import db_service
+        conn = db_service.get_connection()
+
+        with conn.cursor() as cursor:
+            # 사용자 존재 확인
+            cursor.execute("SELECT username FROM users WHERE id = %s", (user_id,))
+            user = cursor.fetchone()
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+
+            # 업데이트 쿼리 동적 생성
+            updates = []
+            params = []
+
+            if full_name is not None:
+                updates.append("full_name = %s")
+                params.append(full_name)
+
+            if role is not None:
+                updates.append("role = %s")
+                params.append(role)
+
+            if is_active is not None:
+                updates.append("is_active = %s")
+                params.append(is_active)
+
+            if not updates:
+                return jsonify({'error': 'No fields to update'}), 400
+
+            params.append(user_id)
+            query = f"UPDATE users SET {', '.join(updates)} WHERE id = %s"
+
+            cursor.execute(query, params)
+            conn.commit()
+
+            logger.info(f"User updated: {user['username']} (ID: {user_id})")
+
+            # 활동 로그 기록
+            log_user_action(
+                user_id=request.headers.get('X-User-ID'),
+                action_type='update_user',
+                action_description=f"사용자 '{user['username']}' 정보 수정",
+                details={'target_user_id': user_id, 'updates': data}
+            )
+
+            return jsonify({
+                'status': 'ok',
+                'message': 'User updated successfully'
+            }), 200
+
+    except Exception as e:
+        logger.error(f"Failed to update user {user_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@user_bp.route('/<int:user_id>', methods=['DELETE'])
+@admin_required
+def delete_user(user_id):
+    """
+    사용자 삭제 (Admin만)
+
+    응답:
+        {
+            "status": "ok",
+            "message": "User deleted successfully"
+        }
+    """
+    try:
+        from server.app import db_service
+        conn = db_service.get_connection()
+
+        with conn.cursor() as cursor:
+            # 사용자 존재 확인
+            cursor.execute("SELECT username FROM users WHERE id = %s", (user_id,))
+            user = cursor.fetchone()
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+
+            # 자기 자신 삭제 방지
+            current_user_id = int(request.headers.get('X-User-ID', 0))
+            if user_id == current_user_id:
+                return jsonify({'error': 'Cannot delete yourself'}), 400
+
+            # 사용자 삭제
+            cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+            conn.commit()
+
+            logger.info(f"User deleted: {user['username']} (ID: {user_id})")
+
+            # 활동 로그 기록
+            log_user_action(
+                user_id=current_user_id,
+                action_type='delete_user',
+                action_description=f"사용자 '{user['username']}' 삭제",
+                details={'deleted_user_id': user_id, 'deleted_username': user['username']}
+            )
+
+            return jsonify({
+                'status': 'ok',
+                'message': 'User deleted successfully'
+            }), 200
+
+    except Exception as e:
+        logger.error(f"Failed to delete user {user_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@user_bp.route('/<int:user_id>/reset-password', methods=['POST'])
+@admin_required
+def reset_password(user_id):
+    """
+    비밀번호 초기화 (Admin만)
+    기본 비밀번호: 'temp1234'
+
+    응답:
+        {
+            "status": "ok",
+            "message": "Password reset successfully",
+            "new_password": "temp1234"
+        }
+    """
+    try:
+        DEFAULT_PASSWORD = 'temp1234'
+
+        # 비밀번호 해싱
+        password_hash = bcrypt.hashpw(DEFAULT_PASSWORD.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+        from server.app import db_service
+        conn = db_service.get_connection()
+
+        with conn.cursor() as cursor:
+            # 사용자 존재 확인
+            cursor.execute("SELECT username FROM users WHERE id = %s", (user_id,))
+            user = cursor.fetchone()
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+
+            # 비밀번호 업데이트
+            cursor.execute("""
+                UPDATE users
+                SET password_hash = %s
+                WHERE id = %s
+            """, (password_hash, user_id))
+
+            conn.commit()
+
+            logger.info(f"Password reset for user: {user['username']} (ID: {user_id})")
+
+            # 활동 로그 기록
+            log_user_action(
+                user_id=request.headers.get('X-User-ID'),
+                action_type='reset_password',
+                action_description=f"사용자 '{user['username']}' 비밀번호 초기화",
+                details={'target_user_id': user_id, 'target_username': user['username'], 'reset_to': DEFAULT_PASSWORD}
+            )
+
+            return jsonify({
+                'status': 'ok',
+                'message': 'Password reset successfully',
+                'new_password': DEFAULT_PASSWORD
+            }), 200
+
+    except Exception as e:
+        logger.error(f"Failed to reset password for user {user_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@user_bp.route('/<int:user_id>/logs', methods=['GET'])
+def get_user_logs(user_id):
+    """
+    사용자 활동 로그 조회
+
+    쿼리 파라미터:
+        - start_date: 시작 날짜 (YYYY-MM-DD)
+        - end_date: 종료 날짜 (YYYY-MM-DD)
+        - action_type: 활동 유형 필터
+        - limit: 최대 개수 (기본: 50)
+
+    응답:
+        {
+            "status": "ok",
+            "logs": [
+                {
+                    "id": 123,
+                    "action_type": "login",
+                    "action_description": "로그인",
+                    "ip_address": "100.64.1.10",
+                    "created_at": "2025-10-22T14:30:00"
+                },
+                ...
+            ],
+            "total": 25
+        }
+    """
+    try:
+        # 쿼리 파라미터
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        action_type = request.args.get('action_type')
+        limit = int(request.args.get('limit', 50))
+
+        from server.app import db_service
+        conn = db_service.get_connection()
+
+        with conn.cursor() as cursor:
+            query = """
+                SELECT id, action_type, action_description, ip_address, details, created_at
+                FROM user_logs
+                WHERE user_id = %s
+            """
+            params = [user_id]
+
+            # 날짜 필터
+            if start_date:
+                query += " AND DATE(created_at) >= %s"
+                params.append(start_date)
+
+            if end_date:
+                query += " AND DATE(created_at) <= %s"
+                params.append(end_date)
+
+            # 활동 유형 필터
+            if action_type:
+                query += " AND action_type = %s"
+                params.append(action_type)
+
+            query += " ORDER BY created_at DESC LIMIT %s"
+            params.append(limit)
+
+            cursor.execute(query, params)
+            logs = cursor.fetchall()
+
+            return jsonify({
+                'status': 'ok',
+                'logs': logs,
+                'total': len(logs)
+            }), 200
+
+    except Exception as e:
+        logger.error(f"Failed to get logs for user {user_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# 인증 API
+
+@auth_bp.route('/login', methods=['POST'])
+def login():
+    """
+    로그인
+
+    요청:
+        {
+            "username": "admin",
+            "password": "admin123"
+        }
+
+    응답:
+        {
+            "status": "ok",
+            "user": {
+                "id": 1,
+                "username": "admin",
+                "full_name": "관리자",
+                "role": "Admin"
+            },
+            "token": "jwt_token_here"  // 실제로는 JWT 토큰 구현
+        }
+    """
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+
+        if not username or not password:
+            return jsonify({'error': 'Username and password are required'}), 400
+
+        from server.app import db_service
+        conn = db_service.get_connection()
+
+        with conn.cursor() as cursor:
+            # 사용자 조회
+            cursor.execute("""
+                SELECT id, username, password_hash, full_name, role, is_active
+                FROM users
+                WHERE username = %s
+            """, (username,))
+
+            user = cursor.fetchone()
+
+            if not user:
+                return jsonify({'error': 'Invalid username or password'}), 401
+
+            if not user['is_active']:
+                return jsonify({'error': 'User account is disabled'}), 403
+
+            # 비밀번호 검증
+            if not bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+                return jsonify({'error': 'Invalid username or password'}), 401
+
+            # 마지막 로그인 시간 업데이트
+            cursor.execute("""
+                UPDATE users
+                SET last_login = %s
+                WHERE id = %s
+            """, (datetime.now(), user['id']))
+            conn.commit()
+
+            logger.info(f"User logged in: {username} (ID: {user['id']})")
+
+            # 로그인 로그 기록
+            log_user_action(
+                user_id=user['id'],
+                action_type='login',
+                action_description="로그인",
+                details={'ip_address': request.remote_addr}
+            )
+
+            # 비밀번호 해시 제거
+            user.pop('password_hash')
+
+            return jsonify({
+                'status': 'ok',
+                'user': user,
+                'token': f"fake_jwt_token_{user['id']}"  # 실제로는 JWT 구현
+            }), 200
+
+    except Exception as e:
+        logger.error(f"Login failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@auth_bp.route('/logout', methods=['POST'])
+def logout():
+    """
+    로그아웃
+
+    요청:
+        {
+            "user_id": 1
+        }
+
+    응답:
+        {
+            "status": "ok",
+            "message": "Logged out successfully"
+        }
+    """
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+
+        if not user_id:
+            return jsonify({'error': 'User ID is required'}), 400
+
+        logger.info(f"User logged out: ID {user_id}")
+
+        # 로그아웃 로그 기록
+        log_user_action(
+            user_id=user_id,
+            action_type='logout',
+            action_description="로그아웃",
+            details={}
+        )
+
+        return jsonify({
+            'status': 'ok',
+            'message': 'Logged out successfully'
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Logout failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# 활동 로그 기록 헬퍼 함수
+def log_user_action(user_id, action_type, action_description, details=None):
+    """사용자 활동 로그 기록"""
+    try:
+        from server.app import db_service
+        conn = db_service.get_connection()
+
+        with conn.cursor() as cursor:
+            # 사용자 정보 조회
+            cursor.execute("SELECT username, role FROM users WHERE id = %s", (user_id,))
+            user = cursor.fetchone()
+
+            if not user:
+                logger.warning(f"User not found for log: {user_id}")
+                return
+
+            # 로그 삽입
+            cursor.execute("""
+                INSERT INTO user_logs
+                (user_id, username, user_role, action_type, action_description, ip_address, details)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (
+                user_id,
+                user['username'],
+                user['role'],
+                action_type,
+                action_description,
+                request.remote_addr if request else None,
+                details if details else None
+            ))
+
+            conn.commit()
+            logger.debug(f"User action logged: {user['username']} - {action_type}")
+
+    except Exception as e:
+        logger.error(f"Failed to log user action: {e}")
+```
+
+### 5-6-2. Flask 앱에 Blueprint 등록
+
+**server/app.py 수정**
+
+```python
+from server.user_api import user_bp, auth_bp
+
+# ... (기존 코드)
+
+# 사용자 관리 API 블루프린트 등록 ⭐
+app.register_blueprint(user_bp)
+app.register_blueprint(auth_bp)
+
+# ... (기존 코드)
+```
+
+### 5-6-3. API 엔드포인트 목록
+
+| 메서드 | 엔드포인트 | 설명 | 권한 |
+|--------|-----------|------|------|
+| **사용자 관리** ||||
+| GET | `/api/users` | 사용자 목록 조회 | Admin |
+| GET | `/api/users/{id}` | 특정 사용자 조회 | All |
+| POST | `/api/users` | 사용자 생성 | Admin |
+| PUT | `/api/users/{id}` | 사용자 수정 | Admin |
+| DELETE | `/api/users/{id}` | 사용자 삭제 | Admin |
+| POST | `/api/users/{id}/reset-password` | 비밀번호 초기화 | Admin |
+| GET | `/api/users/{id}/logs` | 활동 로그 조회 | All |
+| **인증** ||||
+| POST | `/api/auth/login` | 로그인 | Public |
+| POST | `/api/auth/logout` | 로그아웃 | All |
+
+### 5-6-4. 보안 고려사항
+
+**비밀번호 해싱**:
+```bash
+# bcrypt 설치
+pip install bcrypt
+```
+
+**권한 체크**:
+- `@admin_required` 데코레이터로 Admin 전용 엔드포인트 보호
+- HTTP 헤더 `X-User-Role`로 권한 검증 (실제로는 JWT 토큰 사용 권장)
+
+**활동 로그**:
+- 모든 중요한 작업은 `user_logs` 테이블에 기록
+- IP 주소, 변경 내역(details) 포함
+
+---
+
 ## C# WinForms용 REST API 엔드포인트
 
 ### 1. 검사 이력 조회 API
@@ -1784,8 +2794,8 @@ def get_system_status():
         status = {
             'server_online': True,
             'database_online': db_service.get_connection() is not None,
-            'raspberry_pi_1_online': check_raspberry_pi('192.168.0.20'),  # 좌측 카메라
-            'raspberry_pi_2_online': check_raspberry_pi('192.168.0.21'),  # 우측 카메라
+            'raspberry_pi_1_online': check_raspberry_pi('100.64.1.2'),  # 좌측 카메라
+            'raspberry_pi_2_online': check_raspberry_pi('100.64.1.3'),  # 우측 카메라
             'server_cpu_usage': psutil.cpu_percent(),
             'server_memory_usage': psutil.virtual_memory().percent,
             'server_gpu_usage': get_gpu_usage() if torch.cuda.is_available() else 0,
@@ -1857,10 +2867,11 @@ def get_gpu_usage():
 1. **PCB_Defect_Detection_Project.md** - 전체 프로젝트 로드맵 및 시스템 아키텍처
 2. **data/pcb_defects.yaml** - YOLO 클래스 정의 및 GPIO 매핑 (통일된 참조)
 3. **RaspberryPi_Setup.md** - 라즈베리파이 웹캠 클라이언트 및 GPIO 제어 설정
-4. **MySQL_Database_Design.md** - 데이터베이스 스키마 및 연동 가이드
-5. **CSharp_WinForms_Guide.md** - C# WinForms 모니터링 앱 개발 기본
-6. **CSharp_WinForms_Design_Specification.md** - UI 상세 설계 (권한 시스템, 7개 화면)
-7. **Logging_Strategy.md** - 통합 로깅 전략 (Flask 서버 로깅 포함)
+4. **OHT_System_Setup.md** - OHT 시스템 하드웨어 및 제어 설계 ⭐
+5. **MySQL_Database_Design.md** - 데이터베이스 스키마 및 연동 가이드
+6. **CSharp_WinForms_Guide.md** - C# WinForms 모니터링 앱 개발 기본
+7. **CSharp_WinForms_Design_Specification.md** - UI 상세 설계 (권한 시스템, 7개 화면)
+8. **Logging_Strategy.md** - 통합 로깅 전략 (Flask 서버 로깅 포함)
 
 ---
 
@@ -1868,7 +2879,7 @@ def get_gpu_usage():
 **최종 수정일**: 2025-10-23
 **버전**: 1.1
 **주요 변경사항**:
-- IP 주소 명시 (192.168.0.10, 192.168.0.20, 192.168.0.21)
+- IP 주소 명시 (100.64.1.1, 100.64.1.2, 100.64.1.3)
 - 양면 통합 로직 명확화 (라즈베리파이 1만 GPIO 제어)
 - YOLO 클래스 이름 통일 (data/pcb_defects.yaml 참조)
 - 폴더 구조 단순화 (routes/ 제거)

@@ -1,0 +1,20 @@
+# PCB 불량 데이터셋 설정 (Roboflow)
+# 수동 다운로드 버전 - 절대 경로 사용
+
+# 데이터셋 경로 (절대 경로)
+path: /home/sys1041/work_project/data/raw/pcb_defects
+train: train/images
+val: valid/images
+test: test/images
+
+# 클래스 정의
+nc: 7
+names: ['defect1', 'defect2', 'defect3', 'defect4', 'defect5', 'defect6', 'defect7']
+
+# Roboflow 정보
+roboflow:
+  workspace: uni-4sdfm
+  project: pcb-defects
+  version: 2
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/uni-4sdfm/pcb-defects/dataset/2

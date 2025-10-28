@@ -96,7 +96,7 @@ def generate_mock_prediction(camera_id="left", has_defect=None):
     }
 
 
-@app.route('/api/v1/health', methods=['GET'])
+@app.route('/health', methods=['GET'])
 def health():
     """서버 상태 확인 (Mock)"""
     return jsonify({
@@ -111,7 +111,7 @@ def health():
     })
 
 
-@app.route('/api/v1/predict', methods=['POST'])
+@app.route('/predict', methods=['POST'])
 def predict():
     """단일 프레임 PCB 불량 검사 (Mock)"""
     data = request.get_json()
@@ -135,7 +135,7 @@ def predict():
     return jsonify(response)
 
 
-@app.route('/api/v1/predict_dual', methods=['POST'])
+@app.route('/predict_dual', methods=['POST'])
 def predict_dual():
     """양면 프레임 동시 검사 (Mock)"""
     data = request.get_json()
@@ -194,7 +194,7 @@ def predict_dual():
     return jsonify(response)
 
 
-@app.route('/api/v1/history', methods=['GET'])
+@app.route('/history', methods=['GET'])
 def history():
     """검사 이력 조회 (Mock)"""
     page = int(request.args.get('page', 1))
@@ -231,7 +231,7 @@ def history():
     })
 
 
-@app.route('/api/v1/statistics', methods=['GET'])
+@app.route('/statistics', methods=['GET'])
 def statistics():
     """통계 데이터 조회 (Mock)"""
     start_date = request.args.get('start_date', '2025-10-01')
@@ -272,17 +272,17 @@ if __name__ == '__main__':
     print("=" * 60)
     print("Mock Flask Server 시작")
     print("=" * 60)
-    print("Base URL: http://0.0.0.0:5000/api/v1")
+    print("Base URL: http://0.0.0.0:5000")
     print("")
     print("사용 가능한 엔드포인트:")
-    print("  GET  /api/v1/health")
-    print("  POST /api/v1/predict")
-    print("  POST /api/v1/predict_dual")
-    print("  GET  /api/v1/history")
-    print("  GET  /api/v1/statistics")
+    print("  GET  /health")
+    print("  POST /predict")
+    print("  POST /predict_dual")
+    print("  GET  /history")
+    print("  GET  /statistics")
     print("")
     print("테스트 예시:")
-    print("  curl http://localhost:5000/api/v1/health")
+    print("  curl http://localhost:5000/health")
     print("=" * 60)
 
     app.run(host='0.0.0.0', port=5000, debug=True)

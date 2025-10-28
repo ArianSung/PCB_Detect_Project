@@ -264,7 +264,7 @@ public async Task TestFlaskAPI()
     {
         try
         {
-            var response = await client.GetAsync("http://100.x.x.x:5000/api/v1/health");
+            var response = await client.GetAsync("http://100.x.x.x:5000/health");
             var json = await response.Content.ReadAsStringAsync();
 
             Console.WriteLine("✓ Flask API 연결 성공!");
@@ -286,7 +286,7 @@ public async Task<List<InspectionRecord>> GetInspectionHistory(int page, int lim
     using (var client = new HttpClient())
     {
         var response = await client.GetAsync(
-            $"http://100.x.x.x:5000/api/v1/history?page={page}&limit={limit}"
+            $"http://100.x.x.x:5000/history?page={page}&limit={limit}"
         );
 
         var json = await response.Content.ReadAsStringAsync();
@@ -419,7 +419,7 @@ public async Task LoadDashboardData()
     {
         // 오늘 통계 조회
         var response = await client.GetAsync(
-            $"{apiBaseUrl}/api/v1/statistics?start_date={DateTime.Today:yyyy-MM-dd}&end_date={DateTime.Today:yyyy-MM-dd}"
+            $"{apiBaseUrl}/statistics?start_date={DateTime.Today:yyyy-MM-dd}&end_date={DateTime.Today:yyyy-MM-dd}"
         );
 
         var json = await response.Content.ReadAsStringAsync();

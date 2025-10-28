@@ -63,7 +63,7 @@ curl http://localhost:5000/health
 ### 3. `/predict_dual` (POST)
 양면 동시 추론
 
-### 4. `/api/v1/box_status` (GET)
+### 4. `/box_status` (GET)
 박스 상태 조회 (C# WinForms용)
 
 ## 폴더 구조

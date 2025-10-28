@@ -677,7 +677,7 @@ bash scripts/evaluate.sh
 
 ### 4. 추론
 ```bash
-python src/main.py --image path/to/image.jpg
+python server/app.py
 ```
 
 ## 프로젝트 구조
@@ -869,10 +869,10 @@ models/yolo/experiments/
 ### 코드 스타일
 ```bash
 # Black으로 코드 포맷팅
-black src/
+black server/ yolo/ raspberry_pi/
 
 # Flake8으로 린팅
-flake8 src/
+flake8 server yolo
 ```
 
 ### 커밋 메시지 컨벤션
@@ -909,7 +909,7 @@ git commit -m "docs: Update Dataset_Guide.md with Kaggle dataset"
 
 3. **첫 실험 시작**
    - Jupyter 노트북으로 프로토타이핑
-   - 검증된 코드는 `src/`로 이동
+   - 검증된 코드는 `server/`, `yolo/`, `raspberry_pi/` 등 역할별 폴더로 이동
 
 ---
 

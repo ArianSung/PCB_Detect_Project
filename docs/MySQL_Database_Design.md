@@ -231,6 +231,218 @@ COMMENT='로봇팔 박스 슬롯 상태 관리 테이블 (3개 박스 × 2개 �
 - `SOLDER_DEFECT`: 납땜 불량 (2개 슬롯)
 - `DISCARD`: 폐기 (슬롯 관리 안 함, box_status 테이블에 저장 안 함)
 
+### 10. oht_operations (OHT 운영 이력) ⭐ 신규
+
+```sql
+CREATE TABLE oht_operations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+
+    -- 요청 정보
+    operation_id VARCHAR(36) NOT NULL UNIQUE COMMENT 'OHT 운영 UUID',
+    category ENUM('NORMAL', 'COMPONENT_DEFECT', 'SOLDER_DEFECT') NOT NULL COMMENT 'PCB 카테고리',
+
+    -- 사용자 정보
+    user_id INT NULL COMMENT '요청한 사용자 ID (NULL이면 시스템 자동)',
+    user_role ENUM('Admin', 'Operator', 'System') NOT NULL COMMENT '사용자 역할',
+    is_auto BOOLEAN NOT NULL DEFAULT FALSE COMMENT '자동 호출 여부',
+    trigger_reason VARCHAR(50) NULL COMMENT '트리거 사유 (box_full 등)',
+
+    -- 상태
+    status ENUM('pending', 'processing', 'completed', 'failed') NOT NULL DEFAULT 'pending' COMMENT '운영 상태',
+
+    -- 타임스탬프
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '요청 생성 시간',
+    started_at DATETIME NULL COMMENT '운영 시작 시간',
+    completed_at DATETIME NULL COMMENT '운영 완료 시간',
+
+    -- 결과
+    pcb_count INT NOT NULL DEFAULT 0 COMMENT '수거한 PCB 개수',
+    success BOOLEAN NULL COMMENT '성공 여부',
+    error_message TEXT NULL COMMENT '오류 메시지',
+    execution_time_seconds DECIMAL(5, 2) NULL COMMENT '실행 시간 (초)',
+
+    -- 인덱스
+    INDEX idx_operation_id (operation_id),
+    INDEX idx_category (category),
+    INDEX idx_status (status),
+    INDEX idx_is_auto (is_auto),
+    INDEX idx_created_at (created_at),
+
+    -- 외래 키
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='OHT (Overhead Hoist Transport) 운영 이력 테이블';
+```
+
+**설명**:
+- **operation_id**: UUID 형식의 고유 식별자
+- **category**: 수거할 PCB 카테고리 (정상/부품불량/납땜불량)
+- **user_role**: Admin/Operator (수동 호출) 또는 System (자동 호출)
+- **is_auto**: true = 박스 꽉 참 자동 호출, false = WinForms 수동 호출
+- **trigger_reason**: 자동 호출 사유 (예: 'box_full')
+- **status**: pending (대기) → processing (진행 중) → completed/failed (완료/실패)
+- **execution_time_seconds**: 창고 → 분류박스 → 적재 → 창고 전체 시간
+
+**쿼리 예시**:
+```sql
+-- 최근 OHT 운영 이력 (최근 10건)
+SELECT operation_id, category, user_role, is_auto, status,
+       created_at, execution_time_seconds
+FROM oht_operations
+ORDER BY created_at DESC
+LIMIT 10;
+
+-- 자동 호출 통계
+SELECT category, COUNT(*) as auto_calls
+FROM oht_operations
+WHERE is_auto = TRUE
+GROUP BY category;
+
+-- 평균 실행 시간
+SELECT category, AVG(execution_time_seconds) as avg_time
+FROM oht_operations
+WHERE status = 'completed'
+GROUP BY category;
+
+-- 실패 이력
+SELECT operation_id, category, error_message, created_at
+FROM oht_operations
+WHERE status = 'failed'
+ORDER BY created_at DESC;
+```
+
+---
+
+### 11. user_logs (사용자 활동 로그) ⭐ 신규
+
+```sql
+CREATE TABLE user_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+
+    -- 사용자 정보
+    user_id INT NOT NULL COMMENT '사용자 ID',
+    username VARCHAR(50) NOT NULL COMMENT '사용자명 (참조용)',
+    user_role ENUM('Admin', 'Operator', 'Viewer') NOT NULL COMMENT '사용자 권한',
+
+    -- 활동 정보
+    action_type ENUM(
+        'login',
+        'logout',
+        'create_user',
+        'update_user',
+        'delete_user',
+        'reset_password',
+        'call_oht',
+        'export_data',
+        'view_inspection',
+        'change_settings',
+        'other'
+    ) NOT NULL COMMENT '활동 유형',
+    action_description VARCHAR(255) NULL COMMENT '활동 상세 설명',
+
+    -- 시스템 정보
+    ip_address VARCHAR(45) NULL COMMENT 'IP 주소 (IPv4/IPv6)',
+    user_agent VARCHAR(255) NULL COMMENT 'User Agent (브라우저/클라이언트 정보)',
+
+    -- 상세 정보
+    details JSON NULL COMMENT '추가 상세 정보 (JSON 형식)',
+
+    -- 타임스탬프
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '활동 발생 시간',
+
+    -- 인덱스
+    INDEX idx_user_id (user_id),
+    INDEX idx_action_type (action_type),
+    INDEX idx_created_at (created_at),
+    INDEX idx_user_action (user_id, action_type),
+
+    -- 외래 키
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='사용자 활동 이력 로그 테이블';
+```
+
+**설명**:
+- **user_id**: 활동을 수행한 사용자 ID
+- **username**: 사용자명 (users 테이블 변경 시에도 이력 유지)
+- **action_type**: 활동 유형 (로그인, 사용자 관리, OHT 호출, 데이터 내보내기 등)
+- **action_description**: 활동에 대한 상세 설명 (예: "사용자 'operator2' 생성")
+- **ip_address**: 클라이언트 IP 주소 (IPv4/IPv6 지원)
+- **user_agent**: 클라이언트 정보 (WinForms 앱, 브라우저 등)
+- **details**: JSON 형식의 추가 정보 (예: 변경 전/후 값, OHT 카테고리 등)
+- **created_at**: 활동 발생 시간
+
+**쿼리 예시**:
+```sql
+-- 특정 사용자의 최근 활동 이력 (최근 20건)
+SELECT action_type, action_description, ip_address, created_at
+FROM user_logs
+WHERE user_id = 1
+ORDER BY created_at DESC
+LIMIT 20;
+
+-- 로그인 이력 조회
+SELECT username, ip_address, created_at
+FROM user_logs
+WHERE action_type = 'login'
+ORDER BY created_at DESC;
+
+-- OHT 호출 이력 조회 (수동 호출만)
+SELECT username, user_role, action_description, details, created_at
+FROM user_logs
+WHERE action_type = 'call_oht'
+ORDER BY created_at DESC;
+
+-- 사용자 관리 활동 이력
+SELECT username, action_type, action_description, created_at
+FROM user_logs
+WHERE action_type IN ('create_user', 'update_user', 'delete_user', 'reset_password')
+ORDER BY created_at DESC;
+
+-- 날짜 범위별 활동 통계
+SELECT action_type, COUNT(*) as count
+FROM user_logs
+WHERE created_at BETWEEN '2025-10-01' AND '2025-10-31'
+GROUP BY action_type
+ORDER BY count DESC;
+
+-- 데이터 내보내기 이력
+SELECT username, user_role, action_description, created_at
+FROM user_logs
+WHERE action_type = 'export_data'
+ORDER BY created_at DESC;
+```
+
+**details 필드 JSON 예시**:
+```json
+// 사용자 생성
+{
+  "new_username": "operator2",
+  "new_role": "Operator",
+  "created_by": "admin"
+}
+
+// 비밀번호 초기화
+{
+  "target_username": "operator1",
+  "reset_to": "temp1234"
+}
+
+// OHT 호출
+{
+  "category": "NORMAL",
+  "is_auto": false,
+  "operation_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+
+// 데이터 내보내기
+{
+  "export_type": "excel",
+  "date_range": "2025-10-01 ~ 2025-10-22",
+  "row_count": 1523
+}
+```
+
 ---
 
 ## 초기 데이터 삽입
@@ -239,7 +451,7 @@ COMMENT='로봇팔 박스 슬롯 상태 관리 테이블 (3개 박스 × 2개 �
 
 ```sql
 INSERT INTO system_config (config_key, config_value, description) VALUES
-('server_url', 'http://192.168.0.10:5000', 'Flask 서버 URL'),
+('server_url', 'http://100.64.1.1:5000', 'Flask 서버 URL'),
 ('fps', '10', '카메라 FPS'),
 ('jpeg_quality', '85', 'JPEG 압축 품질'),
 ('defect_threshold', '0.70', '불량 판정 임계값 (신뢰도)'),
@@ -614,17 +826,17 @@ Flask 서버는 검사 결과를 데이터베이스에 저장하고 조회할 �
 
 ```sql
 -- Flask 서버 전용 사용자 생성
-CREATE USER 'flask_server'@'192.168.0.10' IDENTIFIED BY 'STRONG_PASSWORD_HERE';
+CREATE USER 'flask_server'@'100.64.1.1' IDENTIFIED BY 'STRONG_PASSWORD_HERE';
 
 -- pcb_inspection 데이터베이스에 대한 권한 부여
-GRANT SELECT, INSERT, UPDATE ON pcb_inspection.* TO 'flask_server'@'192.168.0.10';
+GRANT SELECT, INSERT, UPDATE ON pcb_inspection.* TO 'flask_server'@'100.64.1.1';
 
 -- 변경사항 적용
 FLUSH PRIVILEGES;
 ```
 
 **참고**:
-- `192.168.0.10`은 Flask 서버의 IP 주소
+- `100.64.1.1`은 Flask 서버의 IP 주소
 - 실제 사용 시 `STRONG_PASSWORD_HERE`를 강력한 비밀번호로 변경
 
 #### 2. C# WinForms 모니터링 앱용 MySQL 사용자 생성 (읽기 전용)
@@ -633,17 +845,17 @@ FLUSH PRIVILEGES;
 
 ```sql
 -- C# WinForms 앱 전용 사용자 생성
-CREATE USER 'winforms_app'@'192.168.0.30' IDENTIFIED BY 'STRONG_PASSWORD_HERE';
+CREATE USER 'winforms_app'@'100.64.1.5' IDENTIFIED BY 'STRONG_PASSWORD_HERE';
 
 -- 읽기 전용 권한 부여
-GRANT SELECT ON pcb_inspection.* TO 'winforms_app'@'192.168.0.30';
+GRANT SELECT ON pcb_inspection.* TO 'winforms_app'@'100.64.1.5';
 
 -- 변경사항 적용
 FLUSH PRIVILEGES;
 ```
 
 **참고**:
-- `192.168.0.30`은 Windows PC의 IP 주소
+- `100.64.1.5`은 Windows PC의 IP 주소
 - 권한 수준별 사용자 (Admin/Operator/Viewer)는 C# 앱 내부에서 관리
 
 #### 3. 관리자용 사용자 (전체 권한)
@@ -668,8 +880,8 @@ FLUSH PRIVILEGES;
 SELECT User, Host FROM mysql.user WHERE User LIKE 'flask%' OR User LIKE 'winforms%' OR User LIKE 'pcb%';
 
 -- 특정 사용자의 권한 확인
-SHOW GRANTS FOR 'flask_server'@'192.168.0.10';
-SHOW GRANTS FOR 'winforms_app'@'192.168.0.30';
+SHOW GRANTS FOR 'flask_server'@'100.64.1.1';
+SHOW GRANTS FOR 'winforms_app'@'100.64.1.5';
 ```
 
 ---
@@ -686,7 +898,7 @@ sudo nano /etc/mysql/mysql.conf.d/mysqld.cnf
 
 # [mysqld] 섹션에서 bind-address 수정
 # 변경 전: bind-address = 127.0.0.1
-# 변경 후: bind-address = 0.0.0.0  # 모든 IP 허용 (또는 192.168.0.10 등 특정 IP만)
+# 변경 후: bind-address = 0.0.0.0  # 모든 IP 허용 (또는 100.64.1.1 등 특정 IP만)
 
 # MySQL 재시작
 sudo systemctl restart mysql
@@ -696,8 +908,8 @@ sudo systemctl restart mysql
 
 ```bash
 # MySQL 포트 (3306) 개방 - 특정 IP만 허용 권장
-sudo ufw allow from 192.168.0.10 to any port 3306 comment 'Flask Server'
-sudo ufw allow from 192.168.0.30 to any port 3306 comment 'Windows PC'
+sudo ufw allow from 100.64.1.1 to any port 3306 comment 'Flask Server'
+sudo ufw allow from 100.64.1.5 to any port 3306 comment 'Windows PC'
 
 # 방화벽 규칙 확인
 sudo ufw status
@@ -716,7 +928,7 @@ sudo ufw status
 **비밀번호 변경**:
 ```sql
 -- 사용자 비밀번호 변경
-ALTER USER 'flask_server'@'192.168.0.10' IDENTIFIED BY 'NEW_STRONG_PASSWORD';
+ALTER USER 'flask_server'@'100.64.1.1' IDENTIFIED BY 'NEW_STRONG_PASSWORD';
 FLUSH PRIVILEGES;
 ```
 

@@ -49,6 +49,7 @@
 | 검사 이력 조회 | ✅ | ✅ | ✅ (읽기만) |
 | 통계 분석 | ✅ | ✅ | ✅ (읽기만) |
 | Excel 내보내기 | ✅ | ✅ | ❌ |
+| **OHT 호출** ⭐ | ✅ | ✅ | ❌ |
 | 사용자 관리 | ✅ | ❌ | ❌ |
 | 시스템 설정 | ✅ | ❌ | ❌ |
 
@@ -437,7 +438,7 @@ public partial class MainForm : Form
     {
         try
         {
-            // API 호출: /api/v1/box_status
+            // API 호출: /box_status
             var response = await ApiClient.GetBoxStatusAsync();
 
             if (response != null && response.Status == "ok")
@@ -587,9 +588,9 @@ public partial class MainForm : Form
 public static class ApiClient
 {
     private static readonly HttpClient client = new HttpClient();
-    // 로컬: http://192.168.0.10:5000/api/v1 (선택)
-    // 원격: http://100.x.x.x:5000/api/v1 (Tailscale VPN - 프로젝트 환경)
-    private const string BASE_URL = "http://192.168.0.10:5000/api/v1";  // Flask 서버
+    // 기본: http://100.64.1.1:5000 (Tailscale)
+    // 원격: http://100.x.x.x:5000 (Tailscale VPN - 프로젝트 환경)
+    private const string BASE_URL = "http://100.64.1.1:5000";  // Flask 서버
 
     public static async Task<BoxStatusResponse> GetBoxStatusAsync()
     {
@@ -683,6 +684,378 @@ public class BoxSummary
 }
 ```
 
+#### OHT (Overhead Hoist Transport) 제어 패널 ⭐ 신규
+
+**주요 기능:**
+- 박스 꽉 참 시 자동 OHT 호출 (시스템 자동)
+- 수동 OHT 호출 (Admin/Operator 권한 필요)
+- OHT 상태 실시간 모니터링
+- 대기 큐 표시
+
+**UI 레이아웃:**
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ OHT 시스템 제어 (Admin/Operator 전용)                       │
+├────────────────────────────────────────────────────────────┤
+│                                                              │
+│  [정상 호출]  [부품불량 호출]  [납땜불량 호출]  [긴급정지]   │
+│                                                              │
+│  현재 상태: ● 대기 중    대기 큐: 0건                        │
+│                                                              │
+│  최근 호출 이력:                                             │
+│  - 2025-10-28 14:23:15  정상 (자동)      완료 (2.3초)       │
+│  - 2025-10-28 14:15:32  부품불량 (수동)  완료 (2.5초)       │
+│                                                              │
+│  참고: Viewer 권한은 OHT 호출 불가 (조회만 가능)            │
+│                                                              │
+└────────────────────────────────────────────────────────────┘
+```
+
+**OHTControlPanel 커스텀 컨트롤:**
+
+```csharp
+public class OHTControlPanel : Panel
+{
+    private Button btnCallNormal;
+    private Button btnCallComponentDefect;
+    private Button btnCallSolderDefect;
+    private Button btnEmergencyStop;
+    private Label lblStatus;
+    private Label lblQueueLength;
+    private DataGridView dgvRecentHistory;
+    private System.Windows.Forms.Timer statusTimer;
+
+    private readonly HttpClient httpClient;
+    private readonly string serverUrl;
+
+    public OHTControlPanel(string serverUrl)
+    {
+        this.serverUrl = serverUrl;
+        this.httpClient = new HttpClient();
+        InitializeComponents();
+        InitializePermissions();
+        StartStatusMonitoring();
+    }
+
+    private void InitializeComponents()
+    {
+        this.Size = new Size(600, 250);
+        this.BorderStyle = BorderStyle.FixedSingle;
+
+        // 호출 버튼들
+        btnCallNormal = new Button
+        {
+            Text = "정상 호출",
+            Location = new Point(10, 40),
+            Size = new Size(120, 40),
+            Font = new Font("맑은 고딕", 10, FontStyle.Bold),
+            BackColor = Color.LightGreen
+        };
+        btnCallNormal.Click += async (s, e) => await CallOHT("NORMAL");
+        this.Controls.Add(btnCallNormal);
+
+        btnCallComponentDefect = new Button
+        {
+            Text = "부품불량 호출",
+            Location = new Point(140, 40),
+            Size = new Size(120, 40),
+            Font = new Font("맑은 고딕", 10, FontStyle.Bold),
+            BackColor = Color.LightYellow
+        };
+        btnCallComponentDefect.Click += async (s, e) => await CallOHT("COMPONENT_DEFECT");
+        this.Controls.Add(btnCallComponentDefect);
+
+        btnCallSolderDefect = new Button
+        {
+            Text = "납땜불량 호출",
+            Location = new Point(270, 40),
+            Size = new Size(120, 40),
+            Font = new Font("맑은 고딕", 10, FontStyle.Bold),
+            BackColor = Color.LightCoral
+        };
+        btnCallSolderDefect.Click += async (s, e) => await CallOHT("SOLDER_DEFECT");
+        this.Controls.Add(btnCallSolderDefect);
+
+        btnEmergencyStop = new Button
+        {
+            Text = "긴급 정지",
+            Location = new Point(400, 40),
+            Size = new Size(120, 40),
+            Font = new Font("맑은 고딕", 10, FontStyle.Bold),
+            BackColor = Color.Red,
+            ForeColor = Color.White
+        };
+        btnEmergencyStop.Click += BtnEmergencyStop_Click;
+        this.Controls.Add(btnEmergencyStop);
+
+        // 상태 표시
+        lblStatus = new Label
+        {
+            Text = "현재 상태: ● 대기 중",
+            Location = new Point(10, 90),
+            AutoSize = true,
+            Font = new Font("맑은 고딕", 10)
+        };
+        this.Controls.Add(lblStatus);
+
+        lblQueueLength = new Label
+        {
+            Text = "대기 큐: 0건",
+            Location = new Point(200, 90),
+            AutoSize = true,
+            Font = new Font("맑은 고딕", 10)
+        };
+        this.Controls.Add(lblQueueLength);
+
+        // 최근 이력 DataGridView
+        dgvRecentHistory = new DataGridView
+        {
+            Location = new Point(10, 120),
+            Size = new Size(580, 120),
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+            ReadOnly = true,
+            AllowUserToAddRows = false,
+            RowHeadersVisible = false
+        };
+        dgvRecentHistory.Columns.Add("time", "시각");
+        dgvRecentHistory.Columns.Add("category", "종류");
+        dgvRecentHistory.Columns.Add("type", "유형");
+        dgvRecentHistory.Columns.Add("status", "상태");
+        dgvRecentHistory.Columns.Add("duration", "소요시간");
+        this.Controls.Add(dgvRecentHistory);
+
+        // 권한 경고 라벨
+        if (!SessionManager.HasPermission(Permission.CallOHT))
+        {
+            Label lblPermissionWarning = new Label
+            {
+                Text = "⚠ OHT 호출 권한이 없습니다 (Admin/Operator 전용)",
+                Location = new Point(10, 10),
+                ForeColor = Color.Red,
+                Font = new Font("맑은 고딕", 9, FontStyle.Bold),
+                AutoSize = true
+            };
+            this.Controls.Add(lblPermissionWarning);
+        }
+    }
+
+    private void InitializePermissions()
+    {
+        // Admin/Operator만 호출 버튼 활성화
+        bool hasPermission = SessionManager.HasPermission(Permission.CallOHT);
+
+        btnCallNormal.Enabled = hasPermission;
+        btnCallComponentDefect.Enabled = hasPermission;
+        btnCallSolderDefect.Enabled = hasPermission;
+        btnEmergencyStop.Enabled = hasPermission;
+    }
+
+    private void StartStatusMonitoring()
+    {
+        statusTimer = new System.Windows.Forms.Timer();
+        statusTimer.Interval = 5000;  // 5초마다
+        statusTimer.Tick += async (s, e) => await RefreshOHTStatus();
+        statusTimer.Start();
+
+        // 초기 로드
+        Task.Run(async () => await RefreshOHTStatus());
+    }
+
+    private async Task CallOHT(string category)
+    {
+        try
+        {
+            var payload = new
+            {
+                category = category,
+                user_id = SessionManager.CurrentUser.UserId,
+                user_role = SessionManager.CurrentUser.Role.ToString()
+            };
+
+            var json = JsonConvert.SerializeObject(payload);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await httpClient.PostAsync($"{serverUrl}/api/oht/request", content);
+
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                MessageBox.Show("OHT 호출 권한이 없습니다.", "권한 오류",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            response.EnsureSuccessStatusCode();
+
+            MessageBox.Show($"{GetCategoryDisplayName(category)} OHT가 호출되었습니다.",
+                "성공", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+            await RefreshOHTStatus();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"OHT 호출 실패: {ex.Message}", "오류",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Logger.LogError("OHT call failed", ex);
+        }
+    }
+
+    private async Task RefreshOHTStatus()
+    {
+        try
+        {
+            var response = await httpClient.GetAsync($"{serverUrl}/api/oht/status");
+            response.EnsureSuccessStatusCode();
+
+            var json = await response.Content.ReadAsStringAsync();
+            var status = JsonConvert.DeserializeObject<OHTStatus>(json);
+
+            // UI 업데이트 (UI 스레드에서)
+            this.Invoke(new Action(() =>
+            {
+                lblQueueLength.Text = $"대기 큐: {status.QueueLength}건";
+
+                if (status.CurrentRequest != null)
+                {
+                    lblStatus.Text = $"현재 상태: ● 진행 중 ({status.CurrentRequest.Category})";
+                    lblStatus.ForeColor = Color.Orange;
+                }
+                else
+                {
+                    lblStatus.Text = "현재 상태: ● 대기 중";
+                    lblStatus.ForeColor = Color.Green;
+                }
+
+                // 최근 이력 업데이트
+                dgvRecentHistory.Rows.Clear();
+                foreach (var req in status.RecentRequests.Take(3))
+                {
+                    dgvRecentHistory.Rows.Add(
+                        req.Timestamp,
+                        GetCategoryDisplayName(req.Category),
+                        req.IsAuto ? "자동" : "수동",
+                        req.Status == "completed" ? "완료" : req.Status,
+                        req.ExecutionTimeSeconds > 0 ? $"{req.ExecutionTimeSeconds:F1}초" : "-"
+                    );
+                }
+            }));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError("Failed to refresh OHT status", ex);
+        }
+    }
+
+    private void BtnEmergencyStop_Click(object sender, EventArgs e)
+    {
+        var result = MessageBox.Show("OHT를 긴급 정지하시겠습니까?",
+            "긴급 정지 확인",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+
+        if (result == DialogResult.Yes)
+        {
+            // OHT 긴급 정지 로직 (라즈베리파이에 신호 전송)
+            MessageBox.Show("OHT 긴급 정지 신호를 전송했습니다.", "정보",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+    }
+
+    private string GetCategoryDisplayName(string category)
+    {
+        return category switch
+        {
+            "NORMAL" => "정상",
+            "COMPONENT_DEFECT" => "부품불량",
+            "SOLDER_DEFECT" => "납땜불량",
+            _ => category
+        };
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            statusTimer?.Stop();
+            statusTimer?.Dispose();
+            httpClient?.Dispose();
+        }
+        base.Dispose(disposing);
+    }
+}
+
+public class OHTStatus
+{
+    [JsonProperty("queue_length")]
+    public int QueueLength { get; set; }
+
+    [JsonProperty("current_request")]
+    public OHTRequest CurrentRequest { get; set; }
+
+    [JsonProperty("recent_requests")]
+    public List<OHTRequestHistory> RecentRequests { get; set; }
+}
+
+public class OHTRequest
+{
+    [JsonProperty("request_id")]
+    public string RequestId { get; set; }
+
+    [JsonProperty("category")]
+    public string Category { get; set; }
+
+    [JsonProperty("is_auto")]
+    public bool IsAuto { get; set; }
+}
+
+public class OHTRequestHistory
+{
+    [JsonProperty("request_id")]
+    public string RequestId { get; set; }
+
+    [JsonProperty("category")]
+    public string Category { get; set; }
+
+    [JsonProperty("is_auto")]
+    public bool IsAuto { get; set; }
+
+    [JsonProperty("status")]
+    public string Status { get; set; }
+
+    [JsonProperty("timestamp")]
+    public string Timestamp { get; set; }
+
+    [JsonProperty("execution_time_seconds")]
+    public double ExecutionTimeSeconds { get; set; }
+}
+```
+
+**MainForm에 OHT 패널 추가:**
+
+```csharp
+// MainForm.cs
+
+private OHTControlPanel ohtPanel;
+
+private void InitializeMainForm()
+{
+    // ... 기존 컴포넌트 초기화 ...
+
+    // OHT 제어 패널 추가 (박스 상태 패널 아래)
+    ohtPanel = new OHTControlPanel("http://100.64.1.1:5000")
+    {
+        Location = new Point(20, 600)
+    };
+    this.Controls.Add(ohtPanel);
+
+    // 권한 없으면 비활성화 (Viewer는 조회만 가능)
+    if (!SessionManager.HasPermission(Permission.CallOHT))
+    {
+        // UI는 표시하되 버튼은 비활성화 (InitializePermissions에서 처리)
+    }
+}
+```
+
 ---
 
 ### 3. InspectionHistoryForm (검사 이력)
@@ -768,9 +1141,477 @@ private void DgvInspections_CellPainting(object sender, DataGridViewCellPainting
 
 #### 주요 기능
 - 사용자 생성/수정/삭제
-- 권한 레벨 설정
-- 비밀번호 초기화
+- 권한 레벨 설정 (Admin/Operator/Viewer)
+- 비밀번호 초기화 (기본: 'temp1234')
 - 사용자 활동 로그 조회
+- 사용자 검색 및 필터
+- 활성화/비활성화 관리
+
+#### 권한 제한
+- Admin만 접근 가능
+- MainForm에서 메뉴 클릭 시 권한 체크
+- Operator/Viewer는 메뉴 비활성화
+
+#### UI 구성 요소
+- 검색 TextBox (사용자명/이름 검색)
+- 권한 필터 ComboBox (전체/Admin/Operator/Viewer)
+- DataGridView (사용자 목록 표시: ID, 사용자명, 이름, 권한, 상태, 마지막 로그인)
+- 버튼: 사용자 추가, 수정, 삭제, 비밀번호 초기화, 활동 로그, 새로고침
+
+#### 핵심 구현 코드
+
+```csharp
+public partial class UserManagementForm : Form
+{
+    private readonly HttpClient _httpClient;
+    private readonly string _serverUrl;
+    private DataGridView dgvUsers;
+    private TextBox txtSearch;
+    private ComboBox cmbRoleFilter;
+
+    public UserManagementForm(string serverUrl, HttpClient httpClient)
+    {
+        InitializeComponent();
+        _serverUrl = serverUrl;
+        _httpClient = httpClient;
+
+        // 권한 체크
+        if (!SessionManager.HasPermission(Permission.ManageUsers))
+        {
+            MessageBox.Show("사용자 관리 권한이 없습니다.", "권한 없음",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            this.Close();
+            return;
+        }
+
+        InitializeUI();  // UI 초기화 (상세 코드는 별도 제공)
+        LoadUsers();
+    }
+
+    // 사용자 목록 조회
+    private async void LoadUsers()
+    {
+        try
+        {
+            this.Cursor = Cursors.WaitCursor;
+            var response = await _httpClient.GetAsync($"{_serverUrl}/api/users");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonConvert.DeserializeObject<UsersResponse>(json);
+
+                dgvUsers.Rows.Clear();
+                foreach (var user in result.Users)
+                {
+                    dgvUsers.Rows.Add(
+                        user.Id,
+                        user.Username,
+                        user.FullName,
+                        user.Role,
+                        user.IsActive ? "활성" : "비활성",
+                        user.LastLogin?.ToString("yyyy-MM-dd HH:mm") ?? "-"
+                    );
+
+                    // 비활성 사용자 표시 (회색)
+                    if (!user.IsActive)
+                    {
+                        dgvUsers.Rows[dgvUsers.Rows.Count - 1].DefaultCellStyle.ForeColor = Color.Gray;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"오류 발생: {ex.Message}", "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            this.Cursor = Cursors.Default;
+        }
+    }
+
+    // 검색 및 필터링
+    private void FilterUsers()
+    {
+        string searchText = txtSearch.Text.ToLower();
+        string roleFilter = cmbRoleFilter.SelectedItem?.ToString();
+
+        foreach (DataGridViewRow row in dgvUsers.Rows)
+        {
+            bool matchSearch = string.IsNullOrEmpty(searchText) ||
+                               row.Cells["Username"].Value.ToString().ToLower().Contains(searchText) ||
+                               row.Cells["FullName"].Value.ToString().ToLower().Contains(searchText);
+
+            bool matchRole = roleFilter == "전체" ||
+                             row.Cells["Role"].Value.ToString() == roleFilter;
+
+            row.Visible = matchSearch && matchRole;
+        }
+    }
+
+    // 사용자 추가
+    private void AddUser()
+    {
+        var dialog = new UserEditDialog(_serverUrl, _httpClient, null);
+        if (dialog.ShowDialog() == DialogResult.OK)
+        {
+            LoadUsers();
+        }
+    }
+
+    // 사용자 수정
+    private void EditUser()
+    {
+        if (dgvUsers.SelectedRows.Count == 0) return;
+
+        var row = dgvUsers.SelectedRows[0];
+        var user = new UserModel
+        {
+            Id = Convert.ToInt32(row.Cells["Id"].Value),
+            Username = row.Cells["Username"].Value.ToString(),
+            FullName = row.Cells["FullName"].Value.ToString(),
+            Role = row.Cells["Role"].Value.ToString(),
+            IsActive = row.Cells["IsActive"].Value.ToString() == "활성"
+        };
+
+        var dialog = new UserEditDialog(_serverUrl, _httpClient, user);
+        if (dialog.ShowDialog() == DialogResult.OK)
+        {
+            LoadUsers();
+        }
+    }
+
+    // 사용자 삭제
+    private async void DeleteUser()
+    {
+        if (dgvUsers.SelectedRows.Count == 0) return;
+
+        var row = dgvUsers.SelectedRows[0];
+        int userId = Convert.ToInt32(row.Cells["Id"].Value);
+        string username = row.Cells["Username"].Value.ToString();
+
+        // 자기 자신 삭제 방지
+        if (userId == SessionManager.CurrentUser.Id)
+        {
+            MessageBox.Show("자기 자신은 삭제할 수 없습니다.", "삭제 불가",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var confirm = MessageBox.Show(
+            $"사용자 '{username}'을(를) 삭제하시겠습니까?",
+            "사용자 삭제 확인", MessageBoxButtons.YesNo, MessageBoxIcon.Warning
+        );
+
+        if (confirm == DialogResult.Yes)
+        {
+            try
+            {
+                var response = await _httpClient.DeleteAsync($"{_serverUrl}/api/users/{userId}");
+                if (response.IsSuccessStatusCode)
+                {
+                    MessageBox.Show("사용자가 삭제되었습니다.", "성공",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    LoadUsers();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"오류 발생: {ex.Message}", "오류",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+    }
+
+    // 비밀번호 초기화
+    private async void ResetPassword()
+    {
+        if (dgvUsers.SelectedRows.Count == 0) return;
+
+        var row = dgvUsers.SelectedRows[0];
+        int userId = Convert.ToInt32(row.Cells["Id"].Value);
+        string username = row.Cells["Username"].Value.ToString();
+
+        var confirm = MessageBox.Show(
+            $"사용자 '{username}'의 비밀번호를 'temp1234'로 초기화하시겠습니까?",
+            "비밀번호 초기화", MessageBoxButtons.YesNo, MessageBoxIcon.Question
+        );
+
+        if (confirm == DialogResult.Yes)
+        {
+            try
+            {
+                var response = await _httpClient.PostAsync(
+                    $"{_serverUrl}/api/users/{userId}/reset-password", null
+                );
+
+                if (response.IsSuccessStatusCode)
+                {
+                    MessageBox.Show("비밀번호가 'temp1234'로 초기화되었습니다.", "성공",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"오류 발생: {ex.Message}", "오류",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+    }
+
+    // 활동 로그 조회
+    private void ViewUserLogs()
+    {
+        if (dgvUsers.SelectedRows.Count == 0) return;
+
+        var row = dgvUsers.SelectedRows[0];
+        int userId = Convert.ToInt32(row.Cells["Id"].Value);
+        string username = row.Cells["Username"].Value.ToString();
+
+        var logsDialog = new UserLogsDialog(_serverUrl, _httpClient, userId, username);
+        logsDialog.ShowDialog();
+    }
+
+    // 데이터 모델
+    public class UserModel
+    {
+        public int Id { get; set; }
+        public string Username { get; set; }
+        public string FullName { get; set; }
+        public string Role { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime? LastLogin { get; set; }
+    }
+
+    public class UsersResponse
+    {
+        public string Status { get; set; }
+        public List<UserModel> Users { get; set; }
+        public int Total { get; set; }
+    }
+
+    public class ErrorResponse
+    {
+        public string Error { get; set; }
+        public string Message { get; set; }
+    }
+}
+```
+
+---
+
+### 6-1. UserEditDialog (사용자 추가/수정 다이얼로그)
+
+#### UI 구성 요소
+- 사용자명 TextBox (영문, 숫자, _ 만 허용, 수정 시 ReadOnly)
+- 비밀번호 TextBox (추가 시에만 표시 및 입력)
+- 이름 TextBox
+- 권한 ComboBox (Admin, Operator, Viewer)
+- 활성화 CheckBox
+- 버튼: 저장, 취소
+
+#### 핵심 구현 코드
+
+```csharp
+public class UserEditDialog : Form
+{
+    private readonly HttpClient _httpClient;
+    private readonly string _serverUrl;
+    private readonly UserModel _existingUser;  // null이면 추가, 아니면 수정
+
+    private TextBox txtUsername, txtPassword, txtFullName;
+    private ComboBox cmbRole;
+    private CheckBox chkIsActive;
+
+    public UserEditDialog(string serverUrl, HttpClient httpClient, UserModel existingUser)
+    {
+        _serverUrl = serverUrl;
+        _httpClient = httpClient;
+        _existingUser = existingUser;
+
+        InitializeComponent();
+        InitializeUI();  // UI 초기화 (상세 코드는 별도 제공)
+
+        if (_existingUser != null)
+        {
+            LoadExistingUser();
+        }
+    }
+
+    // 기존 사용자 정보 로드
+    private void LoadExistingUser()
+    {
+        txtUsername.Text = _existingUser.Username;
+        txtUsername.ReadOnly = true;  // 수정 시 사용자명 변경 불가
+        txtFullName.Text = _existingUser.FullName;
+        cmbRole.SelectedItem = _existingUser.Role;
+        chkIsActive.Checked = _existingUser.IsActive;
+    }
+
+    // 사용자 저장 (추가 또는 수정)
+    private async Task SaveUser()
+    {
+        // 유효성 검사
+        if (string.IsNullOrWhiteSpace(txtUsername.Text) ||
+            (_existingUser == null && string.IsNullOrWhiteSpace(txtPassword.Text)) ||
+            string.IsNullOrWhiteSpace(txtFullName.Text))
+        {
+            MessageBox.Show("필수 항목을 입력하세요.", "입력 오류",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            var userData = new
+            {
+                username = txtUsername.Text.Trim(),
+                password = _existingUser == null ? txtPassword.Text : null,
+                full_name = txtFullName.Text.Trim(),
+                role = cmbRole.SelectedItem.ToString(),
+                is_active = chkIsActive.Checked
+            };
+
+            var json = JsonConvert.SerializeObject(userData);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            HttpResponseMessage response;
+            if (_existingUser == null)
+            {
+                response = await _httpClient.PostAsync($"{_serverUrl}/api/users", content);
+            }
+            else
+            {
+                response = await _httpClient.PutAsync(
+                    $"{_serverUrl}/api/users/{_existingUser.Id}", content
+                );
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                MessageBox.Show(
+                    _existingUser == null ? "사용자가 추가되었습니다." : "사용자 정보가 수정되었습니다.",
+                    "성공", MessageBoxButtons.OK, MessageBoxIcon.Information
+                );
+                this.DialogResult = DialogResult.OK;
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"오류 발생: {ex.Message}", "오류",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+}
+```
+
+---
+
+### 6-2. UserLogsDialog (사용자 활동 로그 다이얼로그)
+
+#### UI 구성 요소
+- 날짜 범위 선택 (DateTimePicker 2개: 시작일, 종료일)
+- 활동 유형 필터 ComboBox (전체/로그인/로그아웃/사용자 생성/수정/삭제/비밀번호 초기화/OHT 호출/데이터 내보내기)
+- DataGridView (로그 목록 표시: 날짜/시간, 활동 유형, 상세 내용, IP 주소)
+- 버튼: 조회, 닫기
+
+#### 핵심 구현 코드
+
+```csharp
+public class UserLogsDialog : Form
+{
+    private readonly HttpClient _httpClient;
+    private readonly string _serverUrl;
+    private readonly int _userId;
+    private readonly string _username;
+
+    private DateTimePicker dtpStartDate, dtpEndDate;
+    private ComboBox cmbActionType;
+    private DataGridView dgvLogs;
+
+    public UserLogsDialog(string serverUrl, HttpClient httpClient, int userId, string username)
+    {
+        _serverUrl = serverUrl;
+        _httpClient = httpClient;
+        _userId = userId;
+        _username = username;
+
+        InitializeComponent();
+        InitializeUI();  // UI 초기화 (상세 코드는 별도 제공)
+        LoadLogs();
+    }
+
+    // 활동 로그 조회
+    private async void LoadLogs()
+    {
+        try
+        {
+            var startDate = dtpStartDate.Value.ToString("yyyy-MM-dd");
+            var endDate = dtpEndDate.Value.ToString("yyyy-MM-dd");
+            string url = $"{_serverUrl}/api/users/{_userId}/logs?start_date={startDate}&end_date={endDate}&limit=100";
+
+            var response = await _httpClient.GetAsync(url);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonConvert.DeserializeObject<LogsResponse>(json);
+
+                dgvLogs.Rows.Clear();
+                foreach (var log in result.Logs)
+                {
+                    dgvLogs.Rows.Add(
+                        log.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"),
+                        TranslateActionType(log.ActionType),
+                        log.ActionDescription,
+                        log.IpAddress ?? "-"
+                    );
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"오류 발생: {ex.Message}", "오류",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private string TranslateActionType(string actionType)
+    {
+        return actionType switch
+        {
+            "login" => "로그인",
+            "logout" => "로그아웃",
+            "create_user" => "사용자 생성",
+            "update_user" => "사용자 수정",
+            "delete_user" => "사용자 삭제",
+            "reset_password" => "비밀번호 초기화",
+            "call_oht" => "OHT 호출",
+            "export_data" => "데이터 내보내기",
+            "view_inspection" => "검사 조회",
+            "change_settings" => "설정 변경",
+            _ => actionType
+        };
+    }
+
+    public class LogModel
+    {
+        public int Id { get; set; }
+        public string ActionType { get; set; }
+        public string ActionDescription { get; set; }
+        public string IpAddress { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    public class LogsResponse
+    {
+        public string Status { get; set; }
+        public List<LogModel> Logs { get; set; }
+        public int Total { get; set; }
+    }
+}
+```
 
 ---
 
@@ -1059,6 +1900,7 @@ public static class SessionManager
         switch (permission)
         {
             case Permission.ExportData:
+            case Permission.CallOHT:  // ⭐ 신규 추가
                 return CurrentUser.Role == UserRole.Admin ||
                        CurrentUser.Role == UserRole.Operator;
 

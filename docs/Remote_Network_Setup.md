@@ -10,7 +10,7 @@
 
 ### 네트워크 환경
 - GPU PC: 원격지 (예: 집, 다른 캠퍼스, 연구실 등)
-- 라즈베리파이 2대 + Windows PC: 같은 위치 (프로젝트 현장)
+- 라즈베리파이 3대 + Windows PC: 같은 위치 (프로젝트 현장)
 - 인터넷 연결 필수 (모든 장비)
 
 ### 실시간 처리 가능 여부 ✅
@@ -128,7 +128,19 @@ tailscale ip -4
 # 출력 예시: 100.64.1.3
 ```
 
-### 4단계: Windows PC (모니터링 앱)에서 설치
+### 4단계: 라즈베리파이 3 (OHT 컨트롤러)에서 설치
+
+```bash
+# 동일한 명령어 실행
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+
+# Tailscale IP 확인
+tailscale ip -4
+# 출력 예시: 100.64.1.4
+```
+
+### 5단계: Windows PC (모니터링 앱)에서 설치
 
 1. **Tailscale 다운로드**:
    - https://tailscale.com/download/windows 접속
@@ -140,7 +152,7 @@ tailscale ip -4
 
 3. **Tailscale IP 확인**:
    - 트레이 아이콘 클릭 → "My IP"
-   - 출력 예시: 100.64.1.4
+   - 출력 예시: 100.64.1.5
 
 ---
 
@@ -151,7 +163,8 @@ tailscale ip -4
 | GPU PC | Flask 추론 서버 | 100.64.1.1 |
 | 라즈베리파이 1 | 좌측 웹캠 + GPIO | 100.64.1.2 |
 | 라즈베리파이 2 | 우측 웹캠 | 100.64.1.3 |
-| Windows PC | C# 모니터링 앱 | 100.64.1.4 |
+| 라즈베리파이 3 | OHT 컨트롤러 | 100.64.1.4 |
+| Windows PC | C# 모니터링 앱 | 100.64.1.5 |
 
 **참고**: 실제 IP는 Tailscale이 자동 할당하므로 위 예시와 다를 수 있습니다.
 
@@ -166,7 +179,7 @@ tailscale ip -4
 conda activate pcb_defect
 
 # Flask 서버 실행 (모든 인터페이스에 바인딩)
-cd ~/work_project/src/server
+cd ~/work_project/server
 python app.py
 
 # 출력:

@@ -91,7 +91,7 @@ ORDER BY user;
 Username: pcb_server
 Password: 1234
 권한: SELECT, INSERT, UPDATE
-용도: Flask 서버에서 사용 (src/server/.env에 입력)
+용도: Flask 서버에서 사용 (server/.env에 입력)
 
 ----------------------------------------------
 2. Flask 팀 리더 (관리자)

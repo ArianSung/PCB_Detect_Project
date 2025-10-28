@@ -177,7 +177,7 @@ def predict_dual():
         }), 500
 
 
-@app.route('/api/v1/box_status', methods=['GET'])
+@app.route('/box_status', methods=['GET'])
 def get_box_status():
     """
     박스 상태 조회 (C# WinForms 모니터링용)

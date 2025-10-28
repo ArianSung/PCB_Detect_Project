@@ -26,6 +26,7 @@ models/*.pth
 yolo/runs/              # YOLO 학습 결과
 yolo/datasets/          # YOLO 데이터셋
 yolo/test_images/       # YOLO 테스트 이미지
+runs/                   # YOLO 탐지 결과 (루트)
 
 # Jupyter Notebook
 .ipynb_checkpoints/

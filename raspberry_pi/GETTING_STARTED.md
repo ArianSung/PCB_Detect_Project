@@ -51,6 +51,7 @@
 
 - **라즈베리파이 1**: 좌측 웹캠 + GPIO 제어 (릴레이 모듈 연결)
 - **라즈베리파이 2**: 우측 웹캠 전용 (GPIO 제어 없음)
+- **라즈베리파이 3**: OHT 컨트롤러 (모터/센서 제어)
 
 ---
 
@@ -65,7 +66,7 @@
 # 2. OS 선택: Raspberry Pi OS (64-bit)
 
 # 3. 고급 설정 (톱니바퀴 아이콘):
-# - 호스트명: pcb-pi-left (또는 pcb-pi-right)
+# - 호스트명: pcb-pi-left / pcb-pi-right / pcb-pi-oht
 # - SSH 활성화
 # - Wi-Fi 설정
 # - 사용자: pi
@@ -78,7 +79,7 @@
 
 ```bash
 # SSH 접속
-ssh pi@pcb-pi-left.local  # 또는 IP 주소
+ssh pi@pcb-pi-left.local  # 또는 Tailscale IP (예: 100.64.1.2)
 
 # 시스템 업데이트
 sudo apt update && sudo apt upgrade -y
@@ -311,7 +312,7 @@ cap.release()
 ```python
 # Flask API 호출
 response = requests.post(
-    "http://100.x.x.x:5000/api/v1/predict",
+    "http://100.x.x.x:5000/predict",
     json={
         "camera_id": "left",
         "image": image_base64,

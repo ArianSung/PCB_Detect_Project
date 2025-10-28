@@ -9,7 +9,7 @@ PCB 불량 검사 시스템의 Flask 서버 REST API 공식 명세서입니다.
 
 ### API 버전 관리
 - **현재 버전**: v1.0.0
-- **Base URL**: `http://{SERVER_IP}:5000/api/v1`
+- **Base URL**: `http://{SERVER_IP}:5000`
 - **마지막 업데이트**: 2025-10-25
 
 ### API 변경 규칙
@@ -41,14 +41,14 @@ PCB 불량 검사 시스템의 Flask 서버 REST API 공식 명세서입니다.
 
 ### 1. 서버 상태 확인
 
-**엔드포인트**: `/api/v1/health`
+**엔드포인트**: `/health`
 **메서드**: `GET`
 **설명**: Flask 서버 및 AI 모델 상태 확인
 
 #### 요청 (Request)
 ```http
-GET /api/v1/health HTTP/1.1
-Host: 192.168.0.10:5000
+GET /health HTTP/1.1
+Host: 100.64.1.1:5000
 ```
 
 #### 응답 (Response)
@@ -79,14 +79,14 @@ Host: 192.168.0.10:5000
 
 ### 2. 단일 프레임 PCB 불량 검사
 
-**엔드포인트**: `/api/v1/predict`
+**엔드포인트**: `/predict`
 **메서드**: `POST`
 **설명**: 라즈베리파이에서 전송한 단일 프레임을 검사하고 불량 분류 결과 반환
 
 #### 요청 (Request)
 ```http
-POST /api/v1/predict HTTP/1.1
-Host: 192.168.0.10:5000
+POST /predict HTTP/1.1
+Host: 100.64.1.1:5000
 Content-Type: application/json
 
 {
@@ -211,14 +211,14 @@ Content-Type: application/json
 
 ### 3. 양면 프레임 동시 검사
 
-**엔드포인트**: `/api/v1/predict_dual`
+**엔드포인트**: `/predict_dual`
 **메서드**: `POST`
 **설명**: 좌우 카메라 프레임을 동시에 검사하고 종합 결과 반환
 
 #### 요청 (Request)
 ```http
-POST /api/v1/predict_dual HTTP/1.1
-Host: 192.168.0.10:5000
+POST /predict_dual HTTP/1.1
+Host: 100.64.1.1:5000
 Content-Type: application/json
 
 {
@@ -278,14 +278,14 @@ Content-Type: application/json
 
 ### 4. 검사 이력 조회
 
-**엔드포인트**: `/api/v1/history`
+**엔드포인트**: `/history`
 **메서드**: `GET`
 **설명**: PCB 검사 이력을 페이지네이션하여 조회
 
 #### 요청 (Request)
 ```http
-GET /api/v1/history?page=1&limit=20&classification=all&start_date=2025-10-01&end_date=2025-10-25 HTTP/1.1
-Host: 192.168.0.10:5000
+GET /history?page=1&limit=20&classification=all&start_date=2025-10-01&end_date=2025-10-25 HTTP/1.1
+Host: 100.64.1.1:5000
 ```
 
 **쿼리 파라미터:**
@@ -330,14 +330,14 @@ Host: 192.168.0.10:5000
 
 ### 5. 특정 검사 결과 상세 조회
 
-**엔드포인트**: `/api/v1/history/<id>`
+**엔드포인트**: `/history/<id>`
 **메서드**: `GET`
 **설명**: 특정 검사 결과의 상세 정보 조회 (이미지 포함)
 
 #### 요청 (Request)
 ```http
-GET /api/v1/history/152 HTTP/1.1
-Host: 192.168.0.10:5000
+GET /history/152 HTTP/1.1
+Host: 100.64.1.1:5000
 ```
 
 #### 응답 (Response)
@@ -367,8 +367,8 @@ Host: 192.168.0.10:5000
     "total_defects": 2,
     "anomaly_score": 0.65,
     "inference_time_ms": 120.5,
-    "image_url": "/api/v1/images/152.jpg",
-    "annotated_image_url": "/api/v1/images/152_annotated.jpg"
+    "image_url": "/images/152.jpg",
+    "annotated_image_url": "/images/152_annotated.jpg"
   }
 }
 ```
@@ -377,14 +377,14 @@ Host: 192.168.0.10:5000
 
 ### 6. 통계 데이터 조회
 
-**엔드포인트**: `/api/v1/statistics`
+**엔드포인트**: `/statistics`
 **메서드**: `GET`
 **설명**: PCB 검사 통계 데이터 (일별, 분류별, 불량 타입별)
 
 #### 요청 (Request)
 ```http
-GET /api/v1/statistics?start_date=2025-10-01&end_date=2025-10-25 HTTP/1.1
-Host: 192.168.0.10:5000
+GET /statistics?start_date=2025-10-01&end_date=2025-10-25 HTTP/1.1
+Host: 100.64.1.1:5000
 ```
 
 #### 응답 (Response)
@@ -429,14 +429,14 @@ Host: 192.168.0.10:5000
 
 ### 7. Excel 내보내기용 데이터
 
-**엔드포인트**: `/api/v1/export`
+**엔드포인트**: `/export`
 **메서드**: `GET`
 **설명**: C# WinForms에서 Excel 내보내기를 위한 전체 데이터 조회
 
 #### 요청 (Request)
 ```http
-GET /api/v1/export?start_date=2025-10-01&end_date=2025-10-25&format=json HTTP/1.1
-Host: 192.168.0.10:5000
+GET /export?start_date=2025-10-01&end_date=2025-10-25&format=json HTTP/1.1
+Host: 100.64.1.1:5000
 ```
 
 **쿼리 파라미터:**
@@ -520,10 +520,10 @@ Phase 6에서 JWT 토큰 기반 인증 추가 예정
 
 ```bash
 # 1. 서버 상태 확인
-curl -X GET http://192.168.0.10:5000/api/v1/health
+curl -X GET http://100.64.1.1:5000/health
 
 # 2. 단일 프레임 검사 (Base64 인코딩 필요)
-curl -X POST http://192.168.0.10:5000/api/v1/predict \
+curl -X POST http://100.64.1.1:5000/predict \
   -H "Content-Type: application/json" \
   -d '{
     "camera_id": "left",
@@ -532,10 +532,10 @@ curl -X POST http://192.168.0.10:5000/api/v1/predict \
   }'
 
 # 3. 검사 이력 조회
-curl -X GET "http://192.168.0.10:5000/api/v1/history?page=1&limit=10"
+curl -X GET "http://100.64.1.1:5000/history?page=1&limit=10"
 
 # 4. 통계 데이터 조회
-curl -X GET "http://192.168.0.10:5000/api/v1/statistics?start_date=2025-10-01&end_date=2025-10-25"
+curl -X GET "http://100.64.1.1:5000/statistics?start_date=2025-10-01&end_date=2025-10-25"
 ```
 
 ### Python 예시 (라즈베리파이 클라이언트)
@@ -551,7 +551,7 @@ with open("pcb_image.jpg", "rb") as f:
 
 # API 요청
 response = requests.post(
-    "http://192.168.0.10:5000/api/v1/predict",
+    "http://100.64.1.1:5000/predict",
     json={
         "camera_id": "left",
         "image": image_base64,
@@ -580,7 +580,7 @@ public async Task<List<InspectionRecord>> GetHistoryAsync(int page, int limit)
     using (var client = new HttpClient())
     {
         var response = await client.GetAsync(
-            $"http://192.168.0.10:5000/api/v1/history?page={page}&limit={limit}"
+            $"http://100.64.1.1:5000/history?page={page}&limit={limit}"
         );
         var json = await response.Content.ReadAsStringAsync();
         var result = JsonConvert.DeserializeObject<HistoryResponse>(json);
@@ -593,14 +593,14 @@ public async Task<List<InspectionRecord>> GetHistoryAsync(int page, int limit)
 
 ### 7. 전체 박스 상태 조회 ⭐ 신규
 
-**엔드포인트**: `/api/v1/box_status`
+**엔드포인트**: `/box_status`
 **메서드**: `GET`
 **설명**: 3개 박스(정상/부품불량/납땜불량)의 상태 조회 (DISCARD는 슬롯 관리 안 함)
 
 #### 요청 (Request)
 ```http
-GET /api/v1/box_status HTTP/1.1
-Host: 192.168.0.10:5000
+GET /box_status HTTP/1.1
+Host: 100.64.1.1:5000
 ```
 
 #### 응답 (Response)
@@ -666,14 +666,14 @@ Host: 192.168.0.10:5000
 
 ### 8. 특정 박스 상태 조회 ⭐ 신규
 
-**엔드포인트**: `/api/v1/box_status/<box_id>`
+**엔드포인트**: `/box_status/<box_id>`
 **메서드**: `GET`
 **설명**: 특정 박스의 상태 조회
 
 #### 요청 (Request)
 ```http
-GET /api/v1/box_status/NORMAL HTTP/1.1
-Host: 192.168.0.10:5000
+GET /box_status/NORMAL HTTP/1.1
+Host: 100.64.1.1:5000
 ```
 
 #### 응답 (Response)
@@ -719,7 +719,7 @@ Host: 192.168.0.10:5000
 
 ### 9. 박스 상태 리셋 ⭐ 신규
 
-**엔드포인트**: `/api/v1/box_status/reset`
+**엔드포인트**: `/box_status/reset`
 **메서드**: `POST`
 **설명**: 특정 박스 또는 전체 박스 상태 리셋 (비우기)
 
@@ -727,8 +727,8 @@ Host: 192.168.0.10:5000
 
 **특정 박스 리셋:**
 ```http
-POST /api/v1/box_status/reset HTTP/1.1
-Host: 192.168.0.10:5000
+POST /box_status/reset HTTP/1.1
+Host: 100.64.1.1:5000
 Content-Type: application/json
 
 {
@@ -740,8 +740,8 @@ Content-Type: application/json
 
 **전체 박스 리셋:**
 ```http
-POST /api/v1/box_status/reset HTTP/1.1
-Host: 192.168.0.10:5000
+POST /box_status/reset HTTP/1.1
+Host: 100.64.1.1:5000
 Content-Type: application/json
 
 {

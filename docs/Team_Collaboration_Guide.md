@@ -23,13 +23,13 @@ PCB 불량 검사 시스템 팀 프로젝트 협업 전략 및 실전 가이드
 |----|------|-----------|-----------|
 | **Flask 서버 팀** | 2명 | Flask 웹서버 + 추론 엔진 | API 개발, AI 모델 통합, DB 연동 |
 | **AI 모델 팀** | 2명 | YOLO 학습 + 이상 탐지 | 모델 학습, 최적화, 평가 |
-| **라즈베리파이 팀** | 2명 | 웹캠 클라이언트 + GPIO | 프레임 캡처, GPIO 제어, Flask 통신 |
+| **라즈베리파이 팀** | 3명 | 웹캠 클라이언트 + GPIO + OHT | 프레임 캡처, GPIO 제어, OHT 제어 |
 | **C# 앱 팀** | 1~2명 | WinForms 모니터링 앱 | UI 개발, 데이터 시각화, Excel 내보내기 |
 
 ### 역할별 주요 책임
 
 #### Flask 서버 팀
-- **디렉토리**: `src/server/`, `src/inference/`, `database/`
+- **디렉토리**: `server/`, `database/`
 - **주요 작업**:
   - Flask API 엔드포인트 개발 (`/predict`, `/history`, `/statistics`)
   - YOLO 모델 로드 및 추론 실행
@@ -41,7 +41,7 @@ PCB 불량 검사 시스템 팀 프로젝트 협업 전략 및 실전 가이드
   - **C# 앱 팀**: 데이터베이스 스키마 공유
 
 #### AI 모델 팀
-- **디렉토리**: `src/models/`, `src/training/`, `src/evaluation/`
+- **디렉토리**: `yolo/`, `configs/`, `models/`
 - **주요 작업**:
   - YOLOv8 모델 학습 및 하이퍼파라미터 튜닝
   - 이상 탐지 모델 구현 (PaDiM, PatchCore)
@@ -91,7 +91,7 @@ bash scripts/setup_env.sh
 
 # 3. .env 파일 확인 및 수정
 # 각 팀별로 해당하는 .env 파일 수정
-# - Flask 팀: src/server/.env
+# - Flask 팀: server/.env
 # - 라즈베리파이 팀: raspberry_pi/.env
 # - C# 앱 팀: csharp_winforms/.env
 
@@ -116,7 +116,7 @@ pip install -r requirements.txt
 mysql -u root -p < database/schema.sql
 
 # Flask 서버 실행 테스트
-cd src/server
+cd server
 python app.py
 ```
 
@@ -133,7 +133,7 @@ python -c "import torch; print(torch.cuda.is_available())"
 # (데이터셋 가이드 참조)
 
 # YOLO 모델 학습 테스트
-python src/training/train_yolo.py --config configs/yolo_config.yaml
+python yolo/train_yolo.py --config configs/yolo_config.yaml
 ```
 
 #### 라즈베리파이 팀
@@ -231,7 +231,7 @@ git push origin feature/<팀명>
 #### 충돌 예시
 ```python
 <<<<<<< HEAD
-server_url = "http://192.168.0.10:5000"
+server_url = "http://100.64.1.1:5000"
 =======
 server_url = "http://100.x.x.x:5000"  # Tailscale
 >>>>>>> develop
@@ -240,7 +240,7 @@ server_url = "http://100.x.x.x:5000"  # Tailscale
 #### 해결 방법 1: 환경 변수 사용
 ```python
 import os
-server_url = os.getenv("SERVER_URL", "http://192.168.0.10:5000")
+server_url = os.getenv("SERVER_URL", "http://100.64.1.1:5000")
 ```
 
 #### 해결 방법 2: 설정 파일 분리
@@ -263,7 +263,7 @@ server:
 **예시**:
 ```bash
 # Flask 서버 .env
-SERVER_URL=http://192.168.0.10:5000  # 로컬
+SERVER_URL=http://100.64.1.1:5000  # Tailscale 기본
 # SERVER_URL=http://100.x.x.x:5000  # Tailscale (주석 처리)
 ```
 
@@ -297,7 +297,7 @@ Flask 팀: "⚠️ API 변경 예정 공지
 python tests/api/mock_server.py
 
 # 다른 팀이 Mock 서버로 테스트 가능
-curl http://localhost:5000/api/v1/predict
+curl http://localhost:5000/predict
 ```
 
 #### Step 4: 계약 테스트 실행

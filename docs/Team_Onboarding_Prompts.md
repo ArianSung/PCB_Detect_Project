@@ -41,14 +41,14 @@
 
 **시스템 구성:**
 - 추론 서버: GPU PC (원격지) - Flask + YOLO v8 + MySQL
-- 웹캠 클라이언트: 라즈베리파이 4 (2대) - 좌우 카메라 + GPIO 제어
+- 웹캠 클라이언트: 라즈베리파이 4 (3대) - 좌/우 카메라 + OHT 제어
 - 모니터링 앱: Windows PC - C# WinForms
 - 네트워크: Tailscale VPN (100.x.x.x)
 
 위 문서들을 읽고, 다음 질문에 답변해줘:
 1. 이 시스템의 전체 데이터 흐름은 어떻게 되는가? (라즈베리파이 → Flask → DB → C# 앱)
 2. 각 팀(Flask, AI 모델, 라즈베리파이, C# 앱)의 주요 책임은 무엇인가?
-3. 프로젝트의 주요 디렉토리(`src/`, `yolo/`, `database/`, `raspberry_pi/`, `csharp_winforms/`)는 각각 어떤 역할을 하는가?
+3. 프로젝트의 주요 디렉토리(`server/`, `yolo/`, `database/`, `raspberry_pi/`, `csharp_winforms/`)는 각각 어떤 역할을 하는가?
 4. 팀 간 협업 시 주의해야 할 점은 무엇인가? (API 변경, Git 충돌 등)
 ```
 
@@ -89,7 +89,7 @@
    ```
 
 4. `.env` 파일 설정:
-   - 내 팀에 해당하는 `.env.example` 파일 확인 (예: `src/server/.env.example`)
+   - 내 팀에 해당하는 `.env.example` 파일 확인 (예: `server/.env.example`)
    - 실제 `.env` 파일 생성 및 수정 (Tailscale IP, DB 비밀번호 등)
 
 위 단계를 순서대로 진행하는데, 내 OS와 팀에 맞는 구체적인 명령어와 설정 방법을 알려줘.
@@ -118,7 +118,7 @@
 2. `docs/API_Contract.md` - 공식 API 명세서 (팀 전체 계약)
 3. `database/README.md` - MySQL 데이터베이스 설정 가이드
 4. `database/schema.sql` - 데이터베이스 스키마
-5. `src/server/.env.example` - 환경 변수 템플릿
+5. `server/.env.example` - 환경 변수 템플릿
 
 **개발 환경:**
 - OS: Ubuntu 22.04 (GPU PC)
@@ -127,7 +127,7 @@
 - 데이터베이스: MySQL 8.0 (Windows PC - Tailscale 100.x.x.x:3306)
 - DB 계정: `pcb_server` / 비밀번호: `1234`
 
-**환경 변수 설정 (src/server/.env):**
+**환경 변수 설정 (server/.env):**
 ```
 DB_HOST=100.x.x.x          # Windows PC의 Tailscale IP
 DB_PORT=3306
@@ -142,8 +142,8 @@ GPU_DEVICE=cuda:0
 
 **첫 번째 작업:**
 1. Conda 가상환경 활성화: `conda activate pcb_defect`
-2. Flask 서버 실행: `cd src/server && python app.py`
-3. 서버 상태 확인: `curl http://localhost:5000/api/v1/health`
+2. Flask 서버 실행: `cd server && python app.py`
+3. 서버 상태 확인: `curl http://localhost:5000/health`
 4. Mock 클라이언트로 API 테스트: `python tests/api/mock_client.py` (생성 필요)
 
 위 정보를 바탕으로, Flask 서버를 처음 실행하고 테스트하는 과정을 단계별로 안내해줘.
@@ -233,7 +233,7 @@ CAMERA_INDEX=0
 SERVER_URL=http://100.x.x.x:5000
 FPS=10
 JPEG_QUALITY=85
-GPIO_ENABLED=true          # 라즈베리파이 1: true, 라즈베리파이 2: false
+GPIO_ENABLED=true          # 라즈베리파이 1: true, 라즈베리파이 2·3: false
 ```
 
 **GPIO 핀 매핑 (BCM 모드, 라즈베리파이 1만):**
@@ -326,7 +326,7 @@ DB_PASSWORD=1234
 5. Flask API 호출 테스트:
    ```csharp
    var client = new HttpClient();
-   var response = await client.GetAsync("http://100.x.x.x:5000/api/v1/health");
+   var response = await client.GetAsync("http://100.x.x.x:5000/health");
    Console.WriteLine(await response.Content.ReadAsStringAsync());
    ```
 
@@ -498,7 +498,7 @@ DB_PASSWORD=1234
 **확인 사항:**
 1. Flask 서버 실행 중인지 확인:
    ```bash
-   curl http://100.x.x.x:5000/api/v1/health
+   curl http://100.x.x.x:5000/health
    ```
 
 2. Tailscale VPN 연결 확인:

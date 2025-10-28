@@ -21,10 +21,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - 위치: 원격지 (같은 도시 내)
   - 연결: Tailscale VPN (100.x.x.x)
   - Flask 서버 + YOLO v8 + 이상 탐지 모델 + MySQL 데이터베이스 + REST API
-- **라즈베리파이 4 (2대)**: 웹캠 클라이언트 (OpenCV + Requests) + GPIO 제어 (RPi.GPIO)
+- **라즈베리파이 4 (3대)**: 좌/우 웹캠 + OHT 제어 (RPi.GPIO, 모터 제어)
 - **Windows PC**: C# WinForms 모니터링 앱 (.NET 6+)
 - **네트워크**:
-  - 로컬: 192.168.0.x (선택)
+  - 로컬: Tailscale 100.64.1.x(로컬 예비: 192.168.0.x) (선택)
   - 원격: Tailscale VPN 메시 네트워크 (프로젝트 환경)
 
 ## Development Commands
@@ -36,7 +36,7 @@ conda activate pcb_defect
 
 ### Flask 추론 서버 실행 (GPU PC)
 ```bash
-cd src/server
+cd server
 python app.py
 
 # 또는
@@ -46,10 +46,10 @@ bash scripts/start_server.sh
 ### 라즈베리파이 클라이언트 실행
 ```bash
 # 좌측 웹캠 (라즈베리파이 1) - GPIO 제어 포함
-python3 camera_client.py left 0 http://192.168.0.10:5000 10
+python3 camera_client.py left 0 http://100.64.1.1:5000 10
 
 # 우측 웹캠 (라즈베리파이 2) - 카메라 전용
-python3 camera_client.py right 0 http://192.168.0.10:5000 10
+python3 camera_client.py right 0 http://100.64.1.1:5000 10
 
 # systemd 서비스로 자동 시작
 sudo systemctl start camera-client-left.service   # 라즈베리파이 1
@@ -71,7 +71,7 @@ mysql -u root -p pcb_inspection
 
 ### YOLO 모델 학습
 ```bash
-python src/training/train_yolo.py --data data/pcb_defects.yaml --epochs 100 --batch 16
+python yolo/train_yolo.py --data data/pcb_defects.yaml --epochs 100 --batch 16
 
 # 또는
 bash scripts/train_yolo.sh
@@ -79,7 +79,7 @@ bash scripts/train_yolo.sh
 
 ### 모델 평가
 ```bash
-python src/evaluation/evaluate_yolo.py --model models/yolo/final/yolo_best.pt
+python yolo/evaluate_yolo.py --model models/yolo/final/yolo_best.pt
 
 # 또는
 bash scripts/evaluate.sh
@@ -132,10 +132,10 @@ pytest tests/test_yolo_model.py
 
 ### 주요 디렉토리 역할
 - `docs/`: 프로젝트 문서 (모든 MD 파일)
-- `src/server/`: Flask 추론 서버 (GPU PC에서 실행)
-- `src/models/`: AI 모델 정의 (YOLO, 이상 탐지, 하이브리드)
-- `src/training/`: 모델 학습 스크립트
-- `src/inference/`: 추론 로직
+- `server/`: Flask 추론 서버 (GPU PC에서 실행)
+- `models/`: AI 모델 정의 (YOLO, 이상 탐지, 하이브리드)
+- `yolo/`: 모델 학습 스크립트
+- `server/`: 추론 로직
 - `raspberry_pi/`: 라즈베리파이 클라이언트 (웹캠 + GPIO)
 - `csharp_winforms/`: C# WinForms 모니터링 앱
 - `database/`: MySQL 데이터베이스 스키마 및 백업
@@ -156,25 +156,25 @@ pytest tests/test_yolo_model.py
 
 ### Key Components
 
-**1. Flask 추론 서버 (`src/server/app.py`)**
+**1. Flask 추론 서버 (`server/app.py`)**
 - API 엔드포인트: `/predict`, `/predict_dual`, `/health`
 - 프레임 수신 및 디코딩
 - AI 추론 실행
 - 결과 반환
 
-**2. AI 추론 엔진 (`src/server/inference.py`)**
+**2. AI 추론 엔진 (`server/inference.py`)**
 - YOLO 모델 로드 및 추론
 - 이상 탐지 모델 추론
 - 결과 융합 로직
 - 불량 분류 알고리즘
 
-**3. 웹캠 클라이언트 (`src/client/camera_client.py`)**
+**3. 웹캠 클라이언트 (`raspberry_pi/camera_client.py`)**
 - 웹캠 프레임 캡처
 - 프레임 인코딩 (Base64)
 - HTTP POST 전송
 - 결과 시각화
 
-**4. 하이브리드 모델 (`src/models/hybrid_model.py`)**
+**4. 하이브리드 모델 (`models/hybrid/hybrid_model.py`)**
 - YOLO + 이상 탐지 결과 융합
 - Confidence 기반 가중치
 - NMS (Non-Maximum Suppression)
@@ -225,7 +225,7 @@ anomaly_model_path: models/anomaly/padim/model.pth
 ```yaml
 camera_id: left  # 또는 right
 camera_index: 0
-server_url: http://192.168.0.10:5000
+server_url: http://100.64.1.1:5000
 fps: 10
 resolution:
   width: 640
@@ -273,16 +273,16 @@ patience: 50
    - AI 모델: YOLOv8l (Large) + 이상 탐지 하이브리드
    - 학습 시 VRAM: 10-14GB, 추론 시 VRAM: 6-8GB
 2. **네트워크 설정**:
-   - **로컬 네트워크** (선택): 모든 장비 동일 네트워크 (192.168.0.x)
+   - **로컬 네트워크** (선택): 모든 장비 동일 네트워크 (Tailscale 100.64.1.x(로컬 예비: 192.168.0.x))
    - **원격 네트워크** (프로젝트 환경): Tailscale VPN 메시 네트워크
      - GPU PC: 원격지 (같은 도시 내)
      - 연결 방법: `docs/Remote_Network_Setup.md` 참조
 3. **IP 주소 설정**:
    - **로컬 환경** (선택):
-     - Flask 서버 (GPU PC): 192.168.0.10:5000
-     - 라즈베리파이 1: 192.168.0.20
-     - 라즈베리파이 2: 192.168.0.21
-     - Windows PC: 192.168.0.30
+     - Flask 서버 (GPU PC): 100.64.1.1:5000
+     - 라즈베리파이 1: 100.64.1.2
+     - 라즈베리파이 2: 100.64.1.3
+     - Windows PC: 100.64.1.5
    - **원격 환경** (프로젝트 환경) ⭐:
      - Flask 서버 (GPU PC): 100.x.x.x:5000 (Tailscale)
      - 라즈베리파이 1: 100.x.x.y (Tailscale)

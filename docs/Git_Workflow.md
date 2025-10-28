@@ -52,7 +52,7 @@ git checkout -b feature/flask-server/add-prediction-api
 
 ```bash
 # 변경사항 스테이징
-git add src/server/app.py
+git add server/app.py
 
 # 커밋 메시지 작성 (규칙 준수)
 git commit -m "feat: Add /predict API endpoint for PCB defect detection"
@@ -142,10 +142,10 @@ git merge develop
 
 | 팀 | 담당 디렉토리 | 절대 수정 금지 |
 |----|--------------|---------------|
-| Flask 팀 | `src/server/`, `src/inference/` | `raspberry_pi/`, `csharp_winforms/` |
-| 라즈베리파이 팀 | `raspberry_pi/`, `configs/camera_config.yaml` | `src/server/`, `csharp_winforms/` |
-| AI 모델 팀 | `src/models/`, `src/training/`, `src/evaluation/` | `raspberry_pi/`, `csharp_winforms/` |
-| C# 앱 팀 | `csharp_winforms/` | `src/server/`, `raspberry_pi/` |
+| Flask 팀 | `server/`, `database/` | `raspberry_pi/`, `csharp_winforms/` |
+| 라즈베리파이 팀 | `raspberry_pi/`, `configs/camera_config.yaml` | `server/`, `csharp_winforms/` |
+| AI 모델 팀 | `yolo/`, `configs/`, `models/` | `raspberry_pi/`, `csharp_winforms/` |
+| C# 앱 팀 | `csharp_winforms/` | `server/`, `raspberry_pi/` |
 
 **예외:** 공통 설정 파일 (`configs/`, `docs/API_Contract.md`)은 전체 팀 합의 필요
 
@@ -241,7 +241,7 @@ README.md           # 문서
 
 ```bash
 <<<<<<< HEAD
-server_url = "http://192.168.0.10:5000"
+server_url = "http://100.64.1.1:5000"
 =======
 server_url = "http://100.x.x.x:5000"  # Tailscale
 >>>>>>> develop
@@ -252,7 +252,7 @@ server_url = "http://100.x.x.x:5000"  # Tailscale
 1. **환경 변수로 변경** (권장)
 ```python
 import os
-server_url = os.getenv("SERVER_URL", "http://192.168.0.10:5000")
+server_url = os.getenv("SERVER_URL", "http://100.64.1.1:5000")
 ```
 
 2. **설정 파일 분리**

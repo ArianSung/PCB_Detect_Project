@@ -12,7 +12,7 @@ camera:
 
 # 서버 설정
 server:
-  url: http://192.168.0.10:5000  # Flask 서버 주소 (로컬)
+  url: http://100.64.1.1:5000  # Flask 서버 주소 (Tailscale)
   # url: http://100.x.x.x:5000  # Tailscale VPN 주소 (원격)
   endpoint: /predict  # 추론 API 엔드포인트
   timeout: 5.0  # 요청 타임아웃 (초)
@@ -21,7 +21,7 @@ server:
 
 # GPIO 설정 (라즈베리파이 1만 해당)
 gpio:
-  enabled: true  # GPIO 제어 활성화 (라즈베리파이 1: true, 2: false)
+  enabled: true  # GPIO 제어 활성화 (라즈베리파이 1: true, 2·3: false)
   mode: BCM  # BCM 또는 BOARD
   pins:
     component_defect: 17  # 부품 불량 (BCM 17)

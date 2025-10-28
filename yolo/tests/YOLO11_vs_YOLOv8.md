@@ -133,7 +133,7 @@
 #### 1단계: **YOLOv8l로 시작** (안전한 선택)
 ```bash
 # YOLOv8l Fine-tuning
-python src/training/train_yolo.py \
+python yolo/train_yolo.py \
     --model yolov8l.pt \
     --data data/pcb_defects.yaml \
     --epochs 150 \
@@ -149,7 +149,7 @@ python src/training/train_yolo.py \
 #### 2단계: **YOLO11l 실험** (선택 사항, 시간 있을 때)
 ```bash
 # YOLO11l Fine-tuning (실험)
-python src/training/train_yolo.py \
+python yolo/train_yolo.py \
     --model yolo11l.pt \
     --data data/pcb_defects.yaml \
     --epochs 150 \

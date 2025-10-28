@@ -36,6 +36,6 @@ echo "🤖 모델 경로: $MODEL_PATH"
 echo ""
 
 # Flask 서버 실행
-python src/server/app.py \
+python server/app.py \
     --config "$CONFIG_FILE" \
     "$@"

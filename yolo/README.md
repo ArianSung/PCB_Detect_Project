@@ -82,7 +82,7 @@ python test_yolo_webcam.py
 
 ```bash
 # 프로젝트 루트에서 실행
-python src/training/train_yolo.py --config configs/yolo_config.yaml
+python yolo/train_yolo.py --config configs/yolo_config.yaml
 
 # 학습 결과 확인
 ls yolo/runs/detect/train/weights/

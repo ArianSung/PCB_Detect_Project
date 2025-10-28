@@ -33,12 +33,12 @@ if command -v tailscale &> /dev/null && tailscale status &> /dev/null; then
     else
         echo -e "${YELLOW}⚠ Tailscale 설치되어 있으나 연결 안 됨${NC}"
         NETWORK_MODE="local"
-        SERVER_IP="192.168.0.10"
+        SERVER_IP="100.64.1.1"
     fi
 else
     echo -e "${YELLOW}⚠ Tailscale VPN 감지 안 됨 (로컬 네트워크 사용)${NC}"
     NETWORK_MODE="local"
-    SERVER_IP="192.168.0.10"
+    SERVER_IP="100.64.1.1"
 fi
 
 # ===== 2. GPU 환경 감지 =====
@@ -68,17 +68,26 @@ if [ -f /proc/device-tree/model ] && grep -q "Raspberry Pi" /proc/device-tree/mo
     echo "이 라즈베리파이의 역할을 선택하세요:"
     echo "  1) 좌측 카메라 + GPIO 제어 (라즈베리파이 1)"
     echo "  2) 우측 카메라 전용 (라즈베리파이 2)"
-    read -p "선택 (1 또는 2): " CAMERA_CHOICE
+    echo "  3) OHT 컨트롤러 (라즈베리파이 3)"
+    read -p "선택 (1 / 2 / 3): " CAMERA_CHOICE
 
-    if [ "$CAMERA_CHOICE" = "1" ]; then
-        CAMERA_ID="left"
-        GPIO_ENABLED="true"
-        echo -e "${GREEN}✓ 좌측 카메라 + GPIO 제어 설정${NC}"
-    else
-        CAMERA_ID="right"
-        GPIO_ENABLED="false"
-        echo -e "${GREEN}✓ 우측 카메라 전용 설정${NC}"
-    fi
+    case "$CAMERA_CHOICE" in
+        1)
+            CAMERA_ID="left"
+            GPIO_ENABLED="true"
+            echo -e "${GREEN}✓ 좌측 카메라 + GPIO 제어 설정${NC}"
+            ;;
+        3)
+            CAMERA_ID="oht"
+            GPIO_ENABLED="false"
+            echo -e "${GREEN}✓ OHT 컨트롤러 설정${NC}"
+            ;;
+        *)
+            CAMERA_ID="right"
+            GPIO_ENABLED="false"
+            echo -e "${GREEN}✓ 우측 카메라 전용 설정${NC}"
+            ;;
+    esac
 else
     echo -e "${GREEN}✓ 일반 PC 감지됨${NC}"
     SYSTEM_TYPE="pc"
@@ -88,9 +97,9 @@ fi
 echo -e "${YELLOW}[4/5] .env 파일 생성 중...${NC}"
 
 # Flask 서버 .env 생성 (PC만 해당)
-if [ "$SYSTEM_TYPE" = "pc" ] && [ ! -f "src/server/.env" ]; then
+if [ "$SYSTEM_TYPE" = "pc" ] && [ ! -f "server/.env" ]; then
     echo -e "${GREEN}✓ Flask 서버 .env 파일 생성 중...${NC}"
-    cat > src/server/.env << EOF
+    cat > server/.env << EOF
 # Flask 서버 환경 변수 (자동 생성됨)
 FLASK_ENV=development
 SERVER_HOST=0.0.0.0
@@ -117,9 +126,9 @@ LOG_FILE=logs/server.log
 
 CORS_ORIGINS=*
 EOF
-    echo -e "${GREEN}  → src/server/.env 생성 완료${NC}"
+    echo -e "${GREEN}  → server/.env 생성 완료${NC}"
 else
-    echo -e "${YELLOW}  → src/server/.env 이미 존재 (건너뜀)${NC}"
+    echo -e "${YELLOW}  → server/.env 이미 존재 (건너뜀)${NC}"
 fi
 
 # 라즈베리파이 클라이언트 .env 생성

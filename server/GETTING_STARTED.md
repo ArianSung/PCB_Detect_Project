@@ -84,12 +84,12 @@ pip list | grep -E "flask|torch|ultralytics|mysql"
 bash scripts/setup_env.sh
 
 # 2. .env 파일 수정
-nano src/server/.env
+nano server/.env
 
 # 3. 아래 내용으로 수정:
 ```
 
-**`src/server/.env` 파일 내용:**
+**`server/.env` 파일 내용:**
 
 ```bash
 # MySQL 데이터베이스 (Windows PC - Tailscale)
@@ -138,7 +138,7 @@ SELECT * FROM inspection_history LIMIT 5;
 conda activate pcb_defect
 
 # Flask 서버 디렉토리로 이동
-cd src/server
+cd server
 
 # 서버 실행
 python app.py
@@ -153,7 +153,7 @@ python app.py
 
 ```bash
 # 다른 터미널에서 실행
-curl http://localhost:5000/api/v1/health
+curl http://localhost:5000/health
 
 # 예상 응답:
 {
@@ -174,10 +174,10 @@ Mock 클라이언트는 아직 생성되지 않았으므로, 직접 `curl`로 �
 
 ```bash
 # 1. 검사 이력 조회
-curl -X GET "http://localhost:5000/api/v1/history?page=1&limit=10"
+curl -X GET "http://localhost:5000/history?page=1&limit=10"
 
 # 2. 통계 데이터 조회
-curl -X GET "http://localhost:5000/api/v1/statistics?start_date=2025-10-01&end_date=2025-10-25"
+curl -X GET "http://localhost:5000/statistics?start_date=2025-10-01&end_date=2025-10-25"
 
 # 3. 단일 프레임 검사 (Base64 인코딩 필요)
 # (라즈베리파이 클라이언트 구현 후 테스트 가능)
@@ -189,10 +189,10 @@ curl -X GET "http://localhost:5000/api/v1/statistics?start_date=2025-10-01&end_d
 
 ### 작업 1: Flask 서버 기본 구조 생성
 
-**목표**: `src/server/app.py` 기본 코드 작성
+**목표**: `server/app.py` 기본 코드 작성
 
 ```python
-# src/server/app.py
+# server/app.py
 from flask import Flask, jsonify
 from flask_cors import CORS
 import os
@@ -205,7 +205,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Health Check API
-@app.route('/api/v1/health', methods=['GET'])
+@app.route('/health', methods=['GET'])
 def health():
     return jsonify({
         "status": "healthy",
@@ -226,10 +226,10 @@ if __name__ == '__main__':
 
 ### 작업 2: MySQL 연결 테스트
 
-**목표**: `src/server/database.py` 생성 및 DB 연결 확인
+**목표**: `server/database.py` 생성 및 DB 연결 확인
 
 ```python
-# src/server/database.py
+# server/database.py
 import pymysql
 import os
 from dotenv import load_dotenv
@@ -271,7 +271,7 @@ if __name__ == '__main__':
 1. `docs/API_Contract.md` 읽기
 2. 요청 형식 확인 (camera_id, image, timestamp)
 3. 응답 형식 확인 (classification, confidence, defects, gpio_action)
-4. `src/server/app.py`에 `/predict` 엔드포인트 추가
+4. `server/app.py`에 `/predict` 엔드포인트 추가
 
 ---
 
@@ -293,7 +293,7 @@ if __name__ == '__main__':
 2. `docs/API_Contract.md` - 공식 API 명세서 (팀 전체 계약)
 3. `database/README.md` - MySQL 데이터베이스 설정 가이드
 4. `database/schema.sql` - 데이터베이스 스키마
-5. `src/server/.env.example` - 환경 변수 템플릿
+5. `server/.env.example` - 환경 변수 템플릿
 
 **개발 환경:**
 - OS: Ubuntu 22.04 (GPU PC)
@@ -302,7 +302,7 @@ if __name__ == '__main__':
 - 데이터베이스: MySQL 8.0 (Windows PC - Tailscale 100.x.x.x:3306)
 - DB 계정: `pcb_server` / 비밀번호: `1234`
 
-**환경 변수 설정 (src/server/.env):**
+**환경 변수 설정 (server/.env):**
 ```
 DB_HOST=100.x.x.x          # Windows PC의 Tailscale IP
 DB_PORT=3306
@@ -317,8 +317,8 @@ GPU_DEVICE=cuda:0
 
 **첫 번째 작업:**
 1. Conda 가상환경 활성화: `conda activate pcb_defect`
-2. Flask 서버 실행: `cd src/server && python app.py`
-3. 서버 상태 확인: `curl http://localhost:5000/api/v1/health`
+2. Flask 서버 실행: `cd server && python app.py`
+3. 서버 상태 확인: `curl http://localhost:5000/health`
 4. MySQL 연결 테스트
 
 위 정보를 바탕으로, Flask 서버를 처음 실행하고 테스트하는 과정을 단계별로 안내해줘.
@@ -333,7 +333,7 @@ GPU_DEVICE=cuda:0
 
 - [ ] Conda 가상환경 생성 및 활성화 완료
 - [ ] `requirements.txt` 패키지 설치 완료
-- [ ] `src/server/.env` 파일 설정 완료
+- [ ] `server/.env` 파일 설정 완료
 - [ ] MySQL 데이터베이스 연결 테스트 성공
 - [ ] Flask 서버 실행 확인 (`/health` API 응답)
 - [ ] GPU 사용 가능 확인 (`torch.cuda.is_available()`)
@@ -384,7 +384,7 @@ GPU_DEVICE=cuda:0
 
 **해결 방법:**
 1. `python-dotenv` 설치 확인: `pip install python-dotenv`
-2. `.env` 파일 위치 확인 (반드시 `src/server/.env`)
+2. `.env` 파일 위치 확인 (반드시 `server/.env`)
 3. 코드에서 `load_dotenv()` 호출 확인
 
 ---

@@ -12,11 +12,17 @@
 - 웹캠 프레임 실시간 분석
 
 **시스템 구성**:
-- **라즈베리파이 2대** (카메라 클라이언트)
+- **라즈베리파이 3대** (카메라 클라이언트 + OHT 컨트롤러)
   - **라즈베리파이 1**: 좌측 웹캠 + GPIO 출력 (분류 게이트, LED 제어)
     - Tailscale VPN: 100.x.x.y
   - **라즈베리파이 2**: 우측 웹캠 전용 (카메라만)
     - Tailscale VPN: 100.x.x.z
+  - **라즈베리파이 3**: OHT(Overhead Hoist Transport) 컨트롤러 ⭐ 신규
+    - Tailscale VPN: 100.64.1.4 (또는 로컬 예비: 192.168.0.22)
+    - 스텝모터 제어 (X축 레일 이동)
+    - 서보모터 제어 (Z축 박스 상하 이동)
+    - 리미트 스위치 및 센서 관리
+    - Flask API 폴링 (OHT 작업 요청 확인)
   - Flask Client 실행 (프레임 전송)
   - GPIO 제어: **라즈베리파이 1만** 릴레이/LED 제어 수행
 - **GPU PC (추론 서버)** - 원격지 (같은 도시 내)
@@ -220,13 +226,13 @@
 ```
 [컨베이어 벨트 시스템]
     │
-    ├─ 웹캠 1 (좌측) ──→ [라즈베리파이 1] (192.168.0.20)
+    ├─ 웹캠 1 (좌측) ──→ [라즈베리파이 1] (100.64.1.2)
     │                      │
     │                      ├──→ Flask Client (프레임 전송)
     │                      ├──→ GPIO 제어 모듈 (LED/릴레이) ⭐
     │                      └──→ USB 시리얼 통신 (Arduino Mega 제어) ⭐ 신규
     │                             │
-    └─ 웹캠 2 (우측) ──→ [라즈베리파이 2] (192.168.0.21)
+    └─ 웹캠 2 (우측) ──→ [라즈베리파이 2] (100.64.1.3)
                          │        │
                          │        └──→ Flask Client (프레임 전송만)
                          │
@@ -237,7 +243,7 @@
                 ↓                  ↑
         ┌─────────────────────────────────┐
         │  Flask 추론 서버 (GPU PC)       │
-        │  IP: 192.168.0.10:5000          │
+        │  Tailscale IP: 100.64.1.1:5000          │
         │  ┌──────────────────────────┐   │
         │  │  양면 프레임 수신        │   │
         │  │  ↓                       │   │
@@ -358,6 +364,88 @@
 참고: 라즈베리파이 2는 카메라 전용이며, GPIO 및 로봇팔 제어를 수행하지 않음
 ```
 
+**[OHT 시스템 아키텍처]** ⭐ 신규 추가 (2025-10 업데이트)
+
+```
+[OHT (Overhead Hoist Transport) 시스템]
+
+                     [천장 레일 (X축)]
+                            │
+              ┌─────────────┴─────────────┐
+              │     스텝모터 (NEMA 17)     │
+              │   A4988/DRV8825 드라이버   │
+              └─────────────┬─────────────┘
+                            │
+                  ┌─────────┴─────────┐
+                  │   OHT 박스 (2 슬롯) │
+                  │   서보모터 (Z축)    │
+                  └─────────┬─────────┘
+                            │ 상하 이동
+                            ↓
+              ┌──────────────────────────┐
+              │    3층 분류 박스 시스템   │
+              ├──────────────────────────┤
+              │ 3층 (상단): 정상 (NORMAL)  │
+              │ 2층 (중간): 부품불량       │
+              │ 1층 (하단): 납땜불량       │
+              └──────────────────────────┘
+                            ↓
+                   [창고 (대기 위치)]
+
+제어 흐름:
+1. WinForms → Flask API (/api/oht/request)
+   - 수동 호출 (Admin/Operator만 가능) ⭐ 권한 제한
+   - 카테고리 선택 (정상/부품불량/납땜불량)
+
+2. BoxManager 자동 감지 → Flask API (/api/oht/auto_trigger)
+   - 박스 가득 참 (2/2 슬롯) 감지
+   - 자동 OHT 호출 트리거
+
+3. Flask 서버 → MySQL (oht_operations 테이블)
+   - 작업 요청 저장 (status: pending)
+   - 사용자 정보 및 카테고리 기록
+
+4. 라즈베리파이 3 (OHT 컨트롤러)
+   - Flask API 폴링 (5초 간격)
+   - GET /api/oht/check_pending
+   - pending 작업 발견 시 실행
+
+5. OHT 동작 시퀀스:
+   ① 창고 위치에서 대기
+   ② 요청된 층(카테고리)으로 X축 이동
+   ③ 해당 층 높이로 Z축 하강
+   ④ PCB 2개 픽업 (그리퍼 또는 박스 전체)
+   ⑤ Z축 상승
+   ⑥ 창고로 X축 복귀
+   ⑦ PCB 적재
+   ⑧ 작업 완료 신호 (POST /api/oht/complete)
+
+6. Flask 서버
+   - 작업 상태 업데이트 (status: completed)
+   - 박스 슬롯 리셋 (current_slot = 0)
+   - 실행 시간 및 결과 기록
+
+7. WinForms 대시보드
+   - 실시간 OHT 상태 모니터링
+   - 최근 작업 이력 표시
+   - 권한별 제어 버튼 표시 (Viewer는 비활성화)
+
+하드웨어 구성:
+- X축 이동: NEMA 17 스텝모터 + A4988 드라이버
+- Z축 이동: MG996R 서보모터 (PWM 제어)
+- 위치 감지: 리미트 스위치 4개 (창고, 3층, 2층, 1층)
+- 높이 감지: 홀 효과 센서 3개 (상단, 중간, 하단)
+- 긴급 정지: 버튼 1개
+- OHT 박스: PCB 2개 수납 가능 (분류 박스와 동일 크기)
+
+권한 제어:
+- Admin: OHT 호출, 긴급 정지, 상태 확인 모두 가능
+- Operator: OHT 호출, 긴급 정지 가능
+- Viewer: 상태 확인만 가능 (호출/제어 불가) ⭐
+
+참고: 폐기(DISCARD) 카테고리는 OHT 대상이 아님 (별도 처리)
+```
+
 #### 웹서버 통신 프로토콜
 
 **1. 라즈베리파이 → Flask 서버 (프레임 전송)**
@@ -432,6 +520,33 @@
 - **GET** `/api/defect-images/{id}` - 불량 이미지 다운로드
 - **GET** `/api/system-status` - 시스템 상태 확인
 - **POST** `/api/config` - 시스템 설정 변경
+- **POST** `/api/oht/request` - OHT 수동 호출 (Admin/Operator만) ⭐ 신규
+- **POST** `/api/oht/auto_trigger` - OHT 자동 호출 (시스템 내부) ⭐ 신규
+- **GET** `/api/oht/check_pending` - pending 작업 조회 (라즈베리파이 3) ⭐ 신규
+- **POST** `/api/oht/complete` - OHT 작업 완료 보고 ⭐ 신규
+- **GET** `/api/oht/status` - OHT 시스템 상태 조회 ⭐ 신규
+
+**5. 라즈베리파이 3 → Flask 서버 (OHT 폴링)** ⭐ 신규
+- **요청**: HTTP GET `/api/oht/check_pending`
+- **응답 (작업 있음)**:
+```json
+{
+  "has_pending": true,
+  "operation": {
+    "operation_id": "550e8400-e29b-41d4-a716-446655440000",
+    "category": "NORMAL",
+    "user_role": "Operator",
+    "is_auto": false,
+    "created_at": "2025-10-22T14:30:00"
+  }
+}
+```
+- **응답 (작업 없음)**:
+```json
+{
+  "has_pending": false
+}
+```
 
 #### 체크리스트
 - [ ] Flask 웹서버 구축 (상세: `Flask_Server_Setup.md`)
@@ -444,6 +559,16 @@
   - [ ] 박스 상태 관리 로직 (BoxManager) ⭐ 신규
   - [ ] 슬롯 할당 알고리즘 ⭐ 신규
   - [ ] 박스 가득 찬 경우 알림 시스템 ⭐ 신규
+  - [ ] 사용자 관리 API (user_api.py) ⭐ 신규
+    - [ ] GET /api/users - 사용자 목록 조회
+    - [ ] POST /api/users - 사용자 생성
+    - [ ] PUT /api/users/{id} - 사용자 수정
+    - [ ] DELETE /api/users/{id} - 사용자 삭제
+    - [ ] POST /api/users/{id}/reset-password - 비밀번호 초기화
+    - [ ] GET /api/users/{id}/logs - 활동 로그 조회
+  - [ ] 인증 API (auth_bp) ⭐ 신규
+    - [ ] POST /api/auth/login - 로그인
+    - [ ] POST /api/auth/logout - 로그아웃
 - [ ] 라즈베리파이 클라이언트 개발 (상세: `RaspberryPi_Setup.md`)
   - [ ] 웹캠 프레임 캡처 및 전송
   - [ ] Base64 인코딩/디코딩
@@ -453,6 +578,15 @@
   - [ ] Arduino Mega 명령 전송 ⭐ 신규
   - [ ] 로봇팔 응답 처리 ⭐ 신규
   - [ ] 자동 시작 스크립트
+- [ ] 라즈베리파이 3 OHT 컨트롤러 개발 (상세: `OHT_System_Setup.md`) ⭐ 신규
+  - [ ] 스텝모터 제어 모듈 (X축 이동)
+  - [ ] 서보모터 제어 모듈 (Z축 상하)
+  - [ ] 리미트 스위치 및 센서 모듈
+  - [ ] Flask API 폴링 로직 (5초 간격)
+  - [ ] OHT 동작 시퀀스 구현
+  - [ ] 긴급 정지 안전 기능
+  - [ ] systemd 서비스 설정
+  - [ ] 오류 처리 및 복구 로직
 - [ ] Arduino 로봇팔 시스템 개발 (상세: `Arduino_RobotArm_Setup.md`) ⭐ 신규
   - [ ] Arduino Mega 2560 설정 ⭐ 신규
   - [ ] 5-6축 서보 제어 코드 ⭐ 신규
@@ -463,15 +597,28 @@
 - [ ] C# WinForms 애플리케이션 개발 (상세: `CSharp_WinForms_Guide.md`, UI 설계: `CSharp_WinForms_Design_Specification.md`)
   - [ ] Visual Studio 프로젝트 생성
   - [ ] 사용자 인증 시스템 (로그인/권한 관리)
+    - [ ] LoginForm - 로그인 화면
+    - [ ] SessionManager - 세션 관리 (권한 체크)
+    - [ ] Permission Enum - 권한 정의
   - [ ] MySQL 연동 (MySql.Data)
   - [ ] REST API 통신 (HttpClient)
   - [ ] 실시간 모니터링 대시보드 UI
   - [ ] 박스 상태 모니터링 UI ⭐ 신규
   - [ ] 박스 가득 찬 경우 알림 팝업 ⭐ 신규
+  - [ ] OHT 제어 패널 (Admin/Operator만) ⭐ 신규
+  - [ ] OHT 상태 모니터링 및 이력 표시 ⭐ 신규
+  - [ ] 권한별 OHT 버튼 활성화/비활성화 ⭐ 신규
   - [ ] 검사 이력 조회 화면
   - [ ] 불량 이미지 뷰어
   - [ ] 통계 화면 (Excel 내보내기 포함)
-  - [ ] 사용자 관리 화면 (관리자 전용)
+  - [ ] 사용자 관리 화면 (Admin 전용) ⭐ 신규 상세 구현
+    - [ ] UserManagementForm - 사용자 목록 및 관리
+    - [ ] UserEditDialog - 사용자 추가/수정
+    - [ ] UserLogsDialog - 활동 로그 뷰어
+    - [ ] 사용자 검색 및 필터 (권한별, 활성 상태별)
+    - [ ] 비밀번호 초기화 (temp1234)
+    - [ ] 사용자 생성/수정/삭제
+    - [ ] 활동 로그 조회 (날짜 범위, 활동 유형 필터)
   - [ ] 시스템 설정 화면
   - [ ] LiveCharts 통계 그래프
 - [ ] MySQL 데이터베이스 설계 및 구축 (상세: `MySQL_Database_Design.md`)
@@ -479,6 +626,8 @@
   - [x] 인덱스 최적화
   - [x] 초기 데이터 및 저장 프로시저
   - [x] 박스 상태 관리 테이블 (box_status) ⭐ 신규
+  - [x] OHT 운영 관리 테이블 (oht_operations) ⭐ 신규
+  - [x] 사용자 활동 로그 테이블 (user_logs) ⭐ 신규
   - [ ] 백업 전략 수립
 - [ ] 병렬 처리 파이프라인 구현
   - [ ] 멀티프로세싱/멀티스레딩 설계
@@ -541,7 +690,7 @@
 - **라즈베리파이 2 (우측 카메라)**: 100.x.x.z (Tailscale 할당)
 - **Windows PC (모니터링)**: 100.x.x.w (Tailscale 할당)
 
-**참고**: 로컬 네트워크 환경(192.168.0.x)도 지원 가능하지만, 본 프로젝트는 원격 환경 사용
+**참고**: 로컬 네트워크(192.168.0.x)도 지원 가능하지만, 본 프로젝트는 Tailscale 원격 환경을 기본 사용
 
 **포트 설정**:
 - Flask 서버 포트: **5000** (TCP) - Tailscale 자동 처리 (방화벽 설정 불필요)
@@ -654,63 +803,66 @@
 ## 프로젝트 폴더 구조 (권장)
 
 ```
-C:\work_project\
+~/work_project/
 │
 ├── docs/                          # 문서
 │   ├── PCB_Defect_Detection_Project.md (이 파일)
 │   ├── Phase1_YOLO_Setup.md
 │   ├── Dataset_Guide.md
 │   ├── Project_Structure.md
-│   └── references/                # 참고 논문 및 자료
+│   └── references/
 │
 ├── data/                          # 데이터셋
-│   ├── raw/                       # 원본 데이터
-│   ├── processed/                 # 전처리된 데이터
-│   │   ├── train/
-│   │   ├── val/
-│   │   └── test/
-│   └── annotations/               # 어노테이션 파일
+│   ├── raw/
+│   └── processed/
 │
 ├── models/                        # 학습된 모델 저장
 │   ├── yolo/
-│   │   ├── yolov8n_best.pt
-│   │   └── yolov8s_best.pt
 │   └── anomaly/
-│       └── padim_model.pth
 │
 ├── notebooks/                     # Jupyter 노트북
 │   ├── 01_data_exploration.ipynb
-│   ├── 02_yolo_training.ipynb
-│   ├── 03_anomaly_detection.ipynb
 │   └── 04_hybrid_system.ipynb
 │
-├── src/                           # 소스 코드
-│   ├── data/
-│   │   ├── download_data.py
-│   │   ├── preprocess.py
-│   │   └── augmentation.py
-│   ├── models/
-│   │   ├── yolo_detector.py
-│   │   ├── anomaly_detector.py
-│   │   └── hybrid_model.py
-│   ├── utils/
-│   │   ├── visualize.py
-│   │   ├── metrics.py
-│   │   └── config.py
-│   └── inference.py               # 추론 메인 스크립트
+├── server/                        # Flask 추론 서버
+│   ├── app.py
+│   ├── README.md
+│   └── routes/
+│
+├── yolo/                          # YOLO 학습 및 평가
+│   ├── train_yolo.py
+│   ├── evaluate_yolo.py
+│   └── tests/
+│
+├── raspberry_pi/                  # 라즈베리파이 클라이언트 가이드
+│   └── GETTING_STARTED.md
+│
+├── csharp_winforms/               # WinForms 모니터링 앱
+│   └── GETTING_STARTED.md
+│
+├── database/                      # MySQL 스키마
+│   ├── schema.sql
+│   └── README.md
+│
+├── configs/                       # 설정 파일
+│   ├── yolo_config.yaml
+│   ├── server_config.yaml
+│   └── camera_config.yaml
 │
 ├── scripts/                       # 실행 스크립트
 │   ├── train_yolo.sh
-│   ├── train_anomaly.sh
-│   └── evaluate.sh
+│   ├── start_server.sh
+│   └── setup_env.sh
+│
+├── tests/                         # 통합 테스트
+│   └── api/
 │
 ├── results/                       # 실험 결과
-│   ├── figures/                   # 그래프 및 시각화
-│   ├── metrics/                   # 성능 지표
-│   └── predictions/               # 예측 결과 이미지
+│   └── figures/
 │
-├── requirements.txt               # Python 패키지 목록
+├── logs/                          # 시스템 로그
 ├── README.md                      # 프로젝트 설명
+├── requirements.txt               # Python 패키지 목록
 └── .gitignore
 ```
 
@@ -850,10 +1002,11 @@ C:\work_project\
 
 1. **CSharp_WinForms_Guide.md** - C# WinForms 모니터링 앱 개발 기본 가이드
 2. **CSharp_WinForms_Design_Specification.md** - UI 상세 설계 (권한 시스템, 7개 화면, Excel 내보내기)
-3. **RaspberryPi_Setup.md** - 라즈베리파이 카메라 클라이언트 설정
-4. **MySQL_Database_Design.md** - MySQL 데이터베이스 스키마 설계
-5. **Flask_Server_Setup.md** - Flask 추론 서버 설정
-6. **Project_Structure.md** - 전체 프로젝트 폴더 구조
+3. **RaspberryPi_Setup.md** - 라즈베리파이 카메라 클라이언트 설정 (라즈베리파이 1, 2, 3 포함)
+4. **OHT_System_Setup.md** - OHT 시스템 하드웨어 및 컨트롤러 설정 ⭐ 신규
+5. **MySQL_Database_Design.md** - MySQL 데이터베이스 스키마 설계
+6. **Flask_Server_Setup.md** - Flask 추론 서버 설정 (OHT API 포함)
+7. **Project_Structure.md** - 전체 프로젝트 폴더 구조
 
 ---
 

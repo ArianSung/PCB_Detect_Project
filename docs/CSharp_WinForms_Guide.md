@@ -530,9 +530,9 @@ namespace PCB_Inspection_Monitor.Forms
             );
 
             // Flask API 연결
-            // 로컬: http://192.168.0.10:5000 (선택)
+            // 기본: http://100.64.1.1:5000 (Tailscale)
             // 원격: http://100.x.x.x:5000 (Tailscale VPN - 프로젝트 환경)
-            apiService = new ApiService("http://192.168.0.10:5000");
+            apiService = new ApiService("http://100.64.1.1:5000");
         }
 
         private void InitializeCharts()
@@ -740,7 +740,7 @@ namespace PCB_Inspection_Monitor.Forms
     <add key="MySQL_Database" value="pcb_inspection"/>
     <add key="MySQL_User" value="root"/>
     <add key="MySQL_Password" value="your_password"/>
-    <add key="Flask_Server_URL" value="http://192.168.0.10:5000"/>  <!-- 로컬 또는 Tailscale: http://100.x.x.x:5000 -->
+    <add key="Flask_Server_URL" value="http://100.64.1.1:5000"/>  <!-- 로컬 또는 Tailscale: http://100.x.x.x:5000 -->
   </appSettings>
 </configuration>
 ```

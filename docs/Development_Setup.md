@@ -178,7 +178,7 @@ mysql -u root -p pcb_inspection < database/schema.sql
 bash scripts/setup_env.sh
 
 # 2. .env 파일 수정
-nano src/server/.env
+nano server/.env
 
 # 3. 최소한 다음 항목 변경:
 # - DB_PASSWORD: MySQL 비밀번호
@@ -189,7 +189,7 @@ nano src/server/.env
 
 ```bash
 # 개발 모드로 실행
-cd src/server
+cd server
 python app.py
 
 # 예상 출력:
@@ -197,7 +197,7 @@ python app.py
 # * GPU 사용 가능: True
 
 # 다른 터미널에서 테스트
-curl http://localhost:5000/api/v1/health
+curl http://localhost:5000/health
 ```
 
 ---
@@ -230,7 +230,7 @@ tree data/processed -L 2
 cat configs/yolo_config.yaml
 
 # 2. 학습 테스트 (1 epoch)
-python src/training/train_yolo.py --config configs/yolo_config.yaml --epochs 1
+python yolo/train_yolo.py --config configs/yolo_config.yaml --epochs 1
 
 # 3. 학습 결과 확인
 ls runs/detect/train
@@ -240,12 +240,17 @@ ls runs/detect/train
 
 ## 🍓 라즈베리파이 팀 환경 설정
 
+> 라즈베리파이는 총 **3대**를 사용합니다.  
+> - `Raspberry Pi 1`: 좌측 웹캠 + GPIO 제어  
+> - `Raspberry Pi 2`: 우측 웹캠 전용  
+> - `Raspberry Pi 3`: OHT(Overhead Hoist Transport) 컨트롤러
+
 ### 1. Raspberry Pi OS 설치
 
 1. **Raspberry Pi Imager** 다운로드: https://www.raspberrypi.com/software/
 2. OS 선택: Raspberry Pi OS (64-bit)
 3. 고급 설정:
-   - 호스트명: `pcb-pi-left` 또는 `pcb-pi-right`
+   - 호스트명: `pcb-pi-left`, `pcb-pi-right`, `pcb-pi-oht`
    - SSH 활성화
    - Wi-Fi 설정
 4. SD 카드에 설치 후 부팅
@@ -254,7 +259,10 @@ ls runs/detect/train
 
 ```bash
 # 1. SSH 접속
-ssh pi@pcb-pi-left.local  # 또는 IP 주소
+ssh pi@pcb-pi-left.local      # 좌측 카메라
+# 또는
+ssh pi@pcb-pi-right.local     # 우측 카메라
+ssh pi@pcb-pi-oht.local       # OHT 컨트롤러
 
 # 2. 시스템 업데이트
 sudo apt update && sudo apt upgrade -y
@@ -331,9 +339,9 @@ bash scripts/setup_env.sh
 nano raspberry_pi/.env
 
 # 3. 최소한 다음 항목 변경:
-# - CAMERA_ID: left 또는 right
-# - SERVER_URL: Flask 서버 IP
-# - GPIO_ENABLED: true (라즈베리파이 1) 또는 false (라즈베리파이 2)
+# - CAMERA_ID: left / right / oht
+# - SERVER_URL: Flask 서버 Tailscale 주소 (예: http://100.64.1.1:5000)
+# - GPIO_ENABLED: true (라즈베리파이 1), false (라즈베리파이 2·3)
 ```
 
 ### 7. 카메라 클라이언트 실행 테스트
@@ -433,7 +441,7 @@ public class ApiTest
     public static async Task Main()
     {
         using var client = new HttpClient();
-        var response = await client.GetAsync("http://localhost:5000/api/v1/health");
+        var response = await client.GetAsync("http://100.64.1.1:5000/health"); // Flask 서버 Tailscale IP
         var content = await response.Content.ReadAsStringAsync();
         Console.WriteLine(content);
     }
@@ -449,10 +457,10 @@ public class ApiTest
 **모든 장비가 같은 네트워크에 있는 경우**
 
 1. **고정 IP 설정 권장**:
-   - Flask 서버: `192.168.0.10`
-   - 라즈베리파이 1: `192.168.0.20`
-   - 라즈베리파이 2: `192.168.0.21`
-   - Windows PC: `192.168.0.30`
+   - Flask 서버: `100.64.1.1` (Tailscale)
+   - 라즈베리파이 1: `100.64.1.2`
+   - 라즈베리파이 2: `100.64.1.3`
+   - Windows PC: `100.64.1.5`
 
 2. **방화벽 설정**:
    ```bash
@@ -483,7 +491,7 @@ public class ApiTest
 
 3. **.env 파일에 Tailscale IP 설정**:
    ```bash
-   # src/server/.env
+   # server/.env
    SERVER_URL=http://100.x.x.x:5000
 
    # raspberry_pi/.env
@@ -501,7 +509,7 @@ public class ApiTest
 - [ ] Conda 가상환경 생성 및 활성화 완료
 - [ ] PyTorch + CUDA 설치 확인 (GPU 사용 가능)
 - [ ] MySQL 데이터베이스 생성 완료
-- [ ] Flask 서버 실행 확인 (`curl http://localhost:5000/api/v1/health`)
+- [ ] Flask 서버 실행 확인 (`curl http://localhost:5000/health`)
 - [ ] .env 파일 설정 완료
 
 ### AI 모델 팀

@@ -13,7 +13,7 @@ import os
 from datetime import datetime
 
 # 테스트할 서버 URL (환경 변수로 설정 가능)
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:5000/api/v1")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:5000")
 
 
 class TestHealthEndpoint:

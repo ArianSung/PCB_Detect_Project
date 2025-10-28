@@ -313,7 +313,7 @@ model.train(
 # 학습 중단 시 자동 저장: yolo/runs/detect/train/weights/last.pt
 
 # 재개:
-python src/training/train_yolo.py --resume yolo/runs/detect/train/weights/last.pt
+python yolo/train_yolo.py --resume yolo/runs/detect/train/weights/last.pt
 ```
 
 ---
