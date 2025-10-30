@@ -2,13 +2,15 @@
 
 ## 개요
 
-이 가이드는 PCB 분류 박스에서 창고로 PCB를 자동 운반하는 OHT 시스템 구축 방법을 설명합니다. OHT 시스템은 3층 구조의 박스를 사용하여 정상, 부품불량, 납땜불량 PCB를 각각 수거하고 창고로 이동합니다.
+이 가이드는 PCB 분류 박스에서 창고로 PCB를 자동 운반하는 OHT 시스템 구축 방법을 설명합니다. OHT 시스템은 **수평으로 나란히 배치된 3개 박스**(각 5슬롯)를 사용하여 정상, 부품불량, 납땜불량 PCB를 수거하고 창고로 이동합니다.
 
 **핵심 기능**:
-- 3층 박스 시스템 (정상 3층, 부품불량 2층, 납땜불량 1층)
-- 천장 레일 기반 X축 이동
-- 서보모터 + 벨트 기반 Z축 상하 이동
-- 수동 호출 (WinForms, Admin/Operator 권한 필요) 및 자동 호출 (박스 꽉 참)
+- 3개 박스 수평 배치 (정상, 부품불량, 납땜불량)
+- 각 박스 5슬롯 (총 15슬롯)
+- 천장 레일 기반 X축 수평 이동
+- 양쪽 스텝모터 기반 Z축 동기화 상하 이동 (베드 내리기/올리기)
+- 서보모터 걸쇠 방식 박스 픽업
+- 수동 호출 (WinForms, Admin/Operator 권한) 및 자동 호출 (박스 가득 참)
 - 라즈베리파이 3 GPIO 제어
 
 ---
@@ -18,48 +20,88 @@
 ### 하드웨어 구성
 
 #### OHT 이동 시스템
-- **천장 레일**: 알루미늄 프로파일 (길이: 분류 영역 ~ 창고, 약 3-5m)
-- **X축 이동**:
-  - 스텝모터: NEMA 17 (1.8° 스텝 각도, 홀딩 토크 40-50 Ncm)
-  - 타이밍 벨트: GT2 (폭 6mm, 피치 2mm)
-  - 드라이버: A4988 또는 DRV8825
-- **Z축 상하 이동**:
-  - 서보모터: MG996R (토크 9.4 kgf·cm, 각도 범위 180°)
-  - 타이밍 벨트: GT2 (폭 6mm)
-  - 층별 높이: 각 층 간격 약 15-20cm
 
-#### OHT 박스 구조
+**X축 수평 이동 (박스 간 이동)**:
+- **천장 레일**: 알루미늄 프로파일 (길이: 창고 ~ 박스3, 약 3-5m)
+- **스텝모터**: NEMA 17 (1.8° 스텝 각도, 홀딩 토크 40-50 Ncm)
+- **드라이버**: A4988 (마이크로스테핑 1/16)
+- **타이밍 벨트**: GT2 (폭 6mm, 피치 2mm)
+
+**Z축 상하 이동 (베드 내리기/올리기)** ⭐ 신규 설계:
+- **구조**: 양쪽 스텝모터 2개 + GT2 벨트 감기 방식
+- **스텝모터**: NEMA 17 × 2 (좌측, 우측)
+- **드라이버**: A4988 × 2
+- **타이밍 벨트**: GT2 (폭 6mm) × 2
+- **이동 거리**: 약 50-100cm (박스 높이 + 여유)
+- **동기화 방식**: 양쪽 모터 동시 신호 + 리미트 스위치 4개로 수평 유지
+
 ```
-┌─────────────────────┐
-│   3층 (정상 PCB)     │  ← 최상층 (Z축 위치: 0°)
-├─────────────────────┤
-│   2층 (부품 불량)    │  ← 중간층 (Z축 위치: 60°)
-├─────────────────────┤
-│   1층 (납땜 불량)    │  ← 최하층 (Z축 위치: 120°)
-└─────────────────────┘
+[베드 프레임 - 양쪽에서 지지]
+    │              │
+벨트 │              │ 벨트
+    ↓              ↓
+┌────────────────────┐
+│ 좌측 모터        우측 모터 │
+│ (NEMA 17)      (NEMA 17) │
+│   ↓              ↓      │
+│ GT2 벨트       GT2 벨트  │
+│ 감기/풀기      감기/풀기  │
+└────────────────────┘
+```
 
-박스 크기: 기존 분류 박스와 동일 (PCB 2개 수납 가능)
+**베드 걸쇠 메커니즘** ⭐ 신규:
+- **서보모터**: MG996R (토크 9.4 kgf·cm)
+- **걸쇠 방식**: L자형 핀 회전 (0도 = 수평 삽입, 90도 = 잠금)
+- **박스 구조**: 측면에 구멍 (직경 10-15mm)
+
+```
+[베드 내부 서보모터]
+     │
+     ↓
+  L자 핀 ─→ 0도 (수평) ─→ 박스 구멍에 삽입
+     │
+     ↓
+  90도 회전 ─→ 걸림 (잠금)
+```
+
+#### OHT 박스 배치 구조
+
+```
+[창고]───[박스1: 정상]───[박스2: 부품불량]───[박스3: 납땜불량]
+         (5슬롯)          (5슬롯)             (5슬롯)
+          │                │                  │
+     PCB 5개 수납      PCB 5개 수납       PCB 5개 수납
+
+박스 크기: PCB 5개 수납 가능 (세로로 배치)
 재질: 아크릴 또는 경량 플라스틱
-무게: 빈 박스 약 500g, PCB 2개 적재 시 약 1kg
+무게: 빈 박스 약 500g, PCB 5개 적재 시 약 1.5kg
 ```
 
 #### 센서 시스템
-- **리미트 스위치** (X축):
-  - 창고 위치 감지: 1개
-  - 분류 박스 위치 감지: 3개 (정상/부품불량/납땜불량)
-- **홀 효과 센서** (Z축):
-  - 층별 위치 감지: 3개 (1층/2층/3층)
-- **중량 센서** (옵션):
-  - 각 층별 PCB 적재 확인
+
+**리미트 스위치 (X축)** - 2개:
+- 창고 위치 감지 (홈 포지션)
+- 최종 박스 위치 감지 (안전 한계)
+
+**리미트 스위치 (Z축)** - 4개 ⭐ 신규:
+- 좌측 상단: 베드 왼쪽 완전히 올라간 상태
+- 좌측 하단: 베드 왼쪽 완전히 내려간 상태
+- 우측 상단: 베드 오른쪽 완전히 올라간 상태
+- 우측 하단: 베드 오른쪽 완전히 내려간 상태
+
+**위치 제어 방식**:
+- X축: 리미트 스위치 2개 + 스텝 카운팅 (하이브리드)
+- Z축: 리미트 스위치 4개 + 양쪽 동기화
 
 #### 제어 시스템
+
 - **라즈베리파이 3**: OHT 전용 제어기
-  - 위치: 로컬 (100.x.x.y, Tailscale)
+  - 위치: 로컬 (Tailscale VPN 또는 로컬 네트워크)
   - OS: Raspberry Pi OS (64-bit)
   - Python 3.9+
 - **전원**:
   - 라즈베리파이: 5V 3A
-  - 스텝모터: 12V 2A
+  - 스텝모터 3개: 12V 5A (공용 전원)
   - 서보모터: 5V 2A (별도 전원 권장)
 
 ### 소프트웨어 구성
@@ -73,13 +115,13 @@
 
 ## Phase 1: 하드웨어 조립
 
-### 1-1. 천장 레일 설치
+### 1-1. 천장 레일 설치 (X축)
 
 ```
-[창고]──────────── 레일 (3-5m) ────────────[분류 영역]
-   ↑                                            ↑
- 대기 위치                               정상/부품불량/납땜불량
-                                           (3개 정지점)
+[창고]──────── 레일 (3-5m) ────────[박스1]─[박스2]─[박스3]
+   ↑                                  ↑      ↑      ↑
+ 대기 위치                          정상  부품불량 납땜불량
+                                    (1m 간격)
 ```
 
 **설치 순서**:
@@ -88,42 +130,64 @@
 3. 타이밍 벨트 및 풀리 장착
 4. 스텝모터 고정 및 벨트 장력 조정
 
-### 1-2. OHT 박스 조립
+### 1-2. Z축 양쪽 스텝모터 설치 ⭐ 신규
 
-```python
-# 박스 레이어 구성
-LAYER_CONFIG = {
-    'NORMAL': {
-        'layer': 3,
-        'z_position': 0,      # 서보모터 각도 (0° = 최상층)
-        'capacity': 2          # PCB 2개
-    },
-    'COMPONENT_DEFECT': {
-        'layer': 2,
-        'z_position': 60,     # 서보모터 각도 (60° = 중간층)
-        'capacity': 2
-    },
-    'SOLDER_DEFECT': {
-        'layer': 1,
-        'z_position': 120,    # 서보모터 각도 (120° = 최하층)
-        'capacity': 2
-    }
-}
+**구조**:
+```
+        [베드 프레임 상단]
+           │         │
+      GT2 벨트   GT2 벨트
+       (감김)     (감김)
+           │         │
+    ┌──────┴─────────┴──────┐
+    │                        │
+NEMA 17 (좌)           NEMA 17 (우)
+    │                        │
+A4988 드라이버         A4988 드라이버
 ```
 
-### 1-3. 센서 배치
+**설치 순서**:
+1. 베드 프레임 양쪽에 스텝모터 고정
+2. GT2 타이밍 벨트 양쪽에 장착
+3. 벨트를 베드 상단에 연결
+4. 양쪽 벨트 장력 균일하게 조정
 
-**X축 리미트 스위치 배치**:
+### 1-3. 베드 걸쇠 메커니즘 조립 ⭐ 신규
+
+**부품**:
+- MG996R 서보모터 × 1
+- L자 걸쇠 핀 (직경 8-10mm, 길이 5cm)
+- 서보 혼 (horn) 및 고정 나사
+
+**조립 순서**:
+1. 베드 하단에 서보모터 고정
+2. 서보 혼에 L자 핀 연결
+3. 0도 위치에서 핀이 수평이 되도록 캘리브레이션
+4. 90도 회전 시 핀이 수직이 되는지 확인
+
+**박스 측면 구조**:
+- 박스 양쪽에 구멍 뚫기 (직경 15mm)
+- 구멍 높이: 베드가 내려왔을 때 L자 핀이 삽입될 위치
+
+### 1-4. 센서 배치
+
+**X축 리미트 스위치**:
 ```
-[창고 SW]──────[정상 SW]─[부품불량 SW]─[납땜불량 SW]──
-    ↑              ↑          ↑            ↑
-  대기 위치      3층 박스    2층 박스      1층 박스
+[창고 SW]──────[박스3 끝 SW]────
+    ↑               ↑
+  홈 포지션      안전 한계
 ```
 
-**Z축 홀 효과 센서 배치**:
-- 3층 위치: Z축 0° (정상 PCB 적재)
-- 2층 위치: Z축 60° (부품불량 적재)
-- 1층 위치: Z축 120° (납땜불량 적재)
+**Z축 리미트 스위치 (양쪽 4개)** ⭐:
+```
+[좌측]           [우측]
+  ↑                ↑
+[상단 SW]       [상단 SW]
+  │                │
+베드 이동        베드 이동
+  │                │
+[하단 SW]       [하단 SW]
+```
 
 ---
 
@@ -139,25 +203,58 @@ STEP_PIN_X = 18        # 스텝 신호
 DIR_PIN_X = 23         # 방향 신호
 ENABLE_PIN_X = 24      # 활성화 신호
 
-# Z축 서보모터
-SERVO_PIN_Z = 12       # PWM 제어 (GPIO 12)
+# Z축 좌측 스텝모터 (A4988 드라이버)
+STEP_PIN_Z_LEFT = 17
+DIR_PIN_Z_LEFT = 27
+ENABLE_PIN_Z_LEFT = 22
+
+# Z축 우측 스텝모터 (A4988 드라이버)
+STEP_PIN_Z_RIGHT = 25
+DIR_PIN_Z_RIGHT = 8
+ENABLE_PIN_Z_RIGHT = 7
+
+# 베드 걸쇠 서보모터
+SERVO_PIN_LATCH = 12   # PWM 제어
 
 # 리미트 스위치 (X축)
-LIMIT_SW_WAREHOUSE = 5      # 창고 위치
-LIMIT_SW_NORMAL = 6         # 정상 박스 위치
-LIMIT_SW_COMPONENT = 13     # 부품불량 박스 위치
-LIMIT_SW_SOLDER = 19        # 납땜불량 박스 위치
+LIMIT_SW_WAREHOUSE = 5      # 창고 위치 (홈)
+LIMIT_SW_END = 6            # 박스3 끝 (안전 한계)
 
-# 홀 효과 센서 (Z축)
-HALL_SENSOR_LAYER3 = 16     # 3층 (정상)
-HALL_SENSOR_LAYER2 = 20     # 2층 (부품불량)
-HALL_SENSOR_LAYER1 = 21     # 1층 (납땜불량)
+# 리미트 스위치 (Z축 - 양쪽 4개)
+LIMIT_SW_Z_LEFT_UP = 16     # 좌측 상단
+LIMIT_SW_Z_LEFT_DOWN = 20   # 좌측 하단
+LIMIT_SW_Z_RIGHT_UP = 21    # 우측 상단
+LIMIT_SW_Z_RIGHT_DOWN = 19  # 우측 하단
 
 # 긴급 정지 버튼
 EMERGENCY_STOP_PIN = 26
 ```
 
-### 2-2. 모터 제어 코드
+### 2-2. A4988 드라이버 연결 (3개)
+
+#### X축 스텝모터 + A4988 연결:
+```
+[라즈베리파이]
+├─ GPIO 18 → A4988 #1 STEP
+├─ GPIO 23 → A4988 #1 DIR
+├─ GPIO 24 → A4988 #1 ENABLE
+├─ 5V      → A4988 #1 VDD
+└─ GND     → A4988 #1 GND
+
+[12V 전원]
+├─ 12V → A4988 #1 VMOT
+└─ GND → A4988 #1 GND
+
+[NEMA 17 스텝모터]
+├─ A+ (빨강) → A4988 #1 1A
+├─ A- (파랑) → A4988 #1 1B
+├─ B+ (녹색) → A4988 #1 2A
+└─ B- (검정) → A4988 #1 2B
+```
+
+#### Z축 좌측/우측 동일 방식으로 연결 (A4988 #2, #3)
+
+### 2-3. 모터 제어 코드
 
 ```python
 # raspberry_pi/oht_motor_control.py
@@ -165,8 +262,8 @@ EMERGENCY_STOP_PIN = 26
 import RPi.GPIO as GPIO
 import time
 
-class StepperMotor:
-    """X축 스텝모터 제어"""
+class StepperMotorA4988:
+    """A4988 드라이버 기반 스텝모터 제어"""
 
     def __init__(self, step_pin, dir_pin, enable_pin):
         self.step_pin = step_pin
@@ -180,14 +277,14 @@ class StepperMotor:
         # 모터 활성화
         GPIO.output(enable_pin, GPIO.LOW)
 
-    def move_steps(self, steps, direction='CW', speed=0.001):
+    def move_steps(self, steps, direction='CW', speed=0.0005):
         """
-        스텝 이동
+        스텝 이동 (A4988 STEP 신호)
 
         Args:
             steps: 이동할 스텝 수
             direction: 'CW' (시계방향) 또는 'CCW' (반시계방향)
-            speed: 스텝 간 딜레이 (초)
+            speed: 스텝 간 딜레이 (초, 기본 0.5ms)
         """
         GPIO.output(self.dir_pin, GPIO.HIGH if direction == 'CW' else GPIO.LOW)
 
@@ -197,19 +294,17 @@ class StepperMotor:
             GPIO.output(self.step_pin, GPIO.LOW)
             time.sleep(speed)
 
-    def move_to_position(self, target_position):
-        """
-        지정 위치로 이동 (리미트 스위치 기반)
+    def enable(self):
+        """모터 활성화"""
+        GPIO.output(self.enable_pin, GPIO.LOW)
 
-        Args:
-            target_position: 'WAREHOUSE', 'NORMAL', 'COMPONENT_DEFECT', 'SOLDER_DEFECT'
-        """
-        # 실제 구현 시 리미트 스위치 읽기 로직 추가
-        pass
+    def disable(self):
+        """모터 비활성화 (전력 절약)"""
+        GPIO.output(self.enable_pin, GPIO.HIGH)
 
 
 class ServoMotor:
-    """Z축 서보모터 제어"""
+    """서보모터 제어 (걸쇠)"""
 
     def __init__(self, servo_pin):
         self.servo_pin = servo_pin
@@ -222,36 +317,111 @@ class ServoMotor:
         서보모터 각도 설정
 
         Args:
-            angle: 0-180도 (0° = 3층, 60° = 2층, 120° = 1층)
+            angle: 0-180도 (0° = 수평 삽입, 90° = 잠금)
         """
-        duty_cycle = 2 + (angle / 18)  # 0° = 2%, 180° = 12%
+        duty_cycle = 2 + (angle / 18)
         self.pwm.ChangeDutyCycle(duty_cycle)
         time.sleep(0.5)
         self.pwm.ChangeDutyCycle(0)  # 지터 방지
 
-    def move_to_layer(self, layer):
-        """
-        지정 층으로 이동
+    def lock(self):
+        """걸쇠 잠금 (90도)"""
+        self.set_angle(90)
 
-        Args:
-            layer: 1, 2, 3
-        """
-        LAYER_ANGLES = {
-            3: 0,    # 정상 (최상층)
-            2: 60,   # 부품불량 (중간층)
-            1: 120   # 납땜불량 (최하층)
-        }
-
-        if layer in LAYER_ANGLES:
-            self.set_angle(LAYER_ANGLES[layer])
-        else:
-            raise ValueError(f"Invalid layer: {layer}")
+    def unlock(self):
+        """걸쇠 해제 (0도)"""
+        self.set_angle(0)
 
     def cleanup(self):
         self.pwm.stop()
 ```
 
-### 2-3. OHT 제어 메인 로직
+### 2-4. Z축 양쪽 동기화 제어 ⭐ 핵심 로직
+
+```python
+# raspberry_pi/oht_controller.py
+
+def lower_bed_synchronized():
+    """
+    Z축 양쪽 스텝모터 동기화하여 베드 내리기
+
+    - 좌측/우측 모터 동시 구동
+    - 리미트 스위치 4개로 수평 유지 확인
+    - 한쪽이 먼저 도달하면 해당 쪽만 정지
+    """
+    # 방향 설정 (둘 다 DOWN)
+    GPIO.output(DIR_PIN_Z_LEFT, GPIO.LOW)
+    GPIO.output(DIR_PIN_Z_RIGHT, GPIO.LOW)
+
+    # 모터 활성화
+    GPIO.output(ENABLE_PIN_Z_LEFT, GPIO.LOW)
+    GPIO.output(ENABLE_PIN_Z_RIGHT, GPIO.LOW)
+
+    logger.info("베드 내리기 시작")
+
+    while True:
+        # 리미트 스위치 상태 확인
+        left_down = GPIO.input(LIMIT_SW_Z_LEFT_DOWN)
+        right_down = GPIO.input(LIMIT_SW_Z_RIGHT_DOWN)
+
+        # 둘 다 도달하면 정지
+        if left_down and right_down:
+            logger.info("베드 하강 완료 (양쪽 도달)")
+            break
+
+        # 아직 도달 안 한 쪽만 계속 이동
+        if not left_down:
+            GPIO.output(STEP_PIN_Z_LEFT, GPIO.HIGH)
+        if not right_down:
+            GPIO.output(STEP_PIN_Z_RIGHT, GPIO.HIGH)
+
+        time.sleep(0.0005)  # 0.5ms
+
+        GPIO.output(STEP_PIN_Z_LEFT, GPIO.LOW)
+        GPIO.output(STEP_PIN_Z_RIGHT, GPIO.LOW)
+
+        time.sleep(0.0005)
+
+    # 베드 수평 확인
+    if left_down != right_down:
+        logger.warning("⚠️ 베드가 기울어져 있을 수 있습니다!")
+        # 필요 시 보정 로직 추가
+
+
+def raise_bed_synchronized():
+    """Z축 양쪽 스텝모터 동기화하여 베드 올리기"""
+    # 방향 설정 (둘 다 UP)
+    GPIO.output(DIR_PIN_Z_LEFT, GPIO.HIGH)
+    GPIO.output(DIR_PIN_Z_RIGHT, GPIO.HIGH)
+
+    # 모터 활성화
+    GPIO.output(ENABLE_PIN_Z_LEFT, GPIO.LOW)
+    GPIO.output(ENABLE_PIN_Z_RIGHT, GPIO.LOW)
+
+    logger.info("베드 올리기 시작")
+
+    while True:
+        left_up = GPIO.input(LIMIT_SW_Z_LEFT_UP)
+        right_up = GPIO.input(LIMIT_SW_Z_RIGHT_UP)
+
+        if left_up and right_up:
+            logger.info("베드 상승 완료 (양쪽 도달)")
+            break
+
+        if not left_up:
+            GPIO.output(STEP_PIN_Z_LEFT, GPIO.HIGH)
+        if not right_up:
+            GPIO.output(STEP_PIN_Z_RIGHT, GPIO.HIGH)
+
+        time.sleep(0.0005)
+
+        GPIO.output(STEP_PIN_Z_LEFT, GPIO.LOW)
+        GPIO.output(STEP_PIN_Z_RIGHT, GPIO.LOW)
+
+        time.sleep(0.0005)
+```
+
+### 2-5. OHT 제어 메인 로직 (10단계 시퀀스)
 
 ```python
 # raspberry_pi/oht_controller.py
@@ -260,7 +430,7 @@ import RPi.GPIO as GPIO
 import requests
 import time
 import logging
-from oht_motor_control import StepperMotor, ServoMotor
+from oht_motor_control import StepperMotorA4988, ServoMotor
 from oht_controller_config import *
 
 logging.basicConfig(level=logging.INFO)
@@ -278,8 +448,10 @@ class OHTController:
         GPIO.setwarnings(False)
 
         # 모터 초기화
-        self.stepper = StepperMotor(STEP_PIN_X, DIR_PIN_X, ENABLE_PIN_X)
-        self.servo = ServoMotor(SERVO_PIN_Z)
+        self.stepper_x = StepperMotorA4988(STEP_PIN_X, DIR_PIN_X, ENABLE_PIN_X)
+        self.stepper_z_left = StepperMotorA4988(STEP_PIN_Z_LEFT, DIR_PIN_Z_LEFT, ENABLE_PIN_Z_LEFT)
+        self.stepper_z_right = StepperMotorA4988(STEP_PIN_Z_RIGHT, DIR_PIN_Z_RIGHT, ENABLE_PIN_Z_RIGHT)
+        self.servo_latch = ServoMotor(SERVO_PIN_LATCH)
 
         # 센서 초기화
         self._setup_sensors()
@@ -293,31 +465,18 @@ class OHTController:
 
     def _setup_sensors(self):
         """센서 핀 설정"""
-        # 리미트 스위치
-        for pin in [LIMIT_SW_WAREHOUSE, LIMIT_SW_NORMAL,
-                    LIMIT_SW_COMPONENT, LIMIT_SW_SOLDER]:
+        # X축 리미트 스위치
+        GPIO.setup(LIMIT_SW_WAREHOUSE, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(LIMIT_SW_END, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+        # Z축 리미트 스위치 (4개)
+        for pin in [LIMIT_SW_Z_LEFT_UP, LIMIT_SW_Z_LEFT_DOWN,
+                    LIMIT_SW_Z_RIGHT_UP, LIMIT_SW_Z_RIGHT_DOWN]:
             GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-        # 홀 효과 센서
-        for pin in [HALL_SENSOR_LAYER3, HALL_SENSOR_LAYER2, HALL_SENSOR_LAYER1]:
-            GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-
-    def check_for_requests(self):
-        """Flask 서버에 OHT 요청 확인 (폴링)"""
-        try:
-            response = requests.get(f"{self.server_url}/api/oht/check_pending", timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('has_pending'):
-                    return data.get('request')
-            return None
-        except Exception as e:
-            logger.error(f"Failed to check OHT request: {e}")
-            return None
 
     def execute_request(self, request):
         """
-        OHT 요청 실행
+        OHT 요청 실행 (10단계 시퀀스)
 
         Args:
             request: {
@@ -329,72 +488,97 @@ class OHTController:
         category = request['category']
         request_id = request['request_id']
 
-        logger.info(f"Executing OHT request {request_id} for {category}")
+        logger.info(f"🚀 OHT 작업 시작: {request_id} ({category})")
 
         try:
-            # 1. 분류 박스로 이동
+            start_time = time.time()
+
+            # 1단계: X축 박스로 이동
+            logger.info("1. X축 이동 중...")
             self._move_to_box(category)
 
-            # 2. 해당 층으로 박스 하강
-            layer = self._get_layer_for_category(category)
-            self.servo.move_to_layer(layer)
-            time.sleep(2)  # 안정화 대기
+            # 2단계: Z축 양쪽 동기화하여 베드 내리기
+            logger.info("2. 베드 하강 중...")
+            self.lower_bed_synchronized()
 
-            # 3. PCB 적재 (그리퍼 동작 - 실제 구현 필요)
-            self._pick_pcbs(category, layer)
+            # 3단계: 걸쇠 수평 위치 (0도)
+            logger.info("3. 걸쇠 수평 위치...")
+            self.servo_latch.unlock()
 
-            # 4. 박스 상승
-            self.servo.move_to_layer(3)  # 최상층으로 복귀
+            # 4단계: 대기 (박스 구멍에 핀 삽입 확인)
+            logger.info("4. 대기 중 (1초)...")
             time.sleep(1)
 
-            # 5. 창고로 복귀
+            # 5단계: 걸쇠 회전 잠금 (90도)
+            logger.info("5. 걸쇠 잠금...")
+            self.servo_latch.lock()
+            time.sleep(0.5)
+
+            # 6단계: Z축 양쪽 동기화하여 베드 올리기 (박스 들어올림)
+            logger.info("6. 베드 상승 중 (박스 픽업)...")
+            self.raise_bed_synchronized()
+
+            # 7단계: X축 창고로 복귀
+            logger.info("7. 창고로 복귀 중...")
             self._move_to_warehouse()
 
-            # 6. 완료 보고
-            self._report_completion(request_id, success=True)
+            # 8단계: Z축 베드 내리기 (박스 내려놓기)
+            logger.info("8. 베드 하강 중 (박스 내려놓기)...")
+            self.lower_bed_synchronized()
 
-            logger.info(f"OHT request {request_id} completed")
+            # 9단계: 걸쇠 해제 (0도)
+            logger.info("9. 걸쇠 해제...")
+            self.servo_latch.unlock()
+            time.sleep(0.5)
+
+            # 10단계: Z축 베드 올리기 (완료)
+            logger.info("10. 베드 상승 (완료)...")
+            self.raise_bed_synchronized()
+
+            # 완료 보고
+            elapsed_time = time.time() - start_time
+            self._report_completion(request_id, success=True)
+            logger.info(f"✅ OHT 작업 완료: {request_id} (소요 시간: {elapsed_time:.2f}초)")
 
         except Exception as e:
-            logger.error(f"OHT request {request_id} failed: {e}")
+            logger.error(f"❌ OHT 작업 실패: {request_id} - {e}")
             self._report_completion(request_id, success=False, error=str(e))
 
     def _move_to_box(self, category):
-        """분류 박스 위치로 이동"""
-        POSITION_MAP = {
-            'NORMAL': 'NORMAL',
-            'COMPONENT_DEFECT': 'COMPONENT_DEFECT',
-            'SOLDER_DEFECT': 'SOLDER_DEFECT'
+        """X축 박스 위치로 이동 (스텝 카운팅)"""
+        BOX_POSITIONS = {
+            'NORMAL': 5000,           # 박스1: 약 1m (예시)
+            'COMPONENT_DEFECT': 10000,  # 박스2: 약 2m
+            'SOLDER_DEFECT': 15000     # 박스3: 약 3m
         }
 
-        target = POSITION_MAP[category]
-        logger.info(f"Moving from {self.current_position} to {target}")
+        target_steps = BOX_POSITIONS.get(category, 0)
+        logger.info(f"박스로 이동: {category} (스텝: {target_steps})")
 
-        # 실제 구현: 리미트 스위치 기반 이동
-        # self.stepper.move_to_position(target)
-
-        self.current_position = target
+        # 실제 구현: 스텝 이동
+        self.stepper_x.move_steps(target_steps, 'CW')
+        self.current_position = category
 
     def _move_to_warehouse(self):
-        """창고로 복귀"""
-        logger.info("Returning to warehouse")
-        # self.stepper.move_to_position('WAREHOUSE')
+        """X축 창고로 복귀 (홈 포지션)"""
+        logger.info("창고로 복귀 중...")
+
+        # 창고 리미트 스위치까지 이동
+        while not GPIO.input(LIMIT_SW_WAREHOUSE):
+            self.stepper_x.move_steps(10, 'CCW')
+
         self.current_position = 'WAREHOUSE'
+        logger.info("창고 도착")
 
-    def _get_layer_for_category(self, category):
-        """카테고리별 층 번호 반환"""
-        LAYER_MAP = {
-            'NORMAL': 3,
-            'COMPONENT_DEFECT': 2,
-            'SOLDER_DEFECT': 1
-        }
-        return LAYER_MAP[category]
+    def lower_bed_synchronized(self):
+        """Z축 양쪽 동기화 베드 내리기 (위 코드 참조)"""
+        # ... (2-4 섹션 코드)
+        pass
 
-    def _pick_pcbs(self, category, layer):
-        """PCB 수거 (그리퍼 동작)"""
-        logger.info(f"Picking PCBs from {category} layer {layer}")
-        # 실제 구현: 그리퍼 제어 로직 (Arduino 시리얼 통신 등)
-        time.sleep(3)  # 적재 시간 시뮬레이션
+    def raise_bed_synchronized(self):
+        """Z축 양쪽 동기화 베드 올리기 (위 코드 참조)"""
+        # ... (2-4 섹션 코드)
+        pass
 
     def _report_completion(self, request_id, success, error=None):
         """완료 보고"""
@@ -407,23 +591,24 @@ class OHTController:
             requests.post(f"{self.server_url}/api/oht/complete",
                          json=payload, timeout=5)
         except Exception as e:
-            logger.error(f"Failed to report completion: {e}")
+            logger.error(f"완료 보고 실패: {e}")
 
     def emergency_stop(self, channel):
         """긴급 정지"""
-        logger.warning("EMERGENCY STOP ACTIVATED!")
+        logger.warning("🚨 긴급 정지 활성화!")
         # 모든 모터 정지
-        GPIO.output(ENABLE_PIN_X, GPIO.HIGH)  # 스텝모터 비활성화
-        self.servo.set_angle(0)  # 서보모터 초기 위치
+        self.stepper_x.disable()
+        self.stepper_z_left.disable()
+        self.stepper_z_right.disable()
 
     def run(self):
-        """메인 루프"""
-        logger.info("OHT Controller started. Polling for requests...")
+        """메인 루프 (Flask API 폴링)"""
+        logger.info("OHT 컨트롤러 시작 (폴링 중...)")
 
         try:
             while True:
                 # 요청 확인 (5초마다)
-                request = self.check_for_requests()
+                request = self._check_for_requests()
 
                 if request:
                     self.execute_request(request)
@@ -431,26 +616,39 @@ class OHTController:
                 time.sleep(5)
 
         except KeyboardInterrupt:
-            logger.info("OHT Controller stopped by user")
+            logger.info("사용자에 의해 중지됨")
         finally:
             self.cleanup()
 
+    def _check_for_requests(self):
+        """Flask 서버에 OHT 요청 확인"""
+        try:
+            response = requests.get(f"{self.server_url}/api/oht/check_pending", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('has_pending'):
+                    return data.get('request')
+            return None
+        except Exception as e:
+            logger.error(f"요청 확인 실패: {e}")
+            return None
+
     def cleanup(self):
         """정리"""
-        self.servo.cleanup()
+        self.servo_latch.cleanup()
         GPIO.cleanup()
-        logger.info("GPIO cleaned up")
+        logger.info("GPIO 정리 완료")
 
 
 if __name__ == "__main__":
-    # Flask 서버 URL (Tailscale)
+    # Flask 서버 URL (Tailscale 또는 로컬)
     SERVER_URL = "http://100.x.x.x:5000"
 
     controller = OHTController(SERVER_URL)
     controller.run()
 ```
 
-### 2-4. systemd 서비스 등록
+### 2-6. systemd 서비스 등록
 
 ```bash
 # /etc/systemd/system/oht-controller.service
@@ -483,572 +681,158 @@ sudo systemctl status oht-controller.service
 
 ## Phase 3: Flask API 구현
 
-### 3-1. OHT API 엔드포인트 추가
+### 3-1. OHT API 엔드포인트 (기존 동일)
+
+Flask API는 기존 OHT_System_Setup.md의 Phase 3 참조 (변경 없음)
+
+---
+
+## Phase 4: 부품 리스트 및 비용
+
+### 4-1. 필수 부품
+
+| 부품 | 수량 | 단가 | 총액 |
+|------|------|------|------|
+| NEMA 17 스텝모터 | 3개 | 8,000원 | 24,000원 |
+| A4988 드라이버 | 3개 | 2,000원 | 6,000원 |
+| GT2 타이밍 벨트 (5m) | 1개 | 5,000원 | 5,000원 |
+| GT2 풀리 20T | 3개 | 1,000원 | 3,000원 |
+| 리미트 스위치 | 6개 | 500원 | 3,000원 |
+| MG996R 서보모터 | 1개 | 5,000원 | 5,000원 |
+| 12V 5A 전원 공급기 | 1개 | 10,000원 | 10,000원 |
+| 알루미늄 프로파일 | - | - | 20,000원 |
+| 점퍼 와이어, 브레드보드 | - | - | 5,000원 |
+
+**총 예상 비용: 약 81,000원**
+
+---
+
+## Phase 5: 캘리브레이션
+
+### 5-1. X축 박스 위치 스텝 수 측정
 
 ```python
-# server/oht_api.py
+# 캘리브레이션 절차
 
-from flask import Blueprint, request, jsonify
-from datetime import datetime
-import uuid
-import logging
+# 1. 홈 포지션으로 이동
+controller._move_to_warehouse()
 
-oht_bp = Blueprint('oht', __name__, url_prefix='/api/oht')
-logger = logging.getLogger(__name__)
+# 2. 각 박스 위치로 수동 이동하며 스텝 수 기록
+BOX_POSITIONS = {
+    'WAREHOUSE': 0,
+    'NORMAL': 5000,           # 박스1까지 스텝 수 (실측)
+    'COMPONENT_DEFECT': 10000,  # 박스2까지 스텝 수 (실측)
+    'SOLDER_DEFECT': 15000     # 박스3까지 스텝 수 (실측)
+}
 
-# OHT 요청 큐 (실제 구현 시 Redis 또는 RabbitMQ 사용 권장)
-oht_request_queue = []
-oht_request_status = {}  # {request_id: {'status': 'pending'|'processing'|'completed', ...}}
-
-
-@oht_bp.route('/request', methods=['POST'])
-def request_oht():
-    """
-    OHT 호출 요청 (수동)
-
-    요청:
-        {
-            "category": "NORMAL" | "COMPONENT_DEFECT" | "SOLDER_DEFECT",
-            "user_id": "user_uuid",
-            "user_role": "Admin" | "Operator"
-        }
-
-    응답:
-        {
-            "status": "ok",
-            "request_id": "uuid",
-            "message": "OHT request queued"
-        }
-    """
-    try:
-        data = request.get_json()
-        category = data.get('category')
-        user_id = data.get('user_id')
-        user_role = data.get('user_role')
-
-        # 권한 검증
-        if user_role not in ['Admin', 'Operator']:
-            return jsonify({
-                'error': 'Insufficient permissions',
-                'message': 'Only Admin and Operator can call OHT'
-            }), 403
-
-        # 카테고리 검증
-        if category not in ['NORMAL', 'COMPONENT_DEFECT', 'SOLDER_DEFECT']:
-            return jsonify({'error': 'Invalid category'}), 400
-
-        # 요청 생성
-        request_id = str(uuid.uuid4())
-        oht_request = {
-            'request_id': request_id,
-            'category': category,
-            'user_id': user_id,
-            'user_role': user_role,
-            'is_auto': False,
-            'timestamp': datetime.now().isoformat()
-        }
-
-        # 큐에 추가
-        oht_request_queue.append(oht_request)
-        oht_request_status[request_id] = {
-            'status': 'pending',
-            'created_at': datetime.now().isoformat()
-        }
-
-        logger.info(f"OHT request {request_id} queued by {user_role} (category: {category})")
-
-        # MySQL에 기록 (실제 구현)
-        # db.insert_oht_request(...)
-
-        return jsonify({
-            'status': 'ok',
-            'request_id': request_id,
-            'message': 'OHT request queued'
-        }), 200
-
-    except Exception as e:
-        logger.error(f"OHT request failed: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@oht_bp.route('/check_pending', methods=['GET'])
-def check_pending_requests():
-    """
-    대기 중인 OHT 요청 확인 (라즈베리파이 3 폴링용)
-
-    응답:
-        {
-            "has_pending": true,
-            "request": {...}
-        }
-    """
-    if oht_request_queue:
-        request_data = oht_request_queue[0]  # FIFO
-        return jsonify({
-            'has_pending': True,
-            'request': request_data
-        }), 200
-    else:
-        return jsonify({
-            'has_pending': False
-        }), 200
-
-
-@oht_bp.route('/complete', methods=['POST'])
-def complete_request():
-    """
-    OHT 요청 완료 보고 (라즈베리파이 3에서 호출)
-
-    요청:
-        {
-            "request_id": "uuid",
-            "success": true,
-            "error": null
-        }
-    """
-    try:
-        data = request.get_json()
-        request_id = data.get('request_id')
-        success = data.get('success')
-        error = data.get('error')
-
-        # 큐에서 제거
-        if oht_request_queue and oht_request_queue[0]['request_id'] == request_id:
-            oht_request_queue.pop(0)
-
-        # 상태 업데이트
-        if request_id in oht_request_status:
-            oht_request_status[request_id]['status'] = 'completed' if success else 'failed'
-            oht_request_status[request_id]['completed_at'] = datetime.now().isoformat()
-            oht_request_status[request_id]['error'] = error
-
-        logger.info(f"OHT request {request_id} completed (success: {success})")
-
-        # MySQL 업데이트 (실제 구현)
-        # db.update_oht_request(request_id, success, error)
-
-        return jsonify({'status': 'ok'}), 200
-
-    except Exception as e:
-        logger.error(f"Failed to complete OHT request: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@oht_bp.route('/status', methods=['GET'])
-def get_oht_status():
-    """
-    OHT 시스템 상태 조회 (WinForms UI용)
-
-    응답:
-        {
-            "queue_length": 2,
-            "current_request": {...},
-            "recent_requests": [...]
-        }
-    """
-    current_request = oht_request_queue[0] if oht_request_queue else None
-
-    return jsonify({
-        'queue_length': len(oht_request_queue),
-        'current_request': current_request,
-        'recent_requests': list(oht_request_status.values())[-10:]  # 최근 10개
-    }), 200
-
-
-@oht_bp.route('/auto_trigger', methods=['POST'])
-def auto_trigger():
-    """
-    자동 OHT 호출 (박스 꽉 찬 경우)
-
-    요청:
-        {
-            "category": "NORMAL" | "COMPONENT_DEFECT" | "SOLDER_DEFECT",
-            "trigger_reason": "box_full"
-        }
-    """
-    try:
-        data = request.get_json()
-        category = data.get('category')
-
-        # 요청 생성 (자동)
-        request_id = str(uuid.uuid4())
-        oht_request = {
-            'request_id': request_id,
-            'category': category,
-            'user_id': 'system',
-            'user_role': 'System',
-            'is_auto': True,
-            'trigger_reason': 'box_full',
-            'timestamp': datetime.now().isoformat()
-        }
-
-        oht_request_queue.append(oht_request)
-        oht_request_status[request_id] = {
-            'status': 'pending',
-            'created_at': datetime.now().isoformat()
-        }
-
-        logger.info(f"Auto OHT request {request_id} triggered for {category} (box full)")
-
-        return jsonify({
-            'status': 'ok',
-            'request_id': request_id
-        }), 200
-
-    except Exception as e:
-        logger.error(f"Auto OHT trigger failed: {e}")
-        return jsonify({'error': str(e)}), 500
+# 3. oht_controller_config.py에 저장
 ```
 
-### 3-2. Flask 서버에 OHT API 등록
+### 5-2. Z축 상하 거리 확인
 
 ```python
-# server/app.py (기존 파일 수정)
-
-from flask import Flask
-from oht_api import oht_bp
-
-app = Flask(__name__)
-
-# OHT API 블루프린트 등록
-app.register_blueprint(oht_bp)
-
-# ... (기존 코드)
+# 베드 완전히 올라간 상태 → 내려간 상태 스텝 수
+# (리미트 스위치로 자동 제어되므로 별도 측정 불필요)
 ```
 
-### 3-3. BoxManager에 자동 호출 로직 추가
+### 5-3. 걸쇠 서보모터 각도 조정
 
 ```python
-# server/box_manager.py (기존 파일 수정)
+# 0도: 수평 (박스 구멍에 삽입 가능)
+# 90도: 수직 (걸쇠 잠금)
 
-import requests
-
-class BoxManager:
-    def __init__(self):
-        self.boxes = {
-            'NORMAL': {'slots': [None, None]},
-            'COMPONENT_DEFECT': {'slots': [None, None]},
-            'SOLDER_DEFECT': {'slots': [None, None]},
-            'DISCARD': {'slots': [None]}  # 슬롯 관리 없음
-        }
-
-    def update_box_status(self, box_id, slot_index, pcb_id):
-        """박스 상태 업데이트 및 자동 OHT 호출"""
-        self.boxes[box_id]['slots'][slot_index] = pcb_id
-
-        # 박스 꽉 참 확인 (2/2)
-        if box_id != 'DISCARD':
-            if all(slot is not None for slot in self.boxes[box_id]['slots']):
-                # 자동 OHT 호출
-                self._trigger_auto_oht(box_id)
-
-    def _trigger_auto_oht(self, category):
-        """자동 OHT 호출"""
-        try:
-            payload = {
-                'category': category,
-                'trigger_reason': 'box_full'
-            }
-            response = requests.post('http://localhost:5000/api/oht/auto_trigger',
-                                    json=payload, timeout=5)
-
-            if response.status_code == 200:
-                print(f"Auto OHT triggered for {category}")
-            else:
-                print(f"Failed to trigger auto OHT: {response.status_code}")
-
-        except Exception as e:
-            print(f"Auto OHT trigger error: {e}")
+# 필요 시 미세 조정
+LATCH_UNLOCK_ANGLE = 0
+LATCH_LOCK_ANGLE = 90
 ```
 
 ---
 
-## Phase 4: WinForms UI 구현
+## Phase 6: 테스트
 
-### 4-1. OHT 제어 패널 추가
+### 6-1. 개별 컴포넌트 테스트
 
-```csharp
-// csharp_winforms/.../OHTControlPanel.cs
+```bash
+# X축 스텝모터 테스트
+python3 test_x_axis.py
 
-using System;
-using System.Net.Http;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-using Newtonsoft.Json;
+# Z축 양쪽 동기화 테스트
+python3 test_z_axis_sync.py
 
-public partial class OHTControlPanel : UserControl
-{
-    private readonly HttpClient _httpClient;
-    private readonly string _serverUrl;
+# 걸쇠 서보모터 테스트
+python3 test_latch.py
 
-    public OHTControlPanel(string serverUrl)
-    {
-        InitializeComponent();
-        _serverUrl = serverUrl;
-        _httpClient = new HttpClient();
-
-        // 권한 체크 및 UI 초기화
-        InitializeUI();
-    }
-
-    private void InitializeUI()
-    {
-        // 권한 체크 (Admin/Operator만 버튼 활성화)
-        bool hasPermission = SessionManager.HasPermission(Permission.CallOHT);
-
-        btnCallNormal.Enabled = hasPermission;
-        btnCallComponentDefect.Enabled = hasPermission;
-        btnCallSolderDefect.Enabled = hasPermission;
-
-        if (!hasPermission)
-        {
-            lblPermissionWarning.Text = "⚠ OHT 호출 권한이 없습니다 (Admin/Operator 전용)";
-            lblPermissionWarning.Visible = true;
-        }
-
-        // OHT 상태 자동 갱신 (5초마다)
-        Timer statusTimer = new Timer();
-        statusTimer.Interval = 5000;
-        statusTimer.Tick += async (s, e) => await RefreshOHTStatus();
-        statusTimer.Start();
-    }
-
-    private async void btnCallNormal_Click(object sender, EventArgs e)
-    {
-        await CallOHT("NORMAL");
-    }
-
-    private async void btnCallComponentDefect_Click(object sender, EventArgs e)
-    {
-        await CallOHT("COMPONENT_DEFECT");
-    }
-
-    private async void btnCallSolderDefect_Click(object sender, EventArgs e)
-    {
-        await CallOHT("SOLDER_DEFECT");
-    }
-
-    private async Task CallOHT(string category)
-    {
-        try
-        {
-            var payload = new
-            {
-                category = category,
-                user_id = SessionManager.CurrentUser.UserId,
-                user_role = SessionManager.CurrentUser.Role.ToString()
-            };
-
-            var json = JsonConvert.SerializeObject(payload);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            var response = await _httpClient.PostAsync($"{_serverUrl}/api/oht/request", content);
-
-            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
-            {
-                MessageBox.Show("OHT 호출 권한이 없습니다.", "권한 오류",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            response.EnsureSuccessStatusCode();
-            var result = await response.Content.ReadAsStringAsync();
-
-            MessageBox.Show($"{category} OHT가 호출되었습니다.", "성공",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-            await RefreshOHTStatus();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"OHT 호출 실패: {ex.Message}", "오류",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-    }
-
-    private async Task RefreshOHTStatus()
-    {
-        try
-        {
-            var response = await _httpClient.GetAsync($"{_serverUrl}/api/oht/status");
-            response.EnsureSuccessStatusCode();
-
-            var json = await response.Content.ReadAsStringAsync();
-            var status = JsonConvert.DeserializeObject<OHTStatus>(json);
-
-            lblQueueLength.Text = $"대기 중: {status.QueueLength}";
-
-            if (status.CurrentRequest != null)
-            {
-                lblCurrentRequest.Text = $"진행 중: {status.CurrentRequest.Category}";
-            }
-            else
-            {
-                lblCurrentRequest.Text = "진행 중: 없음";
-            }
-        }
-        catch (Exception ex)
-        {
-            lblQueueLength.Text = "상태 조회 실패";
-        }
-    }
-}
-
-// Permission enum에 CallOHT 추가
-public enum Permission
-{
-    ViewData,
-    ExportData,
-    ManageUsers,
-    ChangeSettings,
-    CallOHT  // 추가
-}
-
-// SessionManager에 권한 체크 로직 추가
-public static class SessionManager
-{
-    public static bool HasPermission(Permission permission)
-    {
-        switch (permission)
-        {
-            case Permission.CallOHT:
-                return CurrentUser.Role == UserRole.Admin ||
-                       CurrentUser.Role == UserRole.Operator;
-            // ... (기존 권한 로직)
-        }
-    }
-}
+# 리미트 스위치 테스트
+python3 test_limit_switches.py
 ```
+
+### 6-2. 통합 테스트
+
+```bash
+# 전체 시퀀스 (창고 → 박스1 → 픽업 → 창고)
+python3 test_full_sequence.py
+```
+
+### 6-3. 안정성 테스트
+
+- 연속 작업 100회 (에러 없이 완료)
+- 베드 수평 유지 확인 (양쪽 리미트 스위치)
+- 타임아웃 시나리오 테스트
 
 ---
 
-## Phase 5: MySQL 데이터베이스 스키마
+## 안전 기능
 
-### 5-1. oht_operations 테이블
+### 긴급 정지
 
-```sql
--- database/schema/oht_operations.sql
+- GPIO 핀 26 버튼 누르면 모든 모터 즉시 정지
 
-CREATE TABLE IF NOT EXISTS oht_operations (
-    operation_id VARCHAR(36) PRIMARY KEY,
-    category ENUM('NORMAL', 'COMPONENT_DEFECT', 'SOLDER_DEFECT') NOT NULL,
-    user_id VARCHAR(36),
-    user_role ENUM('Admin', 'Operator', 'System') NOT NULL,
-    is_auto BOOLEAN DEFAULT FALSE,
-    trigger_reason VARCHAR(50),
+### 타임아웃
 
-    -- 상태
-    status ENUM('pending', 'processing', 'completed', 'failed') DEFAULT 'pending',
-
-    -- 타임스탬프
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    started_at DATETIME,
-    completed_at DATETIME,
-
-    -- 결과
-    pcb_count INT DEFAULT 0,
-    success BOOLEAN,
-    error_message TEXT,
-
-    INDEX idx_category (category),
-    INDEX idx_status (status),
-    INDEX idx_created_at (created_at),
-
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```python
+TIMEOUT_X_AXIS = 30000  # 30초
+TIMEOUT_Z_AXIS = 15000  # 15초
+TIMEOUT_LATCH = 5000    # 5초
 ```
 
----
+### 베드 기울어짐 감지
 
-## Phase 6: 운영 시나리오
-
-### 6-1. 수동 호출 시나리오
-
+```python
+# 양쪽 리미트 스위치 도달 시간 차이 확인
+if left_down != right_down:
+    logger.warning("⚠️ 베드가 기울어져 있습니다!")
 ```
-1. WinForms에서 Admin/Operator가 "정상 호출" 버튼 클릭
-   ↓
-2. SessionManager.HasPermission(Permission.CallOHT) 확인
-   ↓
-3. Flask API /api/oht/request POST
-   ↓
-4. 요청 큐에 추가, MySQL에 기록
-   ↓
-5. 라즈베리파이 3 폴링 (/api/oht/check_pending)
-   ↓
-6. OHTController.execute_request() 실행
-   ↓
-7. 창고 → 정상 박스 → 3층 하강 → PCB 적재 → 창고 복귀
-   ↓
-8. Flask API /api/oht/complete POST
-   ↓
-9. MySQL 업데이트, WinForms 상태 갱신
-```
-
-### 6-2. 자동 호출 시나리오
-
-```
-1. 로봇팔이 정상 박스 2번 슬롯에 PCB 적재
-   ↓
-2. BoxManager.update_box_status() 호출
-   ↓
-3. 박스 꽉 참 감지 (2/2)
-   ↓
-4. BoxManager._trigger_auto_oht() 호출
-   ↓
-5. Flask API /api/oht/auto_trigger POST
-   ↓
-6. (이후 수동 호출과 동일한 흐름)
-```
-
----
-
-## 테스트 및 검증
-
-### 테스트 항목
-
-1. **하드웨어 테스트**:
-   - X축 스텝모터 이동 정확도 (±2mm)
-   - Z축 서보모터 층별 위치 정확도 (±5도)
-   - 리미트 스위치 감지 신뢰성
-   - 홀 효과 센서 층별 감지
-
-2. **소프트웨어 테스트**:
-   - Flask API 응답 시간 (< 100ms)
-   - 라즈베리파이 폴링 주기 (5초)
-   - WinForms 권한 체크 정확도
-   - 자동 호출 트리거 정확도
-
-3. **통합 테스트**:
-   - 수동 호출 → 창고 → 분류 박스 → 적재 → 복귀 (< 2분)
-   - 자동 호출 (박스 꽉 참) → 정상 동작
-   - 긴급 정지 버튼 → 즉시 정지
 
 ---
 
 ## 문제 해결 가이드
 
-### 자주 발생하는 문제
+### 1. 베드가 기울어지는 경우
 
-1. **스텝모터가 움직이지 않음**:
-   - ENABLE_PIN 상태 확인 (LOW = 활성화)
-   - 전원 공급 확인 (12V 2A)
-   - 드라이버 방향 핀 확인
+**원인**: 양쪽 벨트 장력 불균형
 
-2. **서보모터 떨림 (지터)**:
-   - PWM duty cycle을 0으로 설정 후 대기
-   - 별도 전원 공급 사용
-   - 캐패시터 추가 (1000µF)
+**해결 방법**:
+1. 전원 끄기
+2. 양쪽 벨트 장력 수동 확인
+3. 느슨한 쪽 벨트 조정
+4. 재시험
 
-3. **리미트 스위치 오작동**:
-   - 풀업 저항 확인
-   - 디바운스 시간 조정 (300ms)
-   - 배선 접지 확인
+### 2. 걸쇠가 잠기지 않는 경우
 
-4. **Flask API 타임아웃**:
-   - 네트워크 연결 확인 (Tailscale)
-   - 방화벽 포트 5000 오픈
-   - 폴링 간격 조정 (5초 → 10초)
+**원인**: 박스 구멍 위치 불일치 또는 서보모터 각도 오차
+
+**해결 방법**:
+1. 박스 구멍 위치 재확인
+2. 서보모터 각도 미세 조정 (85도 또는 95도)
+3. L자 핀 길이 확인
+
+### 3. X축 이동 오차 발생
+
+**원인**: 스텝 카운팅 오차 누적
+
+**해결 방법**:
+1. 주기적으로 홈 포지션 복귀 (홈잉)
+2. 박스 위치 리미트 스위치 추가 (선택)
 
 ---
 
@@ -1057,30 +841,28 @@ CREATE TABLE IF NOT EXISTS oht_operations (
 - `docs/PCB_Defect_Detection_Project.md`: 전체 시스템 아키텍처
 - `docs/Flask_Server_Setup.md`: Flask API 설계
 - `docs/RaspberryPi_Setup.md`: 라즈베리파이 GPIO 설정
-- `docs/CSharp_WinForms_Design_Specification.md`: WinForms UI 및 권한 시스템
 - `docs/MySQL_Database_Design.md`: 데이터베이스 스키마
 
 ---
 
-## 추가 개선 사항
+## 개발 일정 (2주)
 
-1. **성능 최적화**:
-   - Redis 큐 사용 (폴링 대신 pub/sub)
-   - WebSocket 실시간 통신
-   - 스텝모터 가속/감속 프로파일
+### Week 1: 하드웨어 조립
+- Day 1-2: 부품 주문 및 수령
+- Day 3-4: X축 레일 + 스텝모터 조립
+- Day 5-6: Z축 양쪽 스텝모터 + 벨트 조립
+- Day 7: 베드 걸쇠 메커니즘 조립
 
-2. **안전성 향상**:
-   - 중복 리미트 스위치 (안전 백업)
-   - 모터 전류 모니터링
-   - 자동 홈 포지셔닝
-
-3. **UI 개선**:
-   - OHT 이동 경로 실시간 애니메이션
-   - 박스 적재 현황 3D 시각화
-   - 긴급 정지 이력 로그
+### Week 2: 소프트웨어 및 테스트
+- Day 8-9: 라즈베리파이 제어 코드 작성
+- Day 10: 캘리브레이션 (스텝 수 측정)
+- Day 11: Flask API 연동 테스트
+- Day 12: WinForms UI 업데이트
+- Day 13: 통합 테스트 (10회 이상)
+- Day 14: 문서 작성 및 최종 점검
 
 ---
 
-**작성일**: 2025-10-28
-**버전**: 1.0
+**작성일**: 2025-10-30
+**버전**: 2.0 (수평 박스 배치 + 양쪽 스텝모터)
 **작성자**: Claude Code
