@@ -12,6 +12,7 @@
 #include "config.h"
 #include "servo_control.h"
 #include "box_manager.h"
+#include "rail_control.h"  // ⭐ 신규
 
 // ========================================
 // JSON 응답 전송 함수
@@ -178,6 +179,64 @@ void handleStatus(JsonDocument &doc) {
 }
 
 // ========================================
+// move_rail 명령 처리 ⭐ 신규
+// ========================================
+void handleMoveRail(JsonDocument &doc) {
+  const char* position = doc["position"];
+
+  if (position == nullptr) {
+    sendErrorResponse("Missing position parameter", "move_rail");
+    return;
+  }
+
+  Serial.print("[INFO] Moving rail to position: ");
+  Serial.println(position);
+
+  if (moveRailTo(position)) {
+    sendSuccessResponse("Rail moved successfully", "move_rail");
+  } else {
+    sendErrorResponse("Rail move failed", "move_rail");
+  }
+}
+
+// ========================================
+// home_rail 명령 처리 ⭐ 신규
+// ========================================
+void handleHomeRail(JsonDocument &doc) {
+  Serial.println("[INFO] Homing rail system");
+
+  if (homeRail()) {
+    sendSuccessResponse("Rail homed successfully", "home_rail");
+  } else {
+    sendErrorResponse("Rail homing failed", "home_rail");
+  }
+}
+
+// ========================================
+// rail_status 명령 처리 ⭐ 신규
+// ========================================
+void handleRailStatus(JsonDocument &doc) {
+  StaticJsonDocument<JSON_BUFFER_SIZE> response;
+
+  response["status"] = "ok";
+  response["command"] = "rail_status";
+  response["timestamp"] = millis();
+
+  int railPos;
+  bool railCal, homeSwitch, endSwitch;
+  getRailStatus(railPos, railCal, homeSwitch, endSwitch);
+
+  JsonObject rail = response.createNestedObject("rail");
+  rail["position"] = railPos;
+  rail["calibrated"] = railCal;
+  rail["home_switch"] = homeSwitch;
+  rail["end_switch"] = endSwitch;
+
+  serializeJson(response, Serial);
+  Serial.println();
+}
+
+// ========================================
 // test 명령 처리 (테스트용)
 // ========================================
 void handleTest(JsonDocument &doc) {
@@ -252,6 +311,12 @@ void handleSerialCommand() {
       handleGripperClose(doc);
     } else if (strcmp(command, "status") == 0) {
       handleStatus(doc);
+    } else if (strcmp(command, "move_rail") == 0) {  // ⭐ 신규
+      handleMoveRail(doc);
+    } else if (strcmp(command, "home_rail") == 0) {  // ⭐ 신규
+      handleHomeRail(doc);
+    } else if (strcmp(command, "rail_status") == 0) {  // ⭐ 신규
+      handleRailStatus(doc);
     } else if (strcmp(command, "test") == 0) {
       handleTest(doc);
     } else {

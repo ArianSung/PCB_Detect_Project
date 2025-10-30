@@ -28,6 +28,7 @@
 #include "config.h"
 #include "servo_control.h"
 #include "box_manager.h"
+#include "rail_control.h"     // ⭐ 신규: 레일 시스템
 #include "serial_handler.h"
 
 // ========================================
@@ -61,11 +62,15 @@ void setup() {
   Serial.println("[INFO] Initializing servos...");
   initServos();
 
-  // 5. 초기 자가 진단
+  // 5. 레일 시스템 초기화 ⭐ 신규
+  Serial.println("[INFO] Initializing rail system...");
+  initRail();
+
+  // 6. 초기 자가 진단
   Serial.println("[INFO] Running self-test...");
   selfTest();
 
-  // 6. 시스템 준비 완료
+  // 7. 시스템 준비 완료
   systemReady = true;
   digitalWrite(LED_STATUS_PIN, HIGH);  // LED 켜기
   Serial.println("[INFO] ========================================");
@@ -165,6 +170,14 @@ void selfTest() {
   // 3. 홈 포지션으로 복귀
   moveToHome();
 
+  // 4. 레일 홈 테스트 ⭐ 신규
+  Serial.println("[TEST] Homing rail system...");
+  if (homeRail()) {
+    Serial.println("[TEST] Rail homing: OK");
+  } else {
+    Serial.println("[ERROR] Rail homing failed!");
+  }
+
   Serial.println("[TEST] Self-test completed successfully");
 }
 
@@ -186,6 +199,17 @@ void sendHeartbeat() {
   angles["wrist_pitch"] = currentAngles[3];
   angles["wrist_roll"] = currentAngles[4];
   angles["gripper"] = currentAngles[5];
+
+  // 레일 상태 ⭐ 신규
+  int railPos;
+  bool railCal, homeSwitch, endSwitch;
+  getRailStatus(railPos, railCal, homeSwitch, endSwitch);
+
+  JsonObject rail = doc.createNestedObject("rail_status");
+  rail["position"] = railPos;
+  rail["calibrated"] = railCal;
+  rail["home_switch"] = homeSwitch;
+  rail["end_switch"] = endSwitch;
 
   serializeJson(doc, Serial);
   Serial.println();

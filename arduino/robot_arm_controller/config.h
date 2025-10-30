@@ -19,6 +19,16 @@
 #define SERVO_GRIPPER_PIN     7    // 그리퍼
 
 // ========================================
+// 레일 시스템 핀 정의 (스텝모터 + 리미트 스위치) ⭐ 신규
+// ========================================
+#define RAIL_STEP_PIN         10   // 스텝모터 STEP 신호
+#define RAIL_DIR_PIN          11   // 스텝모터 DIR 신호
+#define RAIL_ENABLE_PIN       12   // 스텝모터 ENABLE 신호
+
+#define RAIL_LIMIT_HOME_PIN   14   // 홈 위치 리미트 스위치 (풀업)
+#define RAIL_LIMIT_END_PIN    15   // 끝 위치 리미트 스위치 (풀업)
+
+// ========================================
 // 안전 설정
 // ========================================
 #define EMERGENCY_STOP_PIN    8    // 비상 정지 버튼 (풀업)
@@ -73,27 +83,36 @@ struct Coordinate {
 const Coordinate PICKUP_POSITION = {90, 120, 80, 90, 90};
 
 // ========================================
-// 6개 박스 슬롯 좌표 + 폐기 위치
-// 3개 카테고리 × 2개 슬롯 (수직 2단) = 6개 슬롯
+// 15개 박스 슬롯 좌표 + 폐기 위치
+// 3개 카테고리 × 5개 슬롯 (수평 배치) = 15개 슬롯
 // 폐기는 슬롯 관리 안 함
 // ========================================
 
-// 정상 박스 (NORMAL) - 2개 슬롯 (수직 2단)
-const Coordinate NORMAL_SLOTS[2] = {
-  {90, 115, 85, 90, 90},   // slot 0 (하단)
-  {90, 115, 75, 90, 90}    // slot 1 (상단, elbow -10도)
+// 정상 박스 (NORMAL) - 5개 슬롯 (좌측 → 우측)
+const Coordinate NORMAL_SLOTS[5] = {
+  {88, 115, 85, 90, 90},   // slot 0
+  {92, 115, 84, 90, 90},   // slot 1
+  {96, 115, 83, 90, 90},   // slot 2
+  {100, 115, 82, 90, 90},  // slot 3
+  {104, 115, 81, 90, 90}   // slot 4
 };
 
-// 부품 불량 박스 (COMPONENT_DEFECT) - 2개 슬롯 (수직 2단)
-const Coordinate COMPONENT_DEFECT_SLOTS[2] = {
-  {90, 105, 85, 90, 90},   // slot 0 (하단)
-  {90, 105, 75, 90, 90}    // slot 1 (상단, elbow -10도)
+// 부품 불량 박스 (COMPONENT_DEFECT) - 5개 슬롯 (좌측 → 우측)
+const Coordinate COMPONENT_DEFECT_SLOTS[5] = {
+  {88, 105, 86, 90, 90},   // slot 0
+  {92, 105, 85, 90, 90},   // slot 1
+  {96, 105, 84, 90, 90},   // slot 2
+  {100, 105, 83, 90, 90},  // slot 3
+  {104, 105, 82, 90, 90}   // slot 4
 };
 
-// 납땜 불량 박스 (SOLDER_DEFECT) - 2개 슬롯 (수직 2단)
-const Coordinate SOLDER_DEFECT_SLOTS[2] = {
-  {90, 95, 85, 90, 90},    // slot 0 (하단)
-  {90, 95, 75, 90, 90}     // slot 1 (상단, elbow -10도)
+// 납땜 불량 박스 (SOLDER_DEFECT) - 5개 슬롯 (좌측 → 우측)
+const Coordinate SOLDER_DEFECT_SLOTS[5] = {
+  {88, 95, 87, 90, 90},    // slot 0
+  {92, 95, 86, 90, 90},    // slot 1
+  {96, 95, 85, 90, 90},    // slot 2
+  {100, 95, 84, 90, 90},   // slot 3
+  {104, 95, 83, 90, 90}    // slot 4
 };
 
 // 폐기 위치 (슬롯 관리 안 함, 그냥 떨어뜨림)
@@ -117,5 +136,23 @@ CalibrationOffset CALIBRATION_OFFSETS[4] = {
   {0, 0, 0, 0, 0},  // SOLDER_DEFECT
   {0, 0, 0, 0, 0}   // DISCARD
 };
+
+// ========================================
+// 레일 시스템 설정 ⭐ 신규
+// ========================================
+#define STEPS_PER_REV         200    // NEMA 17 스텝모터 (1.8도)
+#define MICROSTEPS            16     // A4988 마이크로스테핑 (1/16)
+#define STEPS_PER_MM          10     // GT2 벨트 기준 (실측 후 조정 필요)
+
+#define RAIL_SPEED_DELAY_US   1000   // 스텝 간 딜레이 (마이크로초, 1ms = 느린 속도)
+
+// 레일 위치 (스텝 수)
+#define RAIL_POS_HOME         0      // 홈 위치
+#define RAIL_POS_BOX1         1500   // 박스1 위치 (약 150mm, 조정 필요)
+#define RAIL_POS_BOX2         3000   // 박스2 위치 (약 300mm, 조정 필요)
+#define RAIL_POS_BOX3         4500   // 박스3 위치 (약 450mm, 조정 필요)
+
+// 레일 타임아웃 (밀리초)
+#define RAIL_MOVE_TIMEOUT_MS  30000  // 30초
 
 #endif // CONFIG_H
