@@ -18,7 +18,7 @@
     - 원격 (Tailscale): 100.x.x.x:5000 ⭐
 - **라즈베리파이 1**: 좌측 웹캠 연결 + GPIO 제어
 - **라즈베리파이 2**: 우측 웹캠 연결 전용
-- **라즈베리파이 3**: OHT 시스템 전용 제어기 ⭐
+- **라즈베리파이 3번 (OHT 컨트롤러)**: OHT 시스템 전용 제어기 ⭐
 - **Windows PC**: C# WinForms 모니터링 앱
 - **네트워크**:
   - 로컬 환경 (선택): LAN (192.168.0.x)
@@ -901,7 +901,7 @@ class BoxManager:
             oht_api_url: OHT API 엔드포인트 URL
         """
         self.db = db_service
-        self.max_slots = 2  # 박스당 최대 슬롯 수 (수직 2단)
+        self.max_slots = 5  # 박스당 최대 슬롯 수 (수평 5슬롯)
         self.oht_api_url = oht_api_url
 
     def get_next_available_slot(self, category):
@@ -932,7 +932,7 @@ class BoxManager:
                     return box_id, box['current_slot']
 
                 # 박스가 꽉 참
-                logger.warning(f"카테고리 {category} 박스가 꽉 참! (2개 슬롯 모두 사용됨)")
+                logger.warning(f"카테고리 {category} 박스가 꽉 참! (5개 슬롯 모두 사용됨)")
                 return None, None
 
         except Exception as e:
@@ -976,9 +976,9 @@ class BoxManager:
 
                 # 박스가 꽉 찼으면 알림 및 자동 OHT 호출
                 if is_full:
-                    logger.warning(f"박스 {box_id}가 꽉 참! (2개 슬롯 모두 사용됨)")
+                    logger.warning(f"박스 {box_id}가 꽉 참! (5개 슬롯 모두 사용됨)")
                     self.send_box_full_alert(box_id)
-                    # 자동 OHT 호출 (박스 2/2 꽉 참)
+                    # 자동 OHT 호출 (박스 5/5 꽉 참)
                     self._trigger_auto_oht(box_id)
 
             conn.commit()
@@ -1362,14 +1362,13 @@ def move_robot_arm_home():
 
 시스템은 다음과 같이 동작합니다:
 
-1. **정상 동작**: 각 박스의 슬롯 0 → 슬롯 1 순서로 채움 (수직 2단 적재)
+1. **정상 동작**: 각 박스의 슬롯 0 → 슬롯 4 순서로 채움 (수평 5슬롯 적재)
 2. **박스 꽉 참 감지**:
-   - 슬롯 0 사용 → 슬롯 1 사용 → `is_full = TRUE`, 해당 카테고리 정지
-   - 각 박스당 2개 슬롯만 있으므로 2개 PCB 배치 후 꽉 참
+   - 슬롯 0~4가 모두 채워지면 `is_full = TRUE`로 마킹
+   - Flask 서버가 자동으로 OHT 요청(`/api/oht/auto_trigger`) 전송
 3. **시스템 정지**:
-   - 해당 카테고리 박스가 꽉 차면 503 에러 반환
-   - WinForms 앱에서 빨간 LED 표시 및 알림
-   - 수동 박스 교체 필요
+   - 해당 카테고리 박스가 5/5가 되면 LED/WinForms에 경고 노출
+   - OHT 자동 호출 상태에서 추가 배치는 차단
 4. **박스 교체 후 재시작**:
    - 작업자가 박스 교체 완료
    - WinForms 앱에서 "박스 리셋" 버튼 클릭
@@ -1796,7 +1795,7 @@ def request_oht():
 @oht_bp.route('/check_pending', methods=['GET'])
 def check_pending_requests():
     """
-    대기 중인 OHT 요청 확인 (라즈베리파이 3 폴링용)
+    대기 중인 OHT 요청 확인 (라즈베리파이 3번 폴링용)
 
     응답:
         {
@@ -1819,7 +1818,7 @@ def check_pending_requests():
 @oht_bp.route('/complete', methods=['POST'])
 def complete_request():
     """
-    OHT 요청 완료 보고 (라즈베리파이 3에서 호출)
+    OHT 요청 완료 보고 (라즈베리파이 3번에서 호출)
 
     요청:
         {

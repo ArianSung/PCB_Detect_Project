@@ -613,39 +613,39 @@ Host: 100.64.1.1:5000
     {
       "box_id": "NORMAL",
       "category": "normal",
-      "current_slot": 1,
-      "max_slots": 2,
+      "current_slot": 3,
+      "max_slots": 5,
       "is_full": false,
-      "total_pcb_count": 1,
-      "utilization_rate": 50.0,
+      "total_pcb_count": 3,
+      "utilization_rate": 60.0,
       "last_updated": "2025-10-27T10:25:00"
     },
     {
       "box_id": "COMPONENT_DEFECT",
       "category": "component_defect",
-      "current_slot": 2,
-      "max_slots": 2,
+      "current_slot": 5,
+      "max_slots": 5,
       "is_full": true,
-      "total_pcb_count": 2,
+      "total_pcb_count": 5,
       "utilization_rate": 100.0,
       "last_updated": "2025-10-27T10:20:00"
     },
     {
       "box_id": "SOLDER_DEFECT",
       "category": "solder_defect",
-      "current_slot": 0,
-      "max_slots": 2,
+      "current_slot": 1,
+      "max_slots": 5,
       "is_full": false,
-      "total_pcb_count": 0,
-      "utilization_rate": 0.0,
+      "total_pcb_count": 1,
+      "utilization_rate": 20.0,
       "last_updated": "2025-10-27T09:00:00"
     }
   ],
   "summary": {
     "total_boxes": 3,
     "full_boxes": 1,
-    "empty_boxes": 1,
-    "total_pcb_stored": 3
+    "empty_boxes": 0,
+    "total_pcb_stored": 9
   }
 }
 ```
@@ -653,8 +653,8 @@ Host: 100.64.1.1:5000
 **필드 설명:**
 - `box_id` (string): 박스 ID (예: "NORMAL", "COMPONENT_DEFECT", "SOLDER_DEFECT")
 - `category` (string): 카테고리 (normal/component_defect/solder_defect)
-- `current_slot` (int): 현재 사용 중인 슬롯 번호 (0-1, 수직 2단)
-- `max_slots` (int): 최대 슬롯 개수 (2개, 수직 2단 적재)
+- `current_slot` (int): 현재 사용 중인 슬롯 번호 (0-4, 수평 5슬롯)
+- `max_slots` (int): 최대 슬롯 개수 (5개, 수평 배치)
 - `is_full` (boolean): 박스 가득참 여부
 - `total_pcb_count` (int): 박스에 저장된 총 PCB 개수
 - `utilization_rate` (float): 사용률 (0.0 ~ 100.0)
@@ -685,11 +685,11 @@ Host: 100.64.1.1:5000
   "box": {
     "box_id": "NORMAL",
     "category": "normal",
-    "current_slot": 1,
-    "max_slots": 2,
+    "current_slot": 3,
+    "max_slots": 5,
     "is_full": false,
-    "total_pcb_count": 1,
-    "utilization_rate": 50.0,
+    "total_pcb_count": 3,
+    "utilization_rate": 60.0,
     "created_at": "2025-10-27T08:00:00",
     "last_updated": "2025-10-27T10:25:00",
     "recent_inspections": [

@@ -197,8 +197,8 @@ CREATE TABLE box_status (
     category VARCHAR(50) NOT NULL COMMENT '분류 카테고리 (normal/component_defect/solder_defect)',
 
     -- 슬롯 상태
-    current_slot INT NOT NULL DEFAULT 0 COMMENT '현재 사용 중인 슬롯 번호 (0-1, 수직 2단)',
-    max_slots INT NOT NULL DEFAULT 2 COMMENT '최대 슬롯 개수 (2개, 수직 2단 적재)',
+    current_slot INT NOT NULL DEFAULT 0 COMMENT '현재 사용 중인 슬롯 번호 (0-4, 수평 5슬롯)',
+    max_slots INT NOT NULL DEFAULT 5 COMMENT '최대 슬롯 개수 (5개, 수평 배치)',
     is_full BOOLEAN NOT NULL DEFAULT FALSE COMMENT '박스 가득참 여부',
 
     -- 통계
@@ -212,23 +212,23 @@ CREATE TABLE box_status (
     INDEX idx_category (category),
     INDEX idx_is_full (is_full)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='로봇팔 박스 슬롯 상태 관리 테이블 (3개 박스 × 2개 슬롯 = 6개 슬롯, 폐기는 슬롯 관리 안 함)';
+COMMENT='로봇팔 박스 슬롯 상태 관리 테이블 (3개 박스 × 5개 슬롯 = 15개 슬롯, 폐기는 슬롯 관리 안 함)';
 ```
 
 **설명**:
 - **총 3개 박스**: 정상, 부품불량, 납땜불량
-- **각 박스: 2개 슬롯** (수직 2단 적재, slot 0 = 하단, slot 1 = 상단)
-- **총 6개 슬롯** = 3 카테고리 × 2 슬롯
+- **각 박스: 5개 슬롯** (수평 배치, slot 0~4)
+- **총 15개 슬롯** = 3 카테고리 × 5 슬롯
 - **DISCARD 처리**: 슬롯 관리 없이 고정 위치에 떨어뜨리기 (프로젝트 데모용)
 - **슬롯 할당 로직**:
-  1. 각 박스는 slot 0(하단)부터 채움
-  2. slot 0 사용 → slot 1(상단) 사용 → 박스 가득참
-  3. 박스가 가득 차면: LED 알림 + WinForms 알림 + 해당 카테고리 정지
+  1. 각 박스는 slot 0부터 4까지 순차 채움
+  2. 사용률은 WinForms + Flask 서버에서 0/5 → 5/5로 표시
+  3. 박스가 가득 차면(5/5): LED 알림 + WinForms 알림 + OHT 자동 호출(`trigger_reason='box_full'`)
 
 **박스 ID 구조**:
-- `NORMAL`: 정상 PCB (2개 슬롯)
-- `COMPONENT_DEFECT`: 부품 불량 (2개 슬롯)
-- `SOLDER_DEFECT`: 납땜 불량 (2개 슬롯)
+- `NORMAL`: 정상 PCB (5개 슬롯)
+- `COMPONENT_DEFECT`: 부품 불량 (5개 슬롯)
+- `SOLDER_DEFECT`: 납땜 불량 (5개 슬롯)
 - `DISCARD`: 폐기 (슬롯 관리 안 함, box_status 테이블에 저장 안 함)
 
 ### 10. oht_operations (OHT 운영 이력) ⭐ 신규
@@ -475,9 +475,9 @@ INSERT INTO users (username, password_hash, full_name, role) VALUES
 ```sql
 -- 3개 박스 초기 데이터 삽입 (DISCARD는 제외)
 INSERT INTO box_status (box_id, category, max_slots) VALUES
-    ('NORMAL', 'normal', 2),
-    ('COMPONENT_DEFECT', 'component_defect', 2),
-    ('SOLDER_DEFECT', 'solder_defect', 2);
+    ('NORMAL', 'normal', 5),
+    ('COMPONENT_DEFECT', 'component_defect', 5),
+    ('SOLDER_DEFECT', 'solder_defect', 5);
 ```
 
 **박스 상태 확인 쿼리**:

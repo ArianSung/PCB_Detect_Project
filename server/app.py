@@ -161,7 +161,7 @@ def predict_dual():
             },
             'robot_command': {
                 'category': defect_type_to_category(final_defect_type),
-                'slot': 1  # TODO: 박스 슬롯 관리
+                'slot': 2  # TODO: 박스 슬롯 관리 (0-4)
             },
             'timestamp': datetime.now().isoformat()
         }
@@ -188,8 +188,8 @@ def get_box_status():
             "boxes": [
                 {
                     "box_id": "NORMAL",
-                    "current_slot": 1,
-                    "max_slots": 2,
+                    "current_slot": 3,
+                    "max_slots": 5,
                     "is_full": false,
                     "total_pcb_count": 15
                 },
@@ -207,26 +207,26 @@ def get_box_status():
         {
             'box_id': 'NORMAL',
             'category': '정상',
-            'current_slot': 1,
-            'max_slots': 2,
+            'current_slot': 3,
+            'max_slots': 5,
             'is_full': False,
             'total_pcb_count': 15
         },
         {
             'box_id': 'COMPONENT_DEFECT',
             'category': '부품불량',
-            'current_slot': 0,
-            'max_slots': 2,
-            'is_full': False,
-            'total_pcb_count': 3
+            'current_slot': 5,
+            'max_slots': 5,
+            'is_full': True,
+            'total_pcb_count': 12
         },
         {
             'box_id': 'SOLDER_DEFECT',
             'category': '납땜불량',
-            'current_slot': 2,
-            'max_slots': 2,
-            'is_full': True,
-            'total_pcb_count': 8
+            'current_slot': 1,
+            'max_slots': 5,
+            'is_full': False,
+            'total_pcb_count': 2
         }
     ]
 

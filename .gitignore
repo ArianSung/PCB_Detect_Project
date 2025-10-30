@@ -63,3 +63,4 @@ csharp_winforms/**/obj/
 # 기타
 *.zip
 *.tar.gz
+*.out

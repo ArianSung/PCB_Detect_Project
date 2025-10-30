@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 OHT (Overhead Hoist Transport) Controller
-라즈베리파이 3 기반 OHT 제어 시스템
+라즈베리파이 3번(Raspberry Pi 4 Model B) 기반 OHT 제어 시스템
 
 기능:
 - Flask API 폴링 (5초마다)

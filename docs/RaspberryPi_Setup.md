@@ -7,7 +7,7 @@
 **시스템 구성**:
 - **라즈베리파이 1 (Tailscale: 100.64.1.2)**: 좌측 웹캠 + GPIO 출력 (분류 게이트, LED 제어)
 - **라즈베리파이 2 (Tailscale: 100.64.1.3)**: 우측 웹캠 전용 (GPIO 제어 없음)
-- **라즈베리파이 3 (Tailscale: 100.64.1.4)**: OHT 시스템 전용 제어기 ⭐
+- **라즈베리파이 3번 (Tailscale: 100.64.1.4, HW: Raspberry Pi 4 Model B)**: OHT 시스템 전용 제어기 ⭐
 
 ---
 
@@ -35,7 +35,8 @@
 
 ### 주요 라이브러리
 - OpenCV
-- RPi.GPIO
+- RPi.GPIO (라즈베리파이 1)
+- pigpio (라즈베리파이 3번 OHT 컨트롤러)
 - Requests
 - Pillow
 
@@ -190,7 +191,7 @@ python3 test_camera.py 0
 **중요**: GPIO 제어는 **라즈베리파이 1 (100.64.1.2)에만** 적용됩니다.
 - Flask 서버가 양면(좌측+우측) 검사 결과를 통합 판정
 - 최종 불량 분류 결과를 라즈베리파이 1에만 전송
-- 라즈베리파이 2 (100.64.1.3)와 라즈베리파이 3 (100.64.1.4)는 카메라/OHT 전용 (GPIO 사용 안 함)
+- 라즈베리파이 2 (100.64.1.3)와 라즈베리파이 3번 (100.64.1.4)는 카메라/OHT 전용 (GPIO 사용 안 함)
 
 ### 4-1. GPIO 핀 매핑 (BCM 모드)
 
@@ -1106,16 +1107,17 @@ python3 test_serial.py
 
 ---
 
-## Phase 7: 라즈베리파이 3 - OHT 시스템 제어기 설정 ⭐ 신규
+## Phase 7: 라즈베리파이 3번 - OHT 시스템 제어기 설정 ⭐ 신규
 
 ### 7-1. 개요
 
-라즈베리파이 3은 OHT (Overhead Hoist Transport) 시스템 전용 제어기로 사용됩니다.
+라즈베리파이 3번(Raspberry Pi 4 Model B 하드웨어)은 OHT (Overhead Hoist Transport) 시스템 전용 제어기로 사용됩니다.
 
 **주요 기능**:
-- X축 스텝모터 제어 (레일 이동)
-- Z축 서보모터 제어 (박스 상하 이동)
-- 리미트 스위치 및 홀 효과 센서 읽기
+- X축 스텝모터 제어 (천장 레일 이동)
+- Z축 좌/우 스텝모터 동기 제어 (베드 상하 이동)
+- 서보모터 걸쇠 제어 (박스 잠금/해제)
+- 리미트 스위치 6개 상태 모니터링 (X축 2, Z축 4)
 - Flask 서버와 HTTP 통신 (OHT 요청 폴링)
 - 긴급 정지 버튼 처리
 
@@ -1125,11 +1127,14 @@ python3 test_serial.py
 # 기본 패키지 (Phase 2와 동일)
 sudo apt update
 sudo apt upgrade -y
-sudo apt install -y python3-pip python3-dev
+sudo apt install -y python3-pip python3-dev pigpio python3-pigpio
 
-# OHT 전용 패키지
-pip3 install RPi.GPIO
-pip3 install requests
+# pigpiod 데몬 활성화 (이미 설정되어 있지 않은 경우)
+sudo systemctl enable pigpiod
+sudo systemctl start pigpiod
+
+# OHT 전용 Python 패키지
+pip3 install pigpio requests
 ```
 
 ### 7-3. GPIO 핀맵 (BCM 모드)
@@ -1144,19 +1149,28 @@ STEP_PIN_X = 18        # 스텝 신호
 DIR_PIN_X = 23         # 방향 신호
 ENABLE_PIN_X = 24      # 활성화 신호
 
-# Z축 서보모터
-SERVO_PIN_Z = 12       # PWM 제어 (GPIO 12)
+# Z축 좌측 스텝모터 (A4988 드라이버)
+STEP_PIN_Z_LEFT = 17
+DIR_PIN_Z_LEFT = 27
+ENABLE_PIN_Z_LEFT = 22
+
+# Z축 우측 스텝모터 (A4988 드라이버)
+STEP_PIN_Z_RIGHT = 25
+DIR_PIN_Z_RIGHT = 8
+ENABLE_PIN_Z_RIGHT = 7
+
+# 베드 걸쇠 서보모터
+SERVO_PIN_LATCH = 12   # PWM 제어 (pigpio)
 
 # 리미트 스위치 (X축)
-LIMIT_SW_WAREHOUSE = 5      # 창고 위치
-LIMIT_SW_NORMAL = 6         # 정상 박스 위치
-LIMIT_SW_COMPONENT = 13     # 부품불량 박스 위치
-LIMIT_SW_SOLDER = 19        # 납땜불량 박스 위치
+LIMIT_SW_WAREHOUSE = 5      # 창고 위치 (홈 포지션)
+LIMIT_SW_END = 6            # 박스3 끝 (안전 한계)
 
-# 홀 효과 센서 (Z축)
-HALL_SENSOR_LAYER3 = 16     # 3층 (정상)
-HALL_SENSOR_LAYER2 = 20     # 2층 (부품불량)
-HALL_SENSOR_LAYER1 = 21     # 1층 (납땜불량)
+# 리미트 스위치 (Z축 - 양쪽 4개)
+LIMIT_SW_Z_LEFT_UP = 16
+LIMIT_SW_Z_LEFT_DOWN = 20
+LIMIT_SW_Z_RIGHT_UP = 21
+LIMIT_SW_Z_RIGHT_DOWN = 19
 
 # 긴급 정지 버튼
 EMERGENCY_STOP_PIN = 26
@@ -1234,7 +1248,7 @@ sudo nano /etc/dhcpcd.conf
 
 추가:
 ```ini
-# 라즈베리파이 3 (OHT 전용) - 로컬 고정 IP 예시
+# 라즈베리파이 3번 (OHT 전용) - 로컬 고정 IP 예시
 interface eth0
 static ip_address=192.168.0.22/24
 static routers=192.168.0.1

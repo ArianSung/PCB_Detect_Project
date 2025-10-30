@@ -11,7 +11,7 @@
 - 양쪽 스텝모터 기반 Z축 동기화 상하 이동 (베드 내리기/올리기)
 - 서보모터 걸쇠 방식 박스 픽업
 - 수동 호출 (WinForms, Admin/Operator 권한) 및 자동 호출 (박스 가득 참)
-- 라즈베리파이 3 GPIO 제어
+- 라즈베리파이 3번(OHT 전용) pigpio 제어
 
 ---
 
@@ -95,7 +95,7 @@
 
 #### 제어 시스템
 
-- **라즈베리파이 3**: OHT 전용 제어기
+- **라즈베리파이 3번 (Raspberry Pi 4 Model B)**: OHT 전용 제어기
   - 위치: 로컬 (Tailscale VPN 또는 로컬 네트워크)
   - OS: Raspberry Pi OS (64-bit)
   - Python 3.9+
@@ -106,7 +106,7 @@
 
 ### 소프트웨어 구성
 
-- **라즈베리파이 3**: Python + RPi.GPIO + systemd 서비스
+- **라즈베리파이 3번**: Python + pigpio + systemd 서비스
 - **Flask 서버**: OHT API 엔드포인트
 - **WinForms UI**: OHT 호출 패널 (권한 제어)
 - **MySQL**: OHT 운영 이력 저장
@@ -191,7 +191,7 @@ A4988 드라이버         A4988 드라이버
 
 ---
 
-## Phase 2: 라즈베리파이 3 설정
+## Phase 2: 라즈베리파이 3번 설정
 
 ### 2-1. GPIO 핀맵 (BCM 모드)
 
@@ -259,81 +259,80 @@ EMERGENCY_STOP_PIN = 26
 ```python
 # raspberry_pi/oht_motor_control.py
 
-import RPi.GPIO as GPIO
+import pigpio
 import time
 
 class StepperMotorA4988:
-    """A4988 드라이버 기반 스텝모터 제어"""
+    """pigpio 기반 A4988 스텝모터 제어"""
 
-    def __init__(self, step_pin, dir_pin, enable_pin):
+    def __init__(self, pi: pigpio.pi, step_pin, dir_pin, enable_pin, step_delay=0.0005):
+        self.pi = pi
         self.step_pin = step_pin
         self.dir_pin = dir_pin
         self.enable_pin = enable_pin
+        self.step_delay = step_delay
 
-        GPIO.setup(step_pin, GPIO.OUT)
-        GPIO.setup(dir_pin, GPIO.OUT)
-        GPIO.setup(enable_pin, GPIO.OUT)
+        for pin in (step_pin, dir_pin, enable_pin):
+            self.pi.set_mode(pin, pigpio.OUTPUT)
 
-        # 모터 활성화
-        GPIO.output(enable_pin, GPIO.LOW)
+        # 기본 비활성화 (HIGH = disable)
+        self.pi.write(self.enable_pin, 1)
 
-    def move_steps(self, steps, direction='CW', speed=0.0005):
+    def move_steps(self, steps, direction='CW'):
         """
         스텝 이동 (A4988 STEP 신호)
 
         Args:
             steps: 이동할 스텝 수
-            direction: 'CW' (시계방향) 또는 'CCW' (반시계방향)
-            speed: 스텝 간 딜레이 (초, 기본 0.5ms)
+            direction: 'CW' 또는 'CCW'
         """
-        GPIO.output(self.dir_pin, GPIO.HIGH if direction == 'CW' else GPIO.LOW)
+        cw = (direction == 'CW')
+        self.pi.write(self.dir_pin, 1 if cw else 0)
+        self.enable()
 
         for _ in range(steps):
-            GPIO.output(self.step_pin, GPIO.HIGH)
-            time.sleep(speed)
-            GPIO.output(self.step_pin, GPIO.LOW)
-            time.sleep(speed)
+            self.pi.write(self.step_pin, 1)
+            time.sleep(self.step_delay)
+            self.pi.write(self.step_pin, 0)
+            time.sleep(self.step_delay)
 
     def enable(self):
         """모터 활성화"""
-        GPIO.output(self.enable_pin, GPIO.LOW)
+        self.pi.write(self.enable_pin, 0)
 
     def disable(self):
         """모터 비활성화 (전력 절약)"""
-        GPIO.output(self.enable_pin, GPIO.HIGH)
+        self.pi.write(self.enable_pin, 1)
 
 
 class ServoMotor:
-    """서보모터 제어 (걸쇠)"""
+    """pigpio 기반 서보모터 제어 (걸쇠)"""
 
-    def __init__(self, servo_pin):
+    def __init__(self, pi: pigpio.pi, servo_pin):
+        self.pi = pi
         self.servo_pin = servo_pin
-        GPIO.setup(servo_pin, GPIO.OUT)
-        self.pwm = GPIO.PWM(servo_pin, 50)  # 50Hz
-        self.pwm.start(0)
+        self.pi.set_mode(servo_pin, pigpio.OUTPUT)
+        self.lock_angle = 90
+        self.unlock_angle = 0
 
     def set_angle(self, angle):
         """
-        서보모터 각도 설정
-
-        Args:
-            angle: 0-180도 (0° = 수평 삽입, 90° = 잠금)
+        서보모터 각도 설정 (0° = 수평, 90° = 잠금)
         """
-        duty_cycle = 2 + (angle / 18)
-        self.pwm.ChangeDutyCycle(duty_cycle)
+        # 0° ≈ 500µs, 180° ≈ 2500µs 기준
+        pulse = 500 + (angle / 180.0) * 2000
+        self.pi.set_servo_pulsewidth(self.servo_pin, pulse)
         time.sleep(0.5)
-        self.pwm.ChangeDutyCycle(0)  # 지터 방지
+        self.pi.set_servo_pulsewidth(self.servo_pin, 0)  # 지터 방지
 
     def lock(self):
-        """걸쇠 잠금 (90도)"""
-        self.set_angle(90)
+        self.set_angle(self.lock_angle)
 
     def unlock(self):
-        """걸쇠 해제 (0도)"""
-        self.set_angle(0)
+        self.set_angle(self.unlock_angle)
 
     def cleanup(self):
-        self.pwm.stop()
+        self.pi.set_servo_pulsewidth(self.servo_pin, 0)
 ```
 
 ### 2-4. Z축 양쪽 동기화 제어 ⭐ 핵심 로직
@@ -341,7 +340,9 @@ class ServoMotor:
 ```python
 # raspberry_pi/oht_controller.py
 
-def lower_bed_synchronized():
+STEP_DELAY = 0.0005  # 0.5ms
+
+def lower_bed_synchronized(pi):
     """
     Z축 양쪽 스텝모터 동기화하여 베드 내리기
 
@@ -350,75 +351,78 @@ def lower_bed_synchronized():
     - 한쪽이 먼저 도달하면 해당 쪽만 정지
     """
     # 방향 설정 (둘 다 DOWN)
-    GPIO.output(DIR_PIN_Z_LEFT, GPIO.LOW)
-    GPIO.output(DIR_PIN_Z_RIGHT, GPIO.LOW)
+    pi.write(DIR_PIN_Z_LEFT, 0)
+    pi.write(DIR_PIN_Z_RIGHT, 0)
 
     # 모터 활성화
-    GPIO.output(ENABLE_PIN_Z_LEFT, GPIO.LOW)
-    GPIO.output(ENABLE_PIN_Z_RIGHT, GPIO.LOW)
+    pi.write(ENABLE_PIN_Z_LEFT, 0)
+    pi.write(ENABLE_PIN_Z_RIGHT, 0)
 
     logger.info("베드 내리기 시작")
 
     while True:
-        # 리미트 스위치 상태 확인
-        left_down = GPIO.input(LIMIT_SW_Z_LEFT_DOWN)
-        right_down = GPIO.input(LIMIT_SW_Z_RIGHT_DOWN)
+        left_down = (pi.read(LIMIT_SW_Z_LEFT_DOWN) == 0)
+        right_down = (pi.read(LIMIT_SW_Z_RIGHT_DOWN) == 0)
 
-        # 둘 다 도달하면 정지
         if left_down and right_down:
             logger.info("베드 하강 완료 (양쪽 도달)")
             break
 
-        # 아직 도달 안 한 쪽만 계속 이동
-        if not left_down:
-            GPIO.output(STEP_PIN_Z_LEFT, GPIO.HIGH)
-        if not right_down:
-            GPIO.output(STEP_PIN_Z_RIGHT, GPIO.HIGH)
+        step_left = not left_down
+        step_right = not right_down
 
-        time.sleep(0.0005)  # 0.5ms
+        if step_left:
+            pi.write(STEP_PIN_Z_LEFT, 1)
+        if step_right:
+            pi.write(STEP_PIN_Z_RIGHT, 1)
 
-        GPIO.output(STEP_PIN_Z_LEFT, GPIO.LOW)
-        GPIO.output(STEP_PIN_Z_RIGHT, GPIO.LOW)
+        time.sleep(STEP_DELAY)
 
-        time.sleep(0.0005)
+        if step_left:
+            pi.write(STEP_PIN_Z_LEFT, 0)
+        if step_right:
+            pi.write(STEP_PIN_Z_RIGHT, 0)
 
-    # 베드 수평 확인
+        time.sleep(STEP_DELAY)
+
     if left_down != right_down:
-        logger.warning("⚠️ 베드가 기울어져 있을 수 있습니다!")
-        # 필요 시 보정 로직 추가
+        logger.warning("⚠️ 베드가 기울어져 있을 수 있습니다! (좌/우 리미트 스위치 비동기)")
 
 
-def raise_bed_synchronized():
+def raise_bed_synchronized(pi):
     """Z축 양쪽 스텝모터 동기화하여 베드 올리기"""
-    # 방향 설정 (둘 다 UP)
-    GPIO.output(DIR_PIN_Z_LEFT, GPIO.HIGH)
-    GPIO.output(DIR_PIN_Z_RIGHT, GPIO.HIGH)
+    pi.write(DIR_PIN_Z_LEFT, 1)
+    pi.write(DIR_PIN_Z_RIGHT, 1)
 
-    # 모터 활성화
-    GPIO.output(ENABLE_PIN_Z_LEFT, GPIO.LOW)
-    GPIO.output(ENABLE_PIN_Z_RIGHT, GPIO.LOW)
+    pi.write(ENABLE_PIN_Z_LEFT, 0)
+    pi.write(ENABLE_PIN_Z_RIGHT, 0)
 
     logger.info("베드 올리기 시작")
 
     while True:
-        left_up = GPIO.input(LIMIT_SW_Z_LEFT_UP)
-        right_up = GPIO.input(LIMIT_SW_Z_RIGHT_UP)
+        left_up = (pi.read(LIMIT_SW_Z_LEFT_UP) == 0)
+        right_up = (pi.read(LIMIT_SW_Z_RIGHT_UP) == 0)
 
         if left_up and right_up:
             logger.info("베드 상승 완료 (양쪽 도달)")
             break
 
-        if not left_up:
-            GPIO.output(STEP_PIN_Z_LEFT, GPIO.HIGH)
-        if not right_up:
-            GPIO.output(STEP_PIN_Z_RIGHT, GPIO.HIGH)
+        step_left = not left_up
+        step_right = not right_up
 
-        time.sleep(0.0005)
+        if step_left:
+            pi.write(STEP_PIN_Z_LEFT, 1)
+        if step_right:
+            pi.write(STEP_PIN_Z_RIGHT, 1)
 
-        GPIO.output(STEP_PIN_Z_LEFT, GPIO.LOW)
-        GPIO.output(STEP_PIN_Z_RIGHT, GPIO.LOW)
+        time.sleep(STEP_DELAY)
 
-        time.sleep(0.0005)
+        if step_left:
+            pi.write(STEP_PIN_Z_LEFT, 0)
+        if step_right:
+            pi.write(STEP_PIN_Z_RIGHT, 0)
+
+        time.sleep(STEP_DELAY)
 ```
 
 ### 2-5. OHT 제어 메인 로직 (10단계 시퀀스)
@@ -426,7 +430,7 @@ def raise_bed_synchronized():
 ```python
 # raspberry_pi/oht_controller.py
 
-import RPi.GPIO as GPIO
+import pigpio
 import requests
 import time
 import logging
@@ -441,101 +445,73 @@ class OHTController:
 
     def __init__(self, server_url):
         self.server_url = server_url
-        self.current_position = 'WAREHOUSE'  # 초기 위치
+        self.current_position = 'WAREHOUSE'
 
-        # GPIO 초기화
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setwarnings(False)
+        self.pi = pigpio.pi()
+        if not self.pi.connected:
+            raise RuntimeError("pigpio 데몬에 연결할 수 없습니다. 'sudo pigpiod' 확인")
 
-        # 모터 초기화
-        self.stepper_x = StepperMotorA4988(STEP_PIN_X, DIR_PIN_X, ENABLE_PIN_X)
-        self.stepper_z_left = StepperMotorA4988(STEP_PIN_Z_LEFT, DIR_PIN_Z_LEFT, ENABLE_PIN_Z_LEFT)
-        self.stepper_z_right = StepperMotorA4988(STEP_PIN_Z_RIGHT, DIR_PIN_Z_RIGHT, ENABLE_PIN_Z_RIGHT)
-        self.servo_latch = ServoMotor(SERVO_PIN_LATCH)
+        self._configure_inputs()
 
-        # 센서 초기화
-        self._setup_sensors()
+        self.stepper_x = StepperMotorA4988(self.pi, STEP_PIN_X, DIR_PIN_X, ENABLE_PIN_X)
+        self.stepper_z_left = StepperMotorA4988(self.pi, STEP_PIN_Z_LEFT, DIR_PIN_Z_LEFT, ENABLE_PIN_Z_LEFT)
+        self.stepper_z_right = StepperMotorA4988(self.pi, STEP_PIN_Z_RIGHT, DIR_PIN_Z_RIGHT, ENABLE_PIN_Z_RIGHT)
+        self.servo_latch = ServoMotor(self.pi, SERVO_PIN_LATCH)
 
-        # 긴급 정지 버튼
-        GPIO.setup(EMERGENCY_STOP_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.add_event_detect(EMERGENCY_STOP_PIN, GPIO.FALLING,
-                              callback=self.emergency_stop, bouncetime=300)
+        self.emergency_cb = self.pi.callback(
+            EMERGENCY_STOP_PIN, pigpio.FALLING_EDGE, self.emergency_stop
+        )
 
-        logger.info("OHT Controller initialized")
+        logger.info("OHT Controller 초기화 완료")
 
-    def _setup_sensors(self):
-        """센서 핀 설정"""
-        # X축 리미트 스위치
-        GPIO.setup(LIMIT_SW_WAREHOUSE, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(LIMIT_SW_END, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-        # Z축 리미트 스위치 (4개)
-        for pin in [LIMIT_SW_Z_LEFT_UP, LIMIT_SW_Z_LEFT_DOWN,
-                    LIMIT_SW_Z_RIGHT_UP, LIMIT_SW_Z_RIGHT_DOWN]:
-            GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+    def _configure_inputs(self):
+        """리미트 스위치 및 긴급 정지 입력 설정"""
+        for pin in [LIMIT_SW_WAREHOUSE, LIMIT_SW_END,
+                    LIMIT_SW_Z_LEFT_UP, LIMIT_SW_Z_LEFT_DOWN,
+                    LIMIT_SW_Z_RIGHT_UP, LIMIT_SW_Z_RIGHT_DOWN,
+                    EMERGENCY_STOP_PIN]:
+            self.pi.set_mode(pin, pigpio.INPUT)
+            self.pi.set_pull_up_down(pin, pigpio.PUD_UP)
 
     def execute_request(self, request):
-        """
-        OHT 요청 실행 (10단계 시퀀스)
-
-        Args:
-            request: {
-                'request_id': 'uuid',
-                'category': 'NORMAL' | 'COMPONENT_DEFECT' | 'SOLDER_DEFECT',
-                'is_auto': True/False
-            }
-        """
-        category = request['category']
+        """OHT 요청 실행 (10단계 시퀀스)"""
         request_id = request['request_id']
+        category = request['category']
 
         logger.info(f"🚀 OHT 작업 시작: {request_id} ({category})")
 
         try:
             start_time = time.time()
 
-            # 1단계: X축 박스로 이동
-            logger.info("1. X축 이동 중...")
+            self._ensure_home_position()
             self._move_to_box(category)
 
-            # 2단계: Z축 양쪽 동기화하여 베드 내리기
-            logger.info("2. 베드 하강 중...")
+            logger.info("3. 베드 하강 중 (박스 접근)...")
             self.lower_bed_synchronized()
 
-            # 3단계: 걸쇠 수평 위치 (0도)
-            logger.info("3. 걸쇠 수평 위치...")
-            self.servo_latch.unlock()
-
-            # 4단계: 대기 (박스 구멍에 핀 삽입 확인)
             logger.info("4. 대기 중 (1초)...")
             time.sleep(1)
 
-            # 5단계: 걸쇠 회전 잠금 (90도)
             logger.info("5. 걸쇠 잠금...")
             self.servo_latch.lock()
             time.sleep(0.5)
 
-            # 6단계: Z축 양쪽 동기화하여 베드 올리기 (박스 들어올림)
             logger.info("6. 베드 상승 중 (박스 픽업)...")
             self.raise_bed_synchronized()
 
-            # 7단계: X축 창고로 복귀
             logger.info("7. 창고로 복귀 중...")
             self._move_to_warehouse()
 
-            # 8단계: Z축 베드 내리기 (박스 내려놓기)
             logger.info("8. 베드 하강 중 (박스 내려놓기)...")
             self.lower_bed_synchronized()
 
-            # 9단계: 걸쇠 해제 (0도)
             logger.info("9. 걸쇠 해제...")
             self.servo_latch.unlock()
             time.sleep(0.5)
 
-            # 10단계: Z축 베드 올리기 (완료)
             logger.info("10. 베드 상승 (완료)...")
             self.raise_bed_synchronized()
 
-            # 완료 보고
             elapsed_time = time.time() - start_time
             self._report_completion(request_id, success=True)
             logger.info(f"✅ OHT 작업 완료: {request_id} (소요 시간: {elapsed_time:.2f}초)")
@@ -543,42 +519,48 @@ class OHTController:
         except Exception as e:
             logger.error(f"❌ OHT 작업 실패: {request_id} - {e}")
             self._report_completion(request_id, success=False, error=str(e))
+            self.emergency_stop(None, None, None)
+
+    def _ensure_home_position(self):
+        """창고 리미트 스위치 기준으로 홈 포지션 정렬"""
+        if self.pi.read(LIMIT_SW_WAREHOUSE) == 0:
+            return
+
+        logger.info("창고 리미트 스위치 탐색 중...")
+        while self.pi.read(LIMIT_SW_WAREHOUSE) == 1:
+            self.stepper_x.move_steps(20, 'CCW')
+            time.sleep(0.01)
+
+        logger.info("창고 위치 정렬 완료")
+        self.current_position = 'WAREHOUSE'
 
     def _move_to_box(self, category):
-        """X축 박스 위치로 이동 (스텝 카운팅)"""
+        """X축 박스 위치로 이동"""
         BOX_POSITIONS = {
-            'NORMAL': 5000,           # 박스1: 약 1m (예시)
-            'COMPONENT_DEFECT': 10000,  # 박스2: 약 2m
-            'SOLDER_DEFECT': 15000     # 박스3: 약 3m
+            'NORMAL': 5000,
+            'COMPONENT_DEFECT': 10000,
+            'SOLDER_DEFECT': 15000
         }
-
         target_steps = BOX_POSITIONS.get(category, 0)
         logger.info(f"박스로 이동: {category} (스텝: {target_steps})")
-
-        # 실제 구현: 스텝 이동
         self.stepper_x.move_steps(target_steps, 'CW')
         self.current_position = category
 
     def _move_to_warehouse(self):
         """X축 창고로 복귀 (홈 포지션)"""
         logger.info("창고로 복귀 중...")
-
-        # 창고 리미트 스위치까지 이동
-        while not GPIO.input(LIMIT_SW_WAREHOUSE):
-            self.stepper_x.move_steps(10, 'CCW')
+        while self.pi.read(LIMIT_SW_WAREHOUSE) == 1:
+            self.stepper_x.move_steps(20, 'CCW')
+            time.sleep(0.01)
 
         self.current_position = 'WAREHOUSE'
         logger.info("창고 도착")
 
     def lower_bed_synchronized(self):
-        """Z축 양쪽 동기화 베드 내리기 (위 코드 참조)"""
-        # ... (2-4 섹션 코드)
-        pass
+        lower_bed_synchronized(self.pi)
 
     def raise_bed_synchronized(self):
-        """Z축 양쪽 동기화 베드 올리기 (위 코드 참조)"""
-        # ... (2-4 섹션 코드)
-        pass
+        raise_bed_synchronized(self.pi)
 
     def _report_completion(self, request_id, success, error=None):
         """완료 보고"""
@@ -588,15 +570,17 @@ class OHTController:
                 'success': success,
                 'error': error
             }
-            requests.post(f"{self.server_url}/api/oht/complete",
-                         json=payload, timeout=5)
+            requests.post(
+                f"{self.server_url}/api/oht/complete",
+                json=payload,
+                timeout=5
+            )
         except Exception as e:
             logger.error(f"완료 보고 실패: {e}")
 
-    def emergency_stop(self, channel):
-        """긴급 정지"""
+    def emergency_stop(self, gpio, level, tick):
+        """긴급 정지 콜백"""
         logger.warning("🚨 긴급 정지 활성화!")
-        # 모든 모터 정지
         self.stepper_x.disable()
         self.stepper_z_left.disable()
         self.stepper_z_right.disable()
@@ -604,17 +588,12 @@ class OHTController:
     def run(self):
         """메인 루프 (Flask API 폴링)"""
         logger.info("OHT 컨트롤러 시작 (폴링 중...)")
-
         try:
             while True:
-                # 요청 확인 (5초마다)
                 request = self._check_for_requests()
-
                 if request:
                     self.execute_request(request)
-
                 time.sleep(5)
-
         except KeyboardInterrupt:
             logger.info("사용자에 의해 중지됨")
         finally:
@@ -635,9 +614,15 @@ class OHTController:
 
     def cleanup(self):
         """정리"""
+        logger.info("OHT 컨트롤러 종료 중...")
         self.servo_latch.cleanup()
-        GPIO.cleanup()
-        logger.info("GPIO 정리 완료")
+        self.stepper_x.disable()
+        self.stepper_z_left.disable()
+        self.stepper_z_right.disable()
+        if self.emergency_cb:
+            self.emergency_cb.cancel()
+        self.pi.stop()
+        logger.info("pigpio 정리 완료")
 
 
 if __name__ == "__main__":

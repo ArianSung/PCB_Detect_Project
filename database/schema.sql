@@ -148,8 +148,8 @@ CREATE TABLE IF NOT EXISTS box_status (
     category VARCHAR(50) NOT NULL COMMENT '분류 카테고리 (normal/component_defect/solder_defect)',
 
     -- 슬롯 상태
-    current_slot INT NOT NULL DEFAULT 0 COMMENT '현재 사용 중인 슬롯 번호 (0-1)',
-    max_slots INT NOT NULL DEFAULT 2 COMMENT '최대 슬롯 개수 (2개, 수직 2단)',
+    current_slot INT NOT NULL DEFAULT 0 COMMENT '현재 사용 중인 슬롯 번호 (0-4)',
+    max_slots INT NOT NULL DEFAULT 5 COMMENT '최대 슬롯 개수 (5개, 수평 배치)',
     is_full BOOLEAN NOT NULL DEFAULT FALSE COMMENT '박스 가득참 여부',
 
     -- 통계
@@ -163,13 +163,13 @@ CREATE TABLE IF NOT EXISTS box_status (
     INDEX idx_category (category),
     INDEX idx_is_full (is_full)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='로봇팔 박스 슬롯 상태 관리 테이블 (3개 박스 × 2개 슬롯 = 6개 슬롯, 폐기는 슬롯 관리 안 함)';
+COMMENT='로봇팔 박스 슬롯 상태 관리 테이블 (3개 박스 × 5개 슬롯 = 15개 슬롯, 폐기는 슬롯 관리 안 함)';
 
 -- 3개 박스 초기 데이터 삽입 (폐기는 제외)
 INSERT INTO box_status (box_id, category, max_slots) VALUES
-    ('NORMAL', 'normal', 2),
-    ('COMPONENT_DEFECT', 'component_defect', 2),
-    ('SOLDER_DEFECT', 'solder_defect', 2);
+    ('NORMAL', 'normal', 5),
+    ('COMPONENT_DEFECT', 'component_defect', 5),
+    ('SOLDER_DEFECT', 'solder_defect', 5);
 
 -- ========================================
 -- 6. 샘플 데이터 삽입 (테스트용)

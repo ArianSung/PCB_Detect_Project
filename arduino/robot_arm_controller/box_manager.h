@@ -64,11 +64,11 @@ bool getBoxCoordinate(const char* boxIdStr, int slotIndex, Coordinate &outCoord)
     return true;
   }
 
-  // 슬롯 인덱스 유효성 검사 (0-1)
-  if (slotIndex < 0 || slotIndex >= 2) {
+  // 슬롯 인덱스 유효성 검사 (0-4)
+  if (slotIndex < 0 || slotIndex >= 5) {
     Serial.print("[ERROR] Invalid slot index: ");
     Serial.print(slotIndex);
-    Serial.println(" (valid range: 0-1)");
+    Serial.println(" (valid range: 0-4)");
     return false;
   }
 
