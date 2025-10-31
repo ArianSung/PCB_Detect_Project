@@ -41,8 +41,10 @@
 
 **시스템 구성:**
 - 추론 서버: GPU PC (원격지) - Flask + YOLO v8 + MySQL
-- 웹캠 클라이언트: 라즈베리파이 4 (3대) - 좌/우 카메라 + OHT 제어
-- 모니터링 앱: Windows PC - C# WinForms
+- 웹캠 클라이언트: 라즈베리파이 4 (2대) - 좌/우 카메라
+- OHT 제어: 라즈베리파이 4 (1대) - GPIO 제어 (릴레이 모듈 → 분류 게이트)
+- 로봇팔 시스템: Arduino 기반 - 박스 슬롯 관리 (3개 박스 × 5개 슬롯)
+- 모니터링 앱: Windows PC - C# WinForms (박스 상태, OHT 제어, 사용자 관리)
 - 네트워크: Tailscale VPN (100.x.x.x)
 
 위 문서들을 읽고, 다음 질문에 답변해줘:
@@ -115,17 +117,19 @@
 
 **읽어야 할 핵심 문서:**
 1. `docs/Flask_Server_Setup.md` - Flask 서버 구축 가이드 (필수!)
-2. `docs/API_Contract.md` - 공식 API 명세서 (팀 전체 계약)
-3. `database/README.md` - MySQL 데이터베이스 설정 가이드
-4. `database/schema.sql` - 데이터베이스 스키마
-5. `server/.env.example` - 환경 변수 템플릿
+2. `docs/API_Contract.md` - 공식 API 명세서 (팀 전체 계약, 박스 상태 API 포함)
+3. `docs/MySQL_Database_Design.md` - MySQL 데이터베이스 설계 (11개 테이블)
+4. `database/schema.sql` - 데이터베이스 스키마 (box_status, oht_operations, user_logs 포함)
+5. `database/create_users.sql` - 데이터베이스 사용자 생성 스크립트 (5개 계정)
+6. `server/.env.example` - 환경 변수 템플릿
 
 **개발 환경:**
 - OS: Ubuntu 22.04 (GPU PC)
 - GPU: NVIDIA RTX 4080 Super
 - Python: 3.10 (Conda 가상환경 `pcb_defect`)
 - 데이터베이스: MySQL 8.0 (Windows PC - Tailscale 100.x.x.x:3306)
-- DB 계정: `pcb_server` / 비밀번호: `1234`
+- DB 계정: `pcb_server` / 비밀번호: `1234` (읽기/쓰기/업데이트 권한)
+- DB 테이블: 11개 (inspections, defect_images, statistics_daily/hourly, system_logs, system_config, users, alerts, box_status, oht_operations, user_logs)
 
 **환경 변수 설정 (server/.env):**
 ```
@@ -202,61 +206,99 @@ yolo/
 
 ### 3.3. 라즈베리파이 팀
 
-**사용 시기**: 라즈베리파이 웹캠 클라이언트 개발을 시작할 때
+**사용 시기**: 라즈베리파이 웹캠 클라이언트 또는 OHT 제어 시스템 개발을 시작할 때
 
 ```
 안녕! 나는 PCB 불량 검사 시스템의 라즈베리파이 팀원이야.
 
-**내 역할:**
+**라즈베리파이 구성 (총 3대):**
+- **라즈베리파이 1 (좌측 웹캠)**: 웹캠 프레임 캡처 + Flask API 호출
+- **라즈베리파이 2 (우측 웹캠)**: 웹캠 프레임 캡처 + Flask API 호출
+- **라즈베리파이 3 (OHT 제어)**: GPIO 제어 (릴레이 모듈 → 분류 게이트) + Arduino 로봇팔 통신
+
+**공통 역할 (웹캠 전용, 라즈베리파이 1·2):**
 - 웹캠에서 PCB 프레임 캡처 (OpenCV)
 - JPEG 인코딩 및 Base64 변환
 - Flask API 호출 (`/predict`)
-- GPIO 핀 제어 (릴레이 모듈 → 불량 분류 게이트)
+
+**OHT 제어 전용 (라즈베리파이 3):**
+- GPIO 핀 제어 (릴레이 모듈 → 분류 게이트)
+- Arduino 로봇팔과 시리얼 통신
+- Flask API 호출 (`/box_status` 조회, OHT 동작 트리거)
 
 **읽어야 할 핵심 문서:**
 1. `docs/RaspberryPi_Setup.md` - 라즈베리파이 환경 설정 및 클라이언트 가이드
-2. `docs/API_Contract.md` - Flask API 명세서
-3. `raspberry_pi/.env.example` - 환경 변수 템플릿
-4. `tests/api/mock_server.py` - Mock Flask 서버 (독립 개발용)
+2. `docs/RaspberryPi_OHT_Setup.md` - OHT 제어 시스템 가이드 (라즈베리파이 3 전용)
+3. `docs/API_Contract.md` - Flask API 명세서 (박스 상태 API 포함)
+4. `raspberry_pi/.env.example` - 환경 변수 템플릿
+5. `tests/api/mock_server.py` - Mock Flask 서버 (독립 개발용)
 
 **개발 환경:**
-- 하드웨어: Raspberry Pi 4 Model B (4GB)
+- 하드웨어: Raspberry Pi 4 Model B (4GB) × 3대
 - OS: Raspberry Pi OS (64-bit)
-- 웹캠: USB 웹캠 (640x480)
-- 릴레이: 4채널 릴레이 모듈 (라즈베리파이 1만 해당)
+- 웹캠: USB 웹캠 (640x480) - 라즈베리파이 1·2만
+- 릴레이: 4채널 릴레이 모듈 (라즈베리파이 3만 해당)
+- Arduino: Arduino Uno/Mega (로봇팔 제어, 라즈베리파이 3와 시리얼 통신)
 - 네트워크: Tailscale VPN (100.x.x.x)
 
 **환경 변수 설정 (raspberry_pi/.env):**
+
+**웹캠 전용 (라즈베리파이 1·2):**
 ```
-CAMERA_ID=left             # 또는 right
+CAMERA_ID=left             # 또는 right (라즈베리파이 2는 right)
 CAMERA_INDEX=0
 SERVER_URL=http://100.x.x.x:5000
 FPS=10
 JPEG_QUALITY=85
-GPIO_ENABLED=true          # 라즈베리파이 1: true, 라즈베리파이 2·3: false
+GPIO_ENABLED=false         # 웹캠 전용은 GPIO 비활성화
 ```
 
-**GPIO 핀 매핑 (BCM 모드, 라즈베리파이 1만):**
-- GPIO 17: 부품 불량
-- GPIO 27: 납땜 불량
-- GPIO 22: 폐기
-- GPIO 23: 정상
+**OHT 제어 전용 (라즈베리파이 3):**
+```
+CAMERA_ID=oht              # OHT 제어 전용
+SERVER_URL=http://100.x.x.x:5000
+GPIO_ENABLED=true          # GPIO 활성화
+ARDUINO_PORT=/dev/ttyACM0  # Arduino 시리얼 포트
+ARDUINO_BAUD=9600          # 시리얼 통신 속도
+```
+
+**GPIO 핀 매핑 (BCM 모드, 라즈베리파이 3 전용):**
+- GPIO 17: 부품 불량 게이트
+- GPIO 27: 납땜 불량 게이트
+- GPIO 22: 폐기 게이트
+- GPIO 23: 정상 게이트
 
 **첫 번째 작업:**
+
+**웹캠 전용 (라즈베리파이 1·2):**
 1. 웹캠 테스트:
    ```python
    python3 -c "import cv2; cap = cv2.VideoCapture(0); print('OK' if cap.isOpened() else 'Error')"
    ```
-2. GPIO 테스트 (라즈베리파이 1만):
-   ```python
-   python3 -c "import RPi.GPIO as GPIO; GPIO.setmode(GPIO.BCM); print('GPIO OK')"
+2. Flask API 연결 테스트:
+   ```bash
+   curl http://100.x.x.x:5000/health
    ```
 3. Mock 서버로 테스트 (Flask 서버 없을 때):
    - GPU PC에서 `python tests/api/mock_server.py` 실행
-   - 라즈베리파이에서 `python3 raspberry_pi/camera_client.py` 실행
+   - 라즈베리파이에서 `python3 raspberry_pi/camera_client.py left` 또는 `right` 실행
 
-위 정보를 바탕으로, 라즈베리파이에서 웹캠과 GPIO를 테스트하고 Flask API와 통신하는 과정을 안내해줘.
-특히 Flask 서버가 아직 없을 때 Mock 서버로 독립 개발하는 방법을 알려줘.
+**OHT 제어 전용 (라즈베리파이 3):**
+1. GPIO 테스트:
+   ```python
+   python3 -c "import RPi.GPIO as GPIO; GPIO.setmode(GPIO.BCM); print('GPIO OK')"
+   ```
+2. Arduino 시리얼 통신 테스트:
+   ```python
+   python3 -c "import serial; s = serial.Serial('/dev/ttyACM0', 9600); print('Arduino OK')"
+   ```
+3. Flask API 박스 상태 조회 테스트:
+   ```bash
+   curl http://100.x.x.x:5000/box_status
+   ```
+
+위 정보를 바탕으로, 라즈베리파이에서 웹캠/GPIO/Arduino를 테스트하고 Flask API와 통신하는 과정을 안내해줘.
+특히 웹캠 전용과 OHT 제어 전용의 차이점을 명확히 설명해줘.
 ```
 
 ### 3.4. C# 앱 팀
@@ -268,25 +310,30 @@ GPIO_ENABLED=true          # 라즈베리파이 1: true, 라즈베리파이 2·3
 
 **내 역할:**
 - WinForms UI 개발 (7개 화면)
-- Flask REST API 호출하여 데이터 조회
-- MySQL 데이터베이스 연결 (검사 이력 조회)
-- LiveCharts로 실시간 차트 표시
+- Flask REST API 호출하여 데이터 조회 (검사 이력, 박스 상태, OHT 운영 등)
+- MySQL 데이터베이스 연결 (검사 이력, 통계, 사용자 관리, OHT 이력 조회)
+- LiveCharts로 실시간 차트 표시 (검사 통계, 박스 사용률)
 - Excel 내보내기 기능 (EPPlus)
 - 권한 시스템 구현 (Admin/Operator/Viewer)
+- 박스 상태 모니터링 및 OHT 호출 기능
+- 사용자 활동 로그 조회 및 관리
 
 **읽어야 할 핵심 문서:**
 1. `docs/CSharp_WinForms_Guide.md` - C# WinForms 기본 개발 가이드
 2. `docs/CSharp_WinForms_Design_Specification.md` - UI 설계 명세서 (7개 화면, 권한 시스템)
-3. `docs/API_Contract.md` - Flask API 명세서
-4. `database/README.md` - MySQL 데이터베이스 설정 가이드
-5. `csharp_winforms/.env.example` - 환경 변수 템플릿
+3. `docs/CSharp_WinForms_UI_Design_Guide.md` - UI 디자인 가이드 (박스 상태, OHT 제어 UI 포함)
+4. `docs/API_Contract.md` - Flask API 명세서 (박스 상태 API, OHT API 포함)
+5. `docs/MySQL_Database_Design.md` - MySQL 데이터베이스 설계 (11개 테이블)
+6. `database/create_users.sql` - 데이터베이스 사용자 생성 스크립트
+7. `csharp_winforms/.env.example` - 환경 변수 템플릿
 
 **개발 환경:**
 - OS: Windows 10 / 11
 - IDE: Visual Studio 2022 Community
 - .NET SDK: .NET 6.0
 - 데이터베이스: MySQL 8.0 (Windows PC - localhost 또는 Tailscale 100.x.x.x:3306)
-- DB 계정: `pcb_viewer` / 비밀번호: `1234`
+- DB 계정: `pcb_viewer` / 비밀번호: `1234` (읽기 전용 권한)
+- DB 테이블: 11개 (inspections, defect_images, statistics_daily/hourly, system_logs, system_config, users, alerts, box_status, oht_operations, user_logs)
 
 **NuGet 패키지:**
 - `MySql.Data` (8.0.32) - MySQL 연결
@@ -304,14 +351,15 @@ DB_USER=pcb_viewer
 DB_PASSWORD=1234
 ```
 
-**7개 화면:**
+**7개 화면 (+박스/OHT 기능):**
 1. 로그인 화면 (권한 시스템)
-2. 메인 대시보드 (실시간 통계)
+2. 메인 대시보드 (실시간 통계 + 박스 상태 요약)
 3. 검사 이력 조회 (DataGridView + 페이지네이션)
 4. 상세 결과 뷰어 (이미지 + 불량 정보)
-5. 통계 및 차트 (LiveCharts)
-6. 설정 화면 (Admin 전용)
-7. Excel 내보내기
+5. 통계 및 차트 (LiveCharts - 검사 통계, 박스 사용률, OHT 운영 통계)
+6. 박스 상태 모니터링 & OHT 제어 (3개 박스 슬롯 상태, 수동 OHT 호출, 운영 이력)
+7. 설정 화면 (Admin 전용 - 사용자 관리, 시스템 설정, 박스 리셋)
+8. Excel 내보내기 (검사 이력, 통계, OHT 운영 이력)
 
 **첫 번째 작업:**
 1. Visual Studio에서 프로젝트 열기
@@ -323,15 +371,22 @@ DB_PASSWORD=1234
    conn.Open();
    Console.WriteLine("MySQL 연결 성공!");
    ```
-5. Flask API 호출 테스트:
+5. Flask API 호출 테스트 (health check):
    ```csharp
    var client = new HttpClient();
    var response = await client.GetAsync("http://100.x.x.x:5000/health");
    Console.WriteLine(await response.Content.ReadAsStringAsync());
    ```
+6. Flask API 박스 상태 조회 테스트:
+   ```csharp
+   var response = await client.GetAsync("http://100.x.x.x:5000/box_status");
+   var json = await response.Content.ReadAsStringAsync();
+   var boxStatus = JsonConvert.DeserializeObject<BoxStatusResponse>(json);
+   Console.WriteLine($"박스 개수: {boxStatus.Boxes.Count}");
+   ```
 
 위 정보를 바탕으로, C# WinForms 프로젝트를 처음 설정하고 MySQL 및 Flask API 연결을 테스트하는 과정을 안내해줘.
-특히 7개 화면의 구조와 권한 시스템을 어떻게 설계할지도 설명해줘.
+특히 8개 화면의 구조, 권한 시스템, 그리고 박스 상태/OHT 제어 기능을 어떻게 설계할지도 설명해줘.
 ```
 
 ---
@@ -650,5 +705,12 @@ DB_PASSWORD=1234
 
 ---
 
-**마지막 업데이트**: 2025-10-25
+**마지막 업데이트**: 2025-10-31
 **문서 관리**: 팀 리더
+**주요 변경사항**:
+- 시스템 구성 업데이트: 라즈베리파이 3대 구분 (웹캠 2대, OHT 제어 1대), 로봇팔/OHT 시스템 추가
+- 데이터베이스 스키마 업데이트: 11개 테이블 (box_status, oht_operations, user_logs 추가)
+- API 엔드포인트 업데이트: 박스 상태 관리 API 3개 추가
+- C# WinForms 기능 업데이트: 박스 상태 모니터링, OHT 제어, 사용자 활동 로그 추가
+- Flask 서버 역할 업데이트: 박스 상태 관리, OHT 운영 이력 저장
+- 데이터베이스 사용자 계정 업데이트: 5개 계정 (pcb_admin, pcb_server, pcb_viewer, pcb_data, pcb_test)
