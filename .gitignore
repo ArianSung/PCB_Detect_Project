@@ -60,7 +60,11 @@ csharp_winforms/**/obj/
 *.env
 !.env.example
 
+# Visual Studio temporary files
+.vs/
+
 # 기타
 *.zip
 *.tar.gz
 *.out
+
