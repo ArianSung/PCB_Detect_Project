@@ -249,28 +249,24 @@ CREATE TABLE IF NOT EXISTS box_status (
 COMMENT='로봇팔 박스 슬롯 상태 관리 테이블 (3개 박스 × 5개 슬롯 = 15개 슬롯, 폐기는 슬롯 관리 안 함)';
 
 -- ========================================
--- 10. box_status_history (박스 상태 이력)
+-- 10. defect_rate_history (불량률 추이 이력)
 -- ========================================
 
-CREATE TABLE IF NOT EXISTS box_status_history (
+CREATE TABLE IF NOT EXISTS defect_rate_history (
     id INT AUTO_INCREMENT PRIMARY KEY,
 
-    -- 박스 정보
-    box_id VARCHAR(20) NOT NULL COMMENT '박스 ID (NORMAL, COMPONENT_DEFECT, SOLDER_DEFECT)',
-
-    -- 상태 정보
-    current_slot INT NOT NULL COMMENT '당시 사용 중인 슬롯 번호 (0-4)',
-    total_pcb_count INT NOT NULL COMMENT '당시 박스에 저장된 총 PCB 개수',
-    is_full BOOLEAN NOT NULL DEFAULT FALSE COMMENT '당시 박스 가득참 여부',
+    -- 불량률 정보
+    defect_rate DECIMAL(5,2) NOT NULL COMMENT '불량률 (%)',
+    total_inspections INT NOT NULL COMMENT '해당 시점의 누적 총 검사 수',
+    defect_count INT NOT NULL COMMENT '해당 시점의 누적 불량 수',
 
     -- 타임스탬프
     recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '기록 시각',
 
     -- 인덱스
-    INDEX idx_box_recorded (box_id, recorded_at),
     INDEX idx_recorded_at (recorded_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='박스 상태 시간대별 이력 (모니터링 그래프, 이탈 포인트 분석용)';
+COMMENT='시간대별 불량률 추이 (불량률 모니터링 그래프, 이탈 포인트 분석용)';
 
 -- ========================================
 -- 11. oht_operations (OHT 운영 이력)
@@ -385,9 +381,9 @@ INSERT INTO system_config (config_key, config_value, description) VALUES
 ('alert_defect_rate_threshold', '10.0', '알람 발생 불량률 임계값 (%)'),
 -- 목표 설정
 ('daily_inspection_target', '1000', '일일 목표 검사 수 (달성률 계산용)'),
--- 박스 모니터링 임계값
-('box_upper_threshold', '7', '박스 상한선 (이탈 포인트 감지용)'),
-('box_lower_threshold', '3', '박스 하한선 (이탈 포인트 감지용)'),
+-- 불량률 모니터링 임계값
+('defect_rate_upper_threshold', '7.0', '불량률 상한선 (%, 이탈 포인트 감지용)'),
+('defect_rate_lower_threshold', '3.0', '불량률 하한선 (%, 이탈 포인트 감지용)'),
 -- 세션 및 로그 설정
 ('session_timeout_minutes', '15', '세션 타임아웃 (분)'),
 ('log_level', 'INFO', '로그 레벨 (DEBUG, INFO, WARNING, ERROR, CRITICAL)'),
@@ -654,7 +650,7 @@ SELECT '7. system_config (시스템 설정)' AS '';
 SELECT '8. users (사용자/작업자)' AS '';
 SELECT '9. alerts (알람/알림)' AS '';
 SELECT '10. box_status (로봇팔 박스 상태 관리)' AS '';
-SELECT '11. box_status_history (박스 상태 이력) ⭐ NEW' AS '';
+SELECT '11. defect_rate_history (불량률 추이 이력) ⭐ NEW' AS '';
 SELECT '12. oht_operations (OHT 운영 이력)' AS '';
 SELECT '13. user_logs (사용자 활동 로그)' AS '';
 SELECT '===================================================' AS '';
