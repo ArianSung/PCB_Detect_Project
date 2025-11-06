@@ -535,21 +535,19 @@ namespace pcb_monitoring_program.DatabaseManager
 
         #endregion
 
-        #region 박스 상태 이력 (Box Status History)
+        #region 불량률 추이 이력 (Defect Rate History)
 
         /// <summary>
-        /// 박스 상태 이력 조회 (시간대별)
+        /// 불량률 추이 이력 조회 (시간대별)
         /// </summary>
-        /// <param name="boxId">박스 ID (NORMAL, COMPONENT_DEFECT, SOLDER_DEFECT)</param>
         /// <param name="startDate">시작 날짜</param>
         /// <param name="endDate">종료 날짜</param>
-        /// <returns>박스 상태 이력 리스트</returns>
-        public List<BoxStatusHistory> GetBoxStatusHistory(
-            string boxId,
+        /// <returns>불량률 추이 이력 리스트</returns>
+        public List<DefectRateHistory> GetDefectRateHistory(
             DateTime startDate,
             DateTime endDate)
         {
-            List<BoxStatusHistory> history = new List<BoxStatusHistory>();
+            List<DefectRateHistory> history = new List<DefectRateHistory>();
 
             try
             {
@@ -558,15 +556,13 @@ namespace pcb_monitoring_program.DatabaseManager
                     conn.Open();
 
                     string query = @"
-                        SELECT id, box_id, current_slot, total_pcb_count, is_full, recorded_at
-                        FROM box_status_history
-                        WHERE box_id = @boxId
-                          AND recorded_at BETWEEN @startDate AND @endDate
+                        SELECT id, defect_rate, total_inspections, defect_count, recorded_at
+                        FROM defect_rate_history
+                        WHERE recorded_at BETWEEN @startDate AND @endDate
                         ORDER BY recorded_at ASC";
 
                     using (MySqlCommand cmd = new MySqlCommand(query, conn))
                     {
-                        cmd.Parameters.AddWithValue("@boxId", boxId);
                         cmd.Parameters.AddWithValue("@startDate", startDate);
                         cmd.Parameters.AddWithValue("@endDate", endDate);
 
@@ -574,13 +570,12 @@ namespace pcb_monitoring_program.DatabaseManager
                         {
                             while (reader.Read())
                             {
-                                history.Add(new BoxStatusHistory
+                                history.Add(new DefectRateHistory
                                 {
                                     Id = reader.GetInt32("id"),
-                                    BoxId = reader.GetString("box_id"),
-                                    CurrentSlot = reader.GetInt32("current_slot"),
-                                    TotalPcbCount = reader.GetInt32("total_pcb_count"),
-                                    IsFull = reader.GetBoolean("is_full"),
+                                    DefectRate = reader.GetDecimal("defect_rate"),
+                                    TotalInspections = reader.GetInt32("total_inspections"),
+                                    DefectCount = reader.GetInt32("defect_count"),
                                     RecordedAt = reader.GetDateTime("recorded_at")
                                 });
                             }
@@ -590,11 +585,11 @@ namespace pcb_monitoring_program.DatabaseManager
             }
             catch (MySqlException ex)
             {
-                Console.WriteLine($"[박스 상태 이력 조회 실패] {ex.Message}");
+                Console.WriteLine($"[불량률 추이 이력 조회 실패] {ex.Message}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[박스 상태 이력 조회 오류] {ex.Message}");
+                Console.WriteLine($"[불량률 추이 이력 조회 오류] {ex.Message}");
             }
 
             return history;
