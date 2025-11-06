@@ -8,11 +8,11 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace pcb_monitoring_program
+namespace pcb_monitoring_program.Views.Statistics
 {
-    public partial class LoginView : UserControl
+    public partial class StatisticsView : UserControl
     {
-        public LoginView()
+        public StatisticsView()
         {
             InitializeComponent();
         }

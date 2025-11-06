@@ -1,6 +1,6 @@
-﻿namespace pcb_monitoring_program
+﻿namespace pcb_monitoring_program.Views.Statistics
 {
-    partial class LoginView
+    partial class StatisticsView
     {
         /// <summary> 
         /// 필수 디자이너 변수입니다.
@@ -30,13 +30,13 @@
         {
             SuspendLayout();
             // 
-            // login
+            // StatisticsView
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(64, 64, 64);
-            Name = "login";
-            Size = new Size(1920, 1080);
+            Name = "StatisticsView";
+            Size = new Size(1600, 900);
             ResumeLayout(false);
         }
 
