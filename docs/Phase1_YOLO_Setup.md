@@ -1,7 +1,12 @@
-# Phase 1: YOLO v8 환경 구축 및 테스트 가이드
+# Phase 1: YOLO v8 환경 구축 및 테스트 가이드 ⭐ (이중 모델 아키텍처)
 
 ## 목표
 WSL2 환경에서 YOLO v8을 설치하고 기본 테스트를 완료하여 프로젝트 개발 환경을 준비합니다.
+
+**프로젝트 아키텍처**: 이중 YOLO 모델
+- **Component Model**: FPIC-Component 데이터셋 (25개 클래스, 6,260 이미지)
+- **Solder Model**: SolDef_AI 데이터셋 (5-6개 클래스, 429/1,150 이미지)
+- **추론 방식**: 병렬 추론 + Flask 서버 결과 융합
 
 ---
 
@@ -313,18 +318,42 @@ pip freeze > requirements.txt
 `requirements.txt` 파일 수동 작성:
 
 ```txt
+# 딥러닝 프레임워크
 torch>=2.0.0
 torchvision>=0.15.0
+
+# YOLO v8 (이중 모델 아키텍처)
 ultralytics>=8.0.0
+
+# 컴퓨터 비전
 opencv-python-headless>=4.8.0
-matplotlib>=3.7.0
 pillow>=10.0.0
-pyyaml>=6.0
-scipy>=1.10.0
+
+# 데이터 처리 및 시각화
+matplotlib>=3.7.0
 pandas>=2.0.0
 seaborn>=0.12.0
+numpy>=1.24.0
+
+# 설정 및 유틸리티
+pyyaml>=6.0
+scipy>=1.10.0
 tensorboard>=2.13.0
+
+# Flask 서버 (추론 서버)
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# 데이터베이스
+pymysql>=1.1.0
+
+# 라즈베리파이 GPIO (라즈베리파이에서만)
+# RPi.GPIO>=0.7.1  # 주석 처리 (라즈베리파이에서 설치)
 ```
+
+**참고**:
+- ⚠️ **Anomalib은 제외**: 이중 YOLO 모델 아키텍처에서는 이상 탐지 라이브러리 불필요
+- RTX 4080 Super (16GB VRAM)로 두 모델 동시 로드 가능 (~8GB VRAM 사용)
 
 ---
 
@@ -380,10 +409,16 @@ for model_name in models:
 - **YOLOv8l (Large)** - 정확도와 속도의 최적 균형 ⭐⭐⭐⭐⭐
 - YOLOv8x (Extra Large) - 최고 정확도 필요 시 ⭐⭐⭐⭐
 
+**이중 모델 아키텍처 고려사항**:
+- RTX 4080 Super (16GB VRAM)로 **두 모델 동시 로드 가능**
+- Component Model (YOLOv8l): ~5-6GB VRAM
+- Solder Model (YOLOv8l): ~4-5GB VRAM
+- **총 VRAM 사용량**: ~8GB (여유 충분)
+
 **이유**:
 - RTX 4080 Super (16GB VRAM)로 실시간 처리 충분
 - 원격 연결 시에도 100-200ms 처리 (목표 300ms 대비 충분한 여유)
-- 양면 동시 검사 시에도 50-66 FPS 달성 가능 (로컬 환경)
+- 양면 동시 검사 + 병렬 추론: 80-100ms/request 달성
 - 작은 납땜 불량(브릿지, 크랙)도 높은 정확도로 검출
 - 디팔렛타이저 분류 시간 (2.5초) 내에 충분히 처리 완료
 
@@ -463,16 +498,36 @@ sudo apt install wget curl -y
 
 Phase 1이 완료되면 다음 단계로 진행:
 
-1. **Phase 2 시작**: PCB 불량 데이터셋 수집
-   - `Dataset_Guide.md` 참고
-   - Kaggle, Roboflow에서 PCB 데이터 검색
-   - 데이터 다운로드 및 분석
+1. **Phase 2 시작**: PCB 불량 데이터셋 수집 (이중 모델)
+   - `Dataset_Guide.md` 참고 ⭐
+   - FPIC-Component 데이터셋 다운로드 (Roboflow)
+   - SolDef_AI 데이터셋 다운로드 (Roboflow)
+   - 각 데이터셋을 YOLO 형식으로 변환
 
-2. **프로젝트 폴더 구조 생성**:
+2. **프로젝트 폴더 구조 생성** (이중 모델):
 ```bash
 cd ~/work_project
-mkdir -p data/raw data/processed/{train,val,test} models/yolo notebooks src results
+
+# Component Model 데이터
+mkdir -p data/processed/fpic_component/{train,val,test}/images
+mkdir -p data/processed/fpic_component/{train,val,test}/labels
+
+# Solder Model 데이터
+mkdir -p data/processed/soldef_ai/{train,val,test}/images
+mkdir -p data/processed/soldef_ai/{train,val,test}/labels
+
+# 모델 저장 폴더
+mkdir -p models/component_model models/solder_model
+
+# 결과 및 로그
+mkdir -p results logs
 ```
+
+3. **이중 모델 학습 준비**:
+   - `YOLO_Training_Guide.md` 참고
+   - Component Model 학습 (FPIC-Component, 25 클래스)
+   - Solder Model 학습 (SolDef_AI, 5-6 클래스)
+   - 각 모델을 독립적으로 학습 및 평가
 
 ---
 
@@ -545,5 +600,13 @@ yolo export model=yolov8n.pt format=engine
 ---
 
 **작성일**: 2025-10-22
-**버전**: 1.0
-**다음 단계**: `Dataset_Guide.md`
+**수정일**: 2025-10-31
+**버전**: 2.0 (이중 YOLO 모델 아키텍처)
+**다음 단계**: `Dataset_Guide.md` (FPIC-Component + SolDef_AI)
+
+**주요 변경사항 (v2.0)**:
+- ✅ 이중 YOLO 모델 아키텍처 적용
+- ✅ Anomalib 제거 (YOLO v8 두 모델만 사용)
+- ✅ Component Model + Solder Model 독립 학습
+- ✅ VRAM 요구사항 업데이트 (~8GB for dual models)
+- ✅ Flask 서버 결과 융합 방식 설명 추가

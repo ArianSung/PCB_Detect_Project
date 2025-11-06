@@ -1,8 +1,14 @@
-# C# WinForms PCB 검사 모니터링 시스템 개발 가이드
+# C# WinForms PCB 검사 모니터링 시스템 개발 가이드 ⭐ (이중 모델 아키텍처)
 
 ## 개요
 
 이 가이드는 PCB 불량 검사 시스템의 모니터링 및 관리를 위한 C# WinForms 애플리케이션 개발 방법을 설명합니다.
+
+**프로젝트 아키텍처** (2025-10-31 업데이트):
+- **이중 YOLO 모델**: Component Model (부품 검출) + Solder Model (납땜 검출)
+- **결과 융합**: Flask 서버에서 두 모델 결과를 융합하여 최종 판정
+- **4가지 분류**: normal (정상), component_defect (부품불량), solder_defect (납땜불량), discard (폐기)
+- **데이터베이스**: MySQL에서 융합 결과 및 개별 모델 결과 저장
 
 ---
 
@@ -88,38 +94,62 @@ PCB_Inspection_Monitor/
 
 ## 데이터 모델 정의
 
-### Models/Inspection.cs
+### Models/Inspection.cs (이중 모델 아키텍처)
 
 ```csharp
 using System;
+using System.Collections.Generic;
 
 namespace PCB_Inspection_Monitor.Models
 {
     public class Inspection
     {
         public int Id { get; set; }
-        public string CameraId { get; set; }  // "left" or "right"
-        public string DefectType { get; set; } // "정상", "부품불량", "납땜불량", "폐기"
-        public double Confidence { get; set; }
+
+        // 융합 결과 (최종 판정)
+        public string FusionDecision { get; set; }  // "normal", "component_defect", "solder_defect", "discard"
+        public int FusionSeverityLevel { get; set; } // 0-3 (심각도)
+
+        // Component Model 결과
+        public List<Defect> ComponentDefects { get; set; }  // JSON 역직렬화
+        public int ComponentDefectCount { get; set; }
+        public double? ComponentInferenceTimeMs { get; set; }
+
+        // Solder Model 결과
+        public List<Defect> SolderDefects { get; set; }  // JSON 역직렬화
+        public int SolderDefectCount { get; set; }
+        public double? SolderInferenceTimeMs { get; set; }
+
+        // 검사 메타데이터
         public DateTime InspectionTime { get; set; }
-        public string ImagePath { get; set; }
+        public double? TotalInferenceTimeMs { get; set; }
+        public string LeftImagePath { get; set; }   // 좌측 카메라 (부품)
+        public string RightImagePath { get; set; }  // 우측 카메라 (납땜)
+        public int? GpioPin { get; set; }
         public int? UserId { get; set; }
 
-        public Inspection() { }
-
-        public Inspection(int id, string cameraId, string defectType,
-                         double confidence, DateTime inspectionTime, string imagePath)
+        public Inspection()
         {
-            Id = id;
-            CameraId = cameraId;
-            DefectType = defectType;
-            Confidence = confidence;
-            InspectionTime = inspectionTime;
-            ImagePath = imagePath;
+            ComponentDefects = new List<Defect>();
+            SolderDefects = new List<Defect>();
         }
+    }
+
+    // 개별 불량 정보
+    public class Defect
+    {
+        public string Type { get; set; }      // 불량 타입
+        public double Confidence { get; set; } // 신뢰도
+        public double[] BBox { get; set; }     // [x1, y1, x2, y2]
     }
 }
 ```
+
+**변경 사항**:
+- ✅ `DefectType` → `FusionDecision` (융합 결과)
+- ✅ `ComponentDefects`, `SolderDefects` 추가 (각 모델의 상세 결과)
+- ✅ `LeftImagePath`, `RightImagePath` 분리 (양면 이미지)
+- ✅ 추론 시간 필드 추가 (성능 모니터링)
 
 ### Models/Statistics.cs
 
@@ -215,7 +245,7 @@ namespace PCB_Inspection_Monitor.Services
         }
 
         /// <summary>
-        /// 검사 이력 조회 (페이징)
+        /// 검사 이력 조회 (페이징) - 이중 모델 아키텍처
         /// </summary>
         public List<Inspection> GetInspections(int page = 1, int pageSize = 50)
         {
@@ -227,8 +257,11 @@ namespace PCB_Inspection_Monitor.Services
                 {
                     conn.Open();
                     string query = @"
-                        SELECT id, camera_id, defect_type, confidence,
-                               inspection_time, image_path
+                        SELECT id, fusion_decision, fusion_severity_level,
+                               component_defects, component_defect_count, component_inference_time_ms,
+                               solder_defects, solder_defect_count, solder_inference_time_ms,
+                               inspection_time, total_inference_time_ms,
+                               left_image_path, right_image_path, gpio_pin
                         FROM inspections
                         ORDER BY inspection_time DESC
                         LIMIT @pageSize OFFSET @offset";
@@ -245,13 +278,24 @@ namespace PCB_Inspection_Monitor.Services
                                 inspections.Add(new Inspection
                                 {
                                     Id = reader.GetInt32("id"),
-                                    CameraId = reader.GetString("camera_id"),
-                                    DefectType = reader.GetString("defect_type"),
-                                    Confidence = reader.GetDouble("confidence"),
+                                    FusionDecision = reader.GetString("fusion_decision"),
+                                    FusionSeverityLevel = reader.GetInt32("fusion_severity_level"),
+                                    ComponentDefectCount = reader.GetInt32("component_defect_count"),
+                                    ComponentInferenceTimeMs = reader.IsDBNull(reader.GetOrdinal("component_inference_time_ms"))
+                                        ? null : reader.GetDouble("component_inference_time_ms"),
+                                    SolderDefectCount = reader.GetInt32("solder_defect_count"),
+                                    SolderInferenceTimeMs = reader.IsDBNull(reader.GetOrdinal("solder_inference_time_ms"))
+                                        ? null : reader.GetDouble("solder_inference_time_ms"),
                                     InspectionTime = reader.GetDateTime("inspection_time"),
-                                    ImagePath = reader.IsDBNull(reader.GetOrdinal("image_path"))
-                                        ? null
-                                        : reader.GetString("image_path")
+                                    TotalInferenceTimeMs = reader.IsDBNull(reader.GetOrdinal("total_inference_time_ms"))
+                                        ? null : reader.GetDouble("total_inference_time_ms"),
+                                    LeftImagePath = reader.IsDBNull(reader.GetOrdinal("left_image_path"))
+                                        ? null : reader.GetString("left_image_path"),
+                                    RightImagePath = reader.IsDBNull(reader.GetOrdinal("right_image_path"))
+                                        ? null : reader.GetString("right_image_path"),
+                                    GpioPin = reader.IsDBNull(reader.GetOrdinal("gpio_pin"))
+                                        ? null : reader.GetInt32("gpio_pin"),
+                                    // ComponentDefects, SolderDefects는 JSON 역직렬화 필요 (Newtonsoft.Json)
                                 });
                             }
                         }
@@ -284,14 +328,14 @@ namespace PCB_Inspection_Monitor.Services
                 {
                     conn.Open();
 
-                    // 전체 통계
+                    // 전체 통계 (이중 모델 아키텍처)
                     string query = @"
                         SELECT
                             COUNT(*) as total,
-                            SUM(CASE WHEN defect_type = '정상' THEN 1 ELSE 0 END) as normal,
-                            SUM(CASE WHEN defect_type = '부품불량' THEN 1 ELSE 0 END) as component,
-                            SUM(CASE WHEN defect_type = '납땜불량' THEN 1 ELSE 0 END) as solder,
-                            SUM(CASE WHEN defect_type = '폐기' THEN 1 ELSE 0 END) as discard
+                            SUM(CASE WHEN fusion_decision = 'normal' THEN 1 ELSE 0 END) as normal,
+                            SUM(CASE WHEN fusion_decision = 'component_defect' THEN 1 ELSE 0 END) as component,
+                            SUM(CASE WHEN fusion_decision = 'solder_defect' THEN 1 ELSE 0 END) as solder,
+                            SUM(CASE WHEN fusion_decision = 'discard' THEN 1 ELSE 0 END) as discard
                         FROM inspections
                         WHERE inspection_time BETWEEN @startDate AND @endDate";
 
@@ -779,9 +823,17 @@ namespace PCB_Inspection_Monitor
 ---
 
 **작성일**: 2025-10-28
-**버전**: 1.1
+**수정일**: 2025-10-31
+**버전**: 2.0 (이중 YOLO 모델 아키텍처)
+
+**주요 변경사항 (v2.0)**:
+- ✅ Inspection 모델 업데이트 (FusionDecision, ComponentDefects, SolderDefects)
+- ✅ 데이터베이스 쿼리 업데이트 (fusion_decision, component_defect_count, solder_defect_count)
+- ✅ 양면 이미지 경로 분리 (LeftImagePath, RightImagePath)
+- ✅ 추론 시간 모니터링 필드 추가 (성능 분석용)
+
 **관련 문서**:
 - `PCB_Defect_Detection_Project.md` - 전체 시스템 아키텍처
 - `CSharp_WinForms_Design_Specification.md` - 상세 UI 설계 및 권한 시스템
-- `MySQL_Database_Design.md` - 데이터베이스 스키마
-- `Flask_Server_Setup.md` - Flask 서버 설정
+- `MySQL_Database_Design.md` - 데이터베이스 스키마 (이중 모델 아키텍처)
+- `Flask_Server_Setup.md` - Flask 서버 설정 (결과 융합)

@@ -2,10 +2,10 @@
 # Aggressive Training Script - mAP50 95%+ 달성을 위한 적극적 학습
 # 변경사항:
 # 1. 학습률 3배 증가 (0.0003 → 0.001) - 빠른 학습
-# 2. Batch size = 16 (VRAM 약 55% 사용, 매우 안정적)
-# 3. Dropout 절반으로 감소 (0.2 → 0.1) - 과적합 방지 완화
-# 4. 데이터 증강 완화 - 학습 난이도 낮춤
-# 5. Weight decay 감소 (0.001 → 0.0005) - 가중치 업데이트 자유롭게
+# 2. Batch size = 16 (VRAM 약 55-65% 사용), nbs=64 (gradient accumulation)
+# 3. Dropout 완전히 제거 (0.0) - 과적합 방지 OFF
+# 4. 데이터 증강 완전히 제거 - 순수 학습
+# 5. Weight decay 제거 (0.0) - 가중치 업데이트 완전 자유
 
 cd /home/sys1041/work_project
 
@@ -18,6 +18,7 @@ mkdir -p logs
   model=/home/sys1041/work_project/runs/detect/complete_pcb_base_model3/weights/best.pt \
   epochs=500 \
   batch=16 \
+  nbs=64 \
   imgsz=640 \
   device=0 \
   patience=100 \
@@ -26,20 +27,20 @@ mkdir -p logs
   warmup_epochs=5 \
   warmup_momentum=0.8 \
   warmup_bias_lr=0.1 \
-  dropout=0.1 \
-  weight_decay=0.0005 \
-  mixup=0.1 \
-  copy_paste=0.1 \
+  dropout=0.0 \
+  weight_decay=0.0 \
+  mixup=0.0 \
+  copy_paste=0.0 \
   mosaic=1.0 \
-  close_mosaic=15 \
-  hsv_h=0.01 \
-  hsv_s=0.5 \
-  hsv_v=0.3 \
-  degrees=5.0 \
-  translate=0.1 \
-  scale=0.5 \
-  shear=5.0 \
-  perspective=0.0005 \
+  close_mosaic=5 \
+  hsv_h=0.0 \
+  hsv_s=0.0 \
+  hsv_v=0.0 \
+  degrees=0.0 \
+  translate=0.0 \
+  scale=0.0 \
+  shear=0.0 \
+  perspective=0.0 \
   flipud=0.5 \
   fliplr=0.5 \
   project=runs/detect \
