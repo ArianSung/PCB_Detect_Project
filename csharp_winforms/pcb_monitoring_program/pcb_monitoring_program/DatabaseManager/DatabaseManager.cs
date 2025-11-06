@@ -465,6 +465,138 @@ namespace pcb_monitoring_program.DatabaseManager
 
         #endregion
 
+        #region 상세 불량 통계 (Defect Details)
+
+        /// <summary>
+        /// 상세 불량 유형별 통계 조회 (TOP N)
+        /// </summary>
+        /// <param name="startDate">시작 날짜</param>
+        /// <param name="endDate">종료 날짜</param>
+        /// <param name="topN">상위 N개 (기본값: 7)</param>
+        /// <returns>상세 불량 통계 리스트 (클래스명, 총 개수, 평균 신뢰도)</returns>
+        public List<(string ClassName, int TotalCount, decimal AvgConfidence)> GetDefectDetailStatistics(
+            DateTime startDate,
+            DateTime endDate,
+            int topN = 7)
+        {
+            List<(string, int, decimal)> statistics = new List<(string, int, decimal)>();
+
+            try
+            {
+                using (MySqlConnection conn = new MySqlConnection(_connectionString))
+                {
+                    conn.Open();
+
+                    string query = @"
+                        SELECT
+                            dd.class_name,
+                            SUM(dd.count) as total_count,
+                            AVG(dd.avg_confidence) as avg_confidence
+                        FROM defect_details dd
+                        INNER JOIN inspections i ON dd.inspection_id = i.id
+                        WHERE i.inspection_time BETWEEN @startDate AND @endDate
+                        GROUP BY dd.class_name
+                        ORDER BY total_count DESC
+                        LIMIT @topN";
+
+                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@startDate", startDate);
+                        cmd.Parameters.AddWithValue("@endDate", endDate);
+                        cmd.Parameters.AddWithValue("@topN", topN);
+
+                        using (MySqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                string className = reader.GetString("class_name");
+                                int totalCount = reader.GetInt32("total_count");
+                                decimal avgConfidence = reader.IsDBNull(reader.GetOrdinal("avg_confidence"))
+                                    ? 0.0m
+                                    : reader.GetDecimal("avg_confidence");
+
+                                statistics.Add((className, totalCount, avgConfidence));
+                            }
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex)
+            {
+                Console.WriteLine($"[상세 불량 통계 조회 실패] {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[상세 불량 통계 조회 오류] {ex.Message}");
+            }
+
+            return statistics;
+        }
+
+        #endregion
+
+        #region 불량률 추이 이력 (Defect Rate History)
+
+        /// <summary>
+        /// 불량률 추이 이력 조회 (시간대별)
+        /// </summary>
+        /// <param name="startDate">시작 날짜</param>
+        /// <param name="endDate">종료 날짜</param>
+        /// <returns>불량률 추이 이력 리스트</returns>
+        public List<DefectRateHistory> GetDefectRateHistory(
+            DateTime startDate,
+            DateTime endDate)
+        {
+            List<DefectRateHistory> history = new List<DefectRateHistory>();
+
+            try
+            {
+                using (MySqlConnection conn = new MySqlConnection(_connectionString))
+                {
+                    conn.Open();
+
+                    string query = @"
+                        SELECT id, defect_rate, total_inspections, defect_count, recorded_at
+                        FROM defect_rate_history
+                        WHERE recorded_at BETWEEN @startDate AND @endDate
+                        ORDER BY recorded_at ASC";
+
+                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@startDate", startDate);
+                        cmd.Parameters.AddWithValue("@endDate", endDate);
+
+                        using (MySqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                history.Add(new DefectRateHistory
+                                {
+                                    Id = reader.GetInt32("id"),
+                                    DefectRate = reader.GetDecimal("defect_rate"),
+                                    TotalInspections = reader.GetInt32("total_inspections"),
+                                    DefectCount = reader.GetInt32("defect_count"),
+                                    RecordedAt = reader.GetDateTime("recorded_at")
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex)
+            {
+                Console.WriteLine($"[불량률 추이 이력 조회 실패] {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[불량률 추이 이력 조회 오류] {ex.Message}");
+            }
+
+            return history;
+        }
+
+        #endregion
+
         #region IDisposable 구현
 
         public void Dispose()

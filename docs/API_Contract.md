@@ -8,9 +8,9 @@ PCB 불량 검사 시스템의 Flask 서버 REST API 공식 명세서입니다.
 ## 📌 중요 공지
 
 ### API 버전 관리
-- **현재 버전**: v1.0.0
+- **현재 버전**: v2.0.0 ⭐ (이중 모델 아키텍처)
 - **Base URL**: `http://{SERVER_IP}:5000`
-- **마지막 업데이트**: 2025-10-25
+- **마지막 업데이트**: 2025-10-31
 
 ### API 변경 규칙
 1. **하위 호환성 유지**: 기존 API는 삭제하지 않고 deprecated 처리
@@ -56,13 +56,17 @@ Host: 100.64.1.1:5000
 ```json
 {
   "status": "healthy",
-  "server_time": "2025-10-25T14:30:00",
+  "server_time": "2025-10-31T14:30:00",
   "gpu_available": true,
   "models_loaded": {
-    "yolo": true,
-    "anomaly": true
+    "component_model": true,
+    "solder_model": true
   },
-  "version": "1.0.0"
+  "model_info": {
+    "component_model": "FPIC-Component (25 classes)",
+    "solder_model": "SolDef_AI (5-6 classes)"
+  },
+  "version": "2.0.0"
 }
 ```
 
@@ -70,8 +74,8 @@ Host: 100.64.1.1:5000
 ```json
 {
   "status": "unhealthy",
-  "error": "YOLO model not loaded",
-  "server_time": "2025-10-25T14:30:00"
+  "error": "Component model not loaded",
+  "server_time": "2025-10-31T14:30:00"
 }
 ```
 
@@ -183,37 +187,45 @@ Content-Type: application/json
 }
 ```
 
-**분류 타입 (classification):**
+**분류 타입 (classification/decision):**
 - `"normal"`: 정상 (GPIO 23)
 - `"component_defect"`: 부품 불량 (GPIO 17)
 - `"solder_defect"`: 납땜 불량 (GPIO 27)
 - `"discard"`: 폐기 (GPIO 22)
 
-**불량 타입 (defect type):**
-- `"cold_joint"`: Cold Joint (차가운 납땜)
-- `"solder_bridge"`: Solder Bridge (땜납 다리)
-- `"insufficient_solder"`: 불충분한 납땜
-- `"excess_solder"`: 과도한 납땜
-- `"missing_component"`: 부품 누락
+**부품 불량 타입 (Component Model - FPIC-Component):**
+- `"missing_component"`: 부품 누락 ⚠️ 치명적
+- `"wrong_component"`: 잘못된 부품 ⚠️ 치명적
 - `"misalignment"`: 부품 위치 불량
-- `"wrong_component"`: 잘못된 부품
 - `"damaged_component"`: 손상된 부품
-- `"trace_damage"`: 회로 선로 손상
-- `"pad_damage"`: 패드 손상
-- `"scratch"`: 스크래치
+- 25개 부품 클래스: capacitor, resistor, IC, LED, diode, transistor, connector, inductor, relay, switch, potentiometer, crystal, fuse, battery, transformer, coil, sensor, microcontroller, capacitor_electrolytic, capacitor_ceramic, resistor_smd, pad, via, trace, hole
 
-**심각도 (severity):**
-- `"low"`: 경미한 불량
-- `"medium"`: 중간 불량
-- `"high"`: 심각한 불량
+**납땜 불량 타입 (Solder Model - SolDef_AI):**
+- `"solder_bridge"`: 납땜 브릿지 ⚠️ 치명적 (즉시 폐기)
+- `"no_good"`: 일반적인 납땜 불량
+- `"exc_solder"`: 과다 납땜 (Excessive Solder)
+- `"poor_solder"`: 불충분한 납땜 (Poor Solder Joint)
+- `"spike"`: 납땜 스파이크
+- `"tombstone"`: 툼스톰 현상 (선택적)
+
+**심각도 (severity) 레벨:**
+- `0`: 불량 없음
+- `1`: 경미한 불량 (1-2개)
+- `2`: 중간 불량 (3-5개)
+- `3`: 심각한 불량 (6개 이상 or 치명적 불량)
 
 ---
 
-### 3. 양면 프레임 동시 검사
+### 3. 양면 프레임 동시 검사 ⭐ (이중 모델 아키텍처)
 
 **엔드포인트**: `/predict_dual`
 **메서드**: `POST`
-**설명**: 좌우 카메라 프레임을 동시에 검사하고 종합 결과 반환
+**설명**: 좌우 카메라 프레임을 이중 YOLO 모델로 동시에 검사하고 결과 융합
+
+**아키텍처**:
+- **좌측 카메라 (left_frame)** → Component Model (FPIC-Component, 25 클래스)
+- **우측 카메라 (right_frame)** → Solder Model (SolDef_AI, 5-6 클래스)
+- **Flask 서버**: 결과 융합 로직 (severity-based fusion)
 
 #### 요청 (Request)
 ```http
@@ -222,57 +234,234 @@ Host: 100.64.1.1:5000
 Content-Type: application/json
 
 {
-  "left_camera": {
+  "left_frame": {
     "image": "base64_encoded_jpeg_string",
-    "timestamp": "2025-10-25T14:30:00"
+    "timestamp": "2025-10-31T14:30:00"
   },
-  "right_camera": {
+  "right_frame": {
     "image": "base64_encoded_jpeg_string",
-    "timestamp": "2025-10-25T14:30:00"
+    "timestamp": "2025-10-31T14:30:00"
   },
   "request_id": "uuid-v4-string"
 }
 ```
 
+**필드 설명:**
+- `left_frame` (object, 필수): 좌측 카메라 (부품 검출)
+  - `image` (string, 필수): Base64 인코딩된 JPEG 이미지
+  - `timestamp` (string, 필수): ISO 8601 타임스탬프
+- `right_frame` (object, 필수): 우측 카메라 (납땜 검출)
+  - `image` (string, 필수): Base64 인코딩된 JPEG 이미지
+  - `timestamp` (string, 필수): ISO 8601 타임스탬프
+- `request_id` (string, 선택): 요청 추적용 UUID
+
 #### 응답 (Response)
+
+**예시 1: 부품 불량 검출**
 ```json
 {
   "success": true,
   "request_id": "uuid-v4-string",
-  "timestamp": "2025-10-25T14:30:00",
-  "inference_time_ms": 185.3,
-  "left_result": {
-    "classification": "normal",
-    "confidence": 0.95,
-    "defects": [],
-    "total_defects": 0
-  },
-  "right_result": {
-    "classification": "solder_defect",
-    "confidence": 0.82,
+  "timestamp": "2025-10-31T14:30:00",
+  "inference_time_ms": 95.3,
+  "component_result": {
+    "model": "FPIC-Component",
+    "inference_time_ms": 55.2,
     "defects": [
       {
-        "type": "cold_joint",
-        "bbox": [150, 100, 230, 180],
-        "confidence": 0.82,
-        "severity": "medium"
+        "type": "missing_component",
+        "class_name": "resistor",
+        "bbox": [120, 80, 200, 150],
+        "confidence": 0.89
+      },
+      {
+        "type": "misalignment",
+        "class_name": "IC",
+        "bbox": [300, 200, 450, 350],
+        "confidence": 0.76
       }
     ],
-    "total_defects": 1
+    "total_defects": 2,
+    "severity": 2
   },
-  "final_classification": "solder_defect",
-  "final_confidence": 0.82,
+  "solder_result": {
+    "model": "SolDef_AI",
+    "inference_time_ms": 40.1,
+    "defects": [],
+    "total_defects": 0,
+    "severity": 0
+  },
+  "fusion_result": {
+    "decision": "component_defect",
+    "component_severity": 2,
+    "solder_severity": 0,
+    "final_severity": 2
+  },
   "gpio_action": {
     "enabled": true,
-    "pin": 27,
+    "pin": 17,
     "action": "activate"
   }
 }
 ```
 
-**최종 분류 규칙:**
-- 양면 중 **더 심각한 불량**을 최종 분류로 선택
-- 우선순위: `discard` > `component_defect` > `solder_defect` > `normal`
+**예시 2: 납땜 불량 검출 (치명적)**
+```json
+{
+  "success": true,
+  "request_id": "uuid-v4-string",
+  "timestamp": "2025-10-31T14:30:15",
+  "inference_time_ms": 88.7,
+  "component_result": {
+    "model": "FPIC-Component",
+    "inference_time_ms": 52.3,
+    "defects": [],
+    "total_defects": 0,
+    "severity": 0
+  },
+  "solder_result": {
+    "model": "SolDef_AI",
+    "inference_time_ms": 36.4,
+    "defects": [
+      {
+        "type": "solder_bridge",
+        "bbox": [150, 100, 230, 180],
+        "confidence": 0.92
+      }
+    ],
+    "total_defects": 1,
+    "severity": 3
+  },
+  "fusion_result": {
+    "decision": "discard",
+    "component_severity": 0,
+    "solder_severity": 3,
+    "final_severity": 3,
+    "reason": "Critical defect detected: solder_bridge"
+  },
+  "gpio_action": {
+    "enabled": true,
+    "pin": 22,
+    "action": "activate"
+  }
+}
+```
+
+**예시 3: 정상 PCB**
+```json
+{
+  "success": true,
+  "request_id": "uuid-v4-string",
+  "timestamp": "2025-10-31T14:30:30",
+  "inference_time_ms": 82.1,
+  "component_result": {
+    "model": "FPIC-Component",
+    "inference_time_ms": 48.7,
+    "defects": [],
+    "total_defects": 0,
+    "severity": 0
+  },
+  "solder_result": {
+    "model": "SolDef_AI",
+    "inference_time_ms": 33.4,
+    "defects": [],
+    "total_defects": 0,
+    "severity": 0
+  },
+  "fusion_result": {
+    "decision": "normal",
+    "component_severity": 0,
+    "solder_severity": 0,
+    "final_severity": 0
+  },
+  "gpio_action": {
+    "enabled": true,
+    "pin": 23,
+    "action": "activate"
+  }
+}
+```
+
+**예시 4: 양면 불량 (폐기)**
+```json
+{
+  "success": true,
+  "request_id": "uuid-v4-string",
+  "timestamp": "2025-10-31T14:30:45",
+  "inference_time_ms": 98.5,
+  "component_result": {
+    "model": "FPIC-Component",
+    "inference_time_ms": 58.2,
+    "defects": [
+      {
+        "type": "wrong_component",
+        "class_name": "capacitor",
+        "bbox": [100, 50, 180, 120],
+        "confidence": 0.85
+      }
+    ],
+    "total_defects": 1,
+    "severity": 2
+  },
+  "solder_result": {
+    "model": "SolDef_AI",
+    "inference_time_ms": 40.3,
+    "defects": [
+      {
+        "type": "poor_solder",
+        "bbox": [200, 150, 280, 220],
+        "confidence": 0.78
+      },
+      {
+        "type": "exc_solder",
+        "bbox": [350, 300, 420, 370],
+        "confidence": 0.71
+      }
+    ],
+    "total_defects": 2,
+    "severity": 2
+  },
+  "fusion_result": {
+    "decision": "discard",
+    "component_severity": 2,
+    "solder_severity": 2,
+    "final_severity": 3,
+    "reason": "Both sides have moderate defects (severity >= 2)"
+  },
+  "gpio_action": {
+    "enabled": true,
+    "pin": 22,
+    "action": "activate"
+  }
+}
+```
+
+**결과 융합 로직** ⭐:
+
+```
+severity 계산:
+- Level 0: 불량 없음
+- Level 1: 경미한 불량 (1-2개)
+- Level 2: 중간 불량 (3-5개)
+- Level 3: 심각한 불량 (6개 이상 or 치명적 불량)
+
+최종 판정:
+1. component_severity == 0 && solder_severity == 0 → normal
+2. component_severity >= 3 || solder_severity >= 3 → discard
+3. component_severity >= 2 && solder_severity >= 2 → discard (양면 모두 중간 이상)
+4. component_severity > solder_severity → component_defect
+5. solder_severity >= component_severity → solder_defect
+```
+
+**치명적 불량 (즉시 Level 3)**:
+- Component Model: `missing_component`, `wrong_component`
+- Solder Model: `solder_bridge`
+
+**최종 분류 (decision):**
+- `"normal"`: 정상 (GPIO 23)
+- `"component_defect"`: 부품 불량 (GPIO 17)
+- `"solder_defect"`: 납땜 불량 (GPIO 27)
+- `"discard"`: 폐기 (GPIO 22)
 
 ---
 
@@ -653,8 +842,8 @@ Host: 100.64.1.1:5000
 **필드 설명:**
 - `box_id` (string): 박스 ID (예: "NORMAL", "COMPONENT_DEFECT", "SOLDER_DEFECT")
 - `category` (string): 카테고리 (normal/component_defect/solder_defect)
-- `current_slot` (int): 현재 사용 중인 슬롯 번호 (0-4, 수평 5슬롯)
-- `max_slots` (int): 최대 슬롯 개수 (5개, 수평 배치)
+- `current_slot` (int): 현재 사용 중인 슬롯 번호 (0-2, 수평 3슬롯)
+- `max_slots` (int): 최대 슬롯 개수 (3개, 수평 배치)
 - `is_full` (boolean): 박스 가득참 여부
 - `total_pcb_count` (int): 박스에 저장된 총 PCB 개수
 - `utilization_rate` (float): 사용률 (0.0 ~ 100.0)
@@ -800,6 +989,11 @@ Content-Type: application/json
 
 | 버전 | 날짜 | 변경 내용 | 변경자 |
 |------|------|-----------|--------|
+| 2.0.0 | 2025-10-31 | ⭐ 이중 모델 아키텍처 전환 (FPIC-Component + SolDef_AI) | 팀 리더 |
+|  |  | - /predict_dual 엔드포인트 대폭 개선 (결과 융합 로직) |  |
+|  |  | - /health 엔드포인트 모델 정보 변경 (component_model, solder_model) |  |
+|  |  | - 부품 불량 타입 및 납땜 불량 타입 재정의 |  |
+|  |  | - severity 기반 융합 알고리즘 명세화 |  |
 | 1.1.0 | 2025-10-27 | 박스 상태 관리 API 추가 (로봇팔 시스템) | 팀 리더 |
 | 1.0.0 | 2025-10-25 | 초기 API 명세서 작성 | 팀 리더 |
 
@@ -807,9 +1001,11 @@ Content-Type: application/json
 
 ## 🔗 관련 문서
 
+- **⭐ [이중 모델 아키텍처 설계](Dual_Model_Architecture.md)** - 핵심 참조 문서
 - [Flask 서버 구축 가이드](Flask_Server_Setup.md)
 - [라즈베리파이 클라이언트 가이드](RaspberryPi_Setup.md)
 - [C# WinForms 개발 가이드](CSharp_WinForms_Guide.md)
+- [데이터셋 가이드](Dataset_Guide.md) - FPIC-Component, SolDef_AI
 - [Git 워크플로우 가이드](Git_Workflow.md)
 
 ---

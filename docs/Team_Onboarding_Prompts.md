@@ -13,7 +13,8 @@
    - [Flask 서버 팀](#31-flask-서버-팀)
    - [AI 모델 팀](#32-ai-모델-팀)
    - [라즈베리파이 팀](#33-라즈베리파이-팀)
-   - [C# 앱 팀](#34-c-앱-팀)
+   - [Arduino 디팔렛타이저 팀](#34-arduino-디팔렛타이저-팀)
+   - [C# 앱 팀](#35-c-앱-팀)
 4. [일일 작업 시작 프롬프트](#4-일일-작업-시작-프롬프트)
 5. [Pull Request 생성 프롬프트](#5-pull-request-생성-프롬프트)
 6. [문제 해결 프롬프트](#6-문제-해결-프롬프트)
@@ -42,16 +43,18 @@
 **시스템 구성:**
 - 추론 서버: GPU PC (원격지) - Flask + YOLO v8 + MySQL
 - 웹캠 클라이언트: 라즈베리파이 4 (2대) - 좌/우 카메라
-- OHT 제어: 라즈베리파이 4 (1대) - GPIO 제어 (릴레이 모듈 → 분류 게이트)
-- 로봇팔 시스템: Arduino 기반 - 박스 슬롯 관리 (3개 박스 × 5개 슬롯)
+- **디팔렛타이저**: Arduino Mega 2560 + 5-6축 로봇팔 - PCB 픽업 및 박스 분류 (2.5초/PCB)
+- OHT 제어: 라즈베리파이 4 (1대) - 가득 찬 박스 운반 (GPIO 제어)
+- 박스 시스템: 3개 박스 × 5개 슬롯 (정상/부품불량/납땜불량)
 - 모니터링 앱: Windows PC - C# WinForms (박스 상태, OHT 제어, 사용자 관리)
 - 네트워크: Tailscale VPN (100.x.x.x)
 
 위 문서들을 읽고, 다음 질문에 답변해줘:
-1. 이 시스템의 전체 데이터 흐름은 어떻게 되는가? (라즈베리파이 → Flask → DB → C# 앱)
-2. 각 팀(Flask, AI 모델, 라즈베리파이, C# 앱)의 주요 책임은 무엇인가?
-3. 프로젝트의 주요 디렉토리(`server/`, `yolo/`, `database/`, `raspberry_pi/`, `csharp_winforms/`)는 각각 어떤 역할을 하는가?
-4. 팀 간 협업 시 주의해야 할 점은 무엇인가? (API 변경, Git 충돌 등)
+1. 이 시스템의 전체 데이터 흐름은 어떻게 되는가? (라즈베리파이 → Flask → Arduino 디팔렛타이저 → 박스 → OHT)
+2. 각 팀(Flask, AI 모델, 라즈베리파이, Arduino, C# 앱)의 주요 책임은 무엇인가?
+3. 프로젝트의 주요 디렉토리(`server/`, `yolo/`, `database/`, `raspberry_pi/`, `arduino/`, `csharp_winforms/`)는 각각 어떤 역할을 하는가?
+4. **디팔렛타이저(Arduino 로봇팔)의 역할과 2.5초 동작 시간 제약**은 무엇인가?
+5. 팀 간 협업 시 주의해야 할 점은 무엇인가? (API 변경, Git 충돌 등)
 ```
 
 ---
@@ -301,7 +304,130 @@ ARDUINO_BAUD=9600          # 시리얼 통신 속도
 특히 웹캠 전용과 OHT 제어 전용의 차이점을 명확히 설명해줘.
 ```
 
-### 3.4. C# 앱 팀
+### 3.4. Arduino 디팔렛타이저 팀
+
+**사용 시기**: Arduino 로봇팔 제어 시스템 개발을 시작할 때
+
+```
+안녕! 나는 PCB 불량 검사 시스템의 Arduino 디팔렛타이저 팀원이야.
+
+**내 역할:**
+- Arduino Mega 2560 기반 5-6축 로봇팔 제어
+- 컨베이어 벨트에서 PCB 픽업
+- 불량 유형에 따라 박스 슬롯에 자동 배치
+- 라즈베리파이 1과 USB 시리얼 통신
+- **디팔렛타이저 역할**: PCB를 픽업하여 분류하는 핵심 하드웨어 (2.5초/PCB 목표)
+
+**시스템 구성:**
+- **Arduino Mega 2560**: 마이크로컨트롤러 (54개 디지털 I/O 핀)
+- **서보 모터 6개**: MG996R 또는 DS3218 (Base, Shoulder, Elbow, Wrist Pitch, Wrist Roll, Gripper)
+- **레일 시스템**: NEMA 17 스텝모터 + A4988 드라이버 (로봇팔 플랫폼 좌우 이동)
+- **박스 시스템**: 3개 박스 × 5개 슬롯 = 15개 슬롯 + DISCARD 위치
+- **통신**: USB 시리얼 (115200 baud) ↔ 라즈베리파이 1
+
+**읽어야 할 핵심 문서:**
+1. `docs/Arduino_RobotArm_Setup.md` - Arduino 로봇팔 전체 설정 가이드 (필수!)
+2. `docs/API_Contract.md` - 박스 상태 API 명세서 (박스 ID, 슬롯 번호)
+3. `arduino/robot_arm_controller/config.h` - 서보 핀 정의 및 좌표 테이블
+4. `arduino/robot_arm_controller/robot_arm_controller.ino` - 메인 스케치 파일
+
+**개발 환경:**
+- **하드웨어**: Arduino Mega 2560
+- **IDE**: Arduino IDE 2.3.0 이상
+- **라이브러리**:
+  - Servo (기본 포함)
+  - ArduinoJson 6.21.0 (JSON 명령 파싱)
+- **전원**: USB 5V (라즈베리파이) + 별도 서보 전원 (5V 10A)
+- **시리얼 포트**: /dev/ttyACM0 (Linux) 또는 COM3 (Windows)
+
+**서보 모터 연결 (PWM 핀):**
+```
+Base (베이스)        → 핀 2 (회전 0-180°)
+Shoulder (어깨)      → 핀 3 (상하 0-180°)
+Elbow (팔꿈치)       → 핀 4 (굽히기 0-180°)
+Wrist Pitch (손목)   → 핀 5 (피치 0-180°)
+Wrist Roll (손목)    → 핀 6 (롤 0-180°)
+Gripper (그리퍼)     → 핀 7 (열기/닫기 0-90°)
+```
+
+**15개 슬롯 좌표 테이블:**
+```cpp
+// NORMAL 박스 (슬롯 0-4, 수평 배치)
+const Coordinate NORMAL_SLOTS[5] = {
+  {88, 115, 85, 90, 90},  // 슬롯 0 (좌측 끝)
+  {92, 115, 84, 90, 90},  // 슬롯 1
+  {96, 115, 83, 90, 90},  // 슬롯 2 (중앙)
+  {100, 115, 82, 90, 90}, // 슬롯 3
+  {104, 115, 81, 90, 90}  // 슬롯 4 (우측 끝)
+};
+
+// COMPONENT_DEFECT 박스, SOLDER_DEFECT 박스도 동일 구조
+// DISCARD 위치: 고정 좌표 {90, 85, 70, 90, 90}
+```
+
+**JSON 시리얼 통신 프로토콜:**
+
+**라즈베리파이 → Arduino (PCB 배치 명령):**
+```json
+{
+  "command": "place_pcb",
+  "box_id": "NORMAL_A",
+  "slot_number": 2,
+  "coordinates": {"x": 240.0, "y": 100.0, "z": 30.0}
+}
+```
+
+**Arduino → 라즈베리파이 (성공 응답):**
+```json
+{
+  "status": "success",
+  "message": "PCB placed successfully",
+  "execution_time_ms": 2350
+}
+```
+
+**성능 목표:**
+- **배치 시간**: < 2.5초/PCB (픽업 + 이동 + 배치)
+- **정확도**: ±2mm 이내 (슬롯 중심 기준)
+- **연속 작동**: 8시간 무중단 운영
+
+**첫 번째 작업:**
+1. Arduino IDE 설치 및 보드 선택:
+   ```
+   Tools → Board → Arduino Mega or Mega 2560
+   Tools → Port → /dev/ttyACM0
+   ```
+
+2. ArduinoJson 라이브러리 설치:
+   ```
+   Tools → Manage Libraries → "ArduinoJson" 검색 → 6.21.0 이상 설치
+   ```
+
+3. 서보 단독 테스트:
+   ```bash
+   # arduino/test_sketches/test_servo_sweep.ino 업로드
+   # 각 서보가 0-180도 스윕하는지 확인
+   ```
+
+4. 시리얼 통신 테스트:
+   ```bash
+   # arduino/test_sketches/test_serial_communication.ino 업로드
+   # 라즈베리파이에서 JSON 명령 전송 및 응답 확인
+   ```
+
+5. 좌표 캘리브레이션:
+   ```
+   # 각 박스 슬롯 위치로 수동 이동
+   # 서보 각도 측정 및 config.h에 저장
+   # 정확도 ±2mm 이내 확인
+   ```
+
+위 정보를 바탕으로, Arduino 로봇팔 시스템을 처음 설정하고 테스트하는 과정을 안내해줘.
+특히 서보 모터 캘리브레이션과 시리얼 통신 테스트 방법을 상세히 설명해줘.
+또한, 디팔렛타이저가 2.5초 이내에 PCB를 배치해야 하는 이유(AI 추론 시간 고려)도 설명해줘.
+```
+
+### 3.5. C# 앱 팀
 
 **사용 시기**: C# WinForms 모니터링 앱 개발을 시작할 때
 
@@ -708,9 +834,16 @@ DB_PASSWORD=1234
 **마지막 업데이트**: 2025-10-31
 **문서 관리**: 팀 리더
 **주요 변경사항**:
-- 시스템 구성 업데이트: 라즈베리파이 3대 구분 (웹캠 2대, OHT 제어 1대), 로봇팔/OHT 시스템 추가
-- 데이터베이스 스키마 업데이트: 11개 테이블 (box_status, oht_operations, user_logs 추가)
-- API 엔드포인트 업데이트: 박스 상태 관리 API 3개 추가
-- C# WinForms 기능 업데이트: 박스 상태 모니터링, OHT 제어, 사용자 활동 로그 추가
-- Flask 서버 역할 업데이트: 박스 상태 관리, OHT 운영 이력 저장
-- 데이터베이스 사용자 계정 업데이트: 5개 계정 (pcb_admin, pcb_server, pcb_viewer, pcb_data, pcb_test)
+- **Arduino 디팔렛타이저 팀 섹션 추가** ⭐ 신규 (3.4절)
+  - Arduino Mega 2560 + 5-6축 로봇팔 제어 시스템
+  - 디팔렛타이저 역할 명시: PCB 픽업 및 박스 분류 (2.5초/PCB 목표)
+  - 15개 슬롯 좌표 테이블 및 JSON 시리얼 통신 프로토콜
+  - 서보 모터 캘리브레이션 및 성능 목표
+- 시스템 구성 업데이트: 디팔렛타이저 역할 및 2.5초 동작 시간 명시
+- 프로젝트 전체 이해하기: 디팔렛타이저 관련 질문 추가 (데이터 흐름, 동작 시간 제약)
+- 목차 업데이트: Arduino 디팔렛타이저 팀 추가 (C# 앱 팀은 3.5절로 변경)
+- 시스템 구성: 라즈베리파이 3대 구분 (웹캠 2대, OHT 제어 1대), 로봇팔/OHT 시스템 추가
+- 데이터베이스 스키마: 11개 테이블 (box_status, oht_operations, user_logs 추가)
+- API 엔드포인트: 박스 상태 관리 API 3개 추가
+- C# WinForms 기능: 박스 상태 모니터링, OHT 제어, 사용자 활동 로그 추가
+- 데이터베이스 사용자 계정: 5개 계정 (pcb_admin, pcb_server, pcb_viewer, pcb_data, pcb_test)

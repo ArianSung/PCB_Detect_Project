@@ -1,143 +1,226 @@
--- PCB 불량 검사 시스템 - 데이터베이스 스키마
--- 실행 방법: MySQL Workbench에서 pcb_admin 계정으로 실행
+-- ========================================
+-- PCB 불량 검사 시스템 - 데이터베이스 스키마 (완전 버전)
+-- ========================================
+-- 버전: 2.0
+-- 마지막 업데이트: 2025-10-31
+-- 실행 방법: MySQL Workbench에서 root 또는 pcb_admin 계정으로 실행
+-- ========================================
+
+-- 데이터베이스 생성
+CREATE DATABASE IF NOT EXISTS pcb_inspection
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
 
 USE pcb_inspection;
 
 -- ========================================
--- 1. 검사 이력 테이블 (inspection_history)
+-- 기존 테이블 삭제 (외래 키 제약 조건 순서 고려)
 -- ========================================
 
-CREATE TABLE IF NOT EXISTS inspection_history (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-
-    -- 검사 정보
-    camera_id VARCHAR(10) NOT NULL COMMENT '카메라 ID (left/right)',
-    timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '검사 시각',
-    request_id VARCHAR(36) COMMENT 'UUID 요청 ID',
-
-    -- 검사 결과
-    classification VARCHAR(20) NOT NULL COMMENT '분류 결과 (normal/component_defect/solder_defect/discard)',
-    confidence DECIMAL(5, 4) NOT NULL COMMENT '신뢰도 (0.0000 ~ 1.0000)',
-    total_defects INT NOT NULL DEFAULT 0 COMMENT '검출된 불량 개수',
-
-    -- 불량 상세 정보 (JSON)
-    defects_json JSON COMMENT '불량 상세 정보 (type, bbox, confidence, severity)',
-
-    -- AI 모델 정보
-    anomaly_score DECIMAL(5, 4) COMMENT '이상 탐지 점수 (0.0000 ~ 1.0000)',
-    inference_time_ms DECIMAL(7, 2) COMMENT '추론 시간 (ms)',
-    model_version VARCHAR(20) DEFAULT 'v1.0' COMMENT '모델 버전',
-
-    -- GPIO 제어 정보
-    gpio_pin INT COMMENT 'GPIO 핀 번호',
-    gpio_action VARCHAR(20) COMMENT 'GPIO 동작 (activate/none)',
-
-    -- 로봇팔 및 박스 정보
-    box_id VARCHAR(30) COMMENT '저장된 박스 ID (예: NORMAL_A)',
-    slot_number INT COMMENT '박스 내 슬롯 번호 (0-4)',
-
-    -- 이미지 저장 경로 (선택)
-    image_path VARCHAR(255) COMMENT '원본 이미지 경로',
-    annotated_image_path VARCHAR(255) COMMENT '결과 표시 이미지 경로',
-
-    -- 인덱스
-    INDEX idx_timestamp (timestamp),
-    INDEX idx_classification (classification),
-    INDEX idx_camera_id (camera_id),
-    INDEX idx_request_id (request_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='PCB 검사 이력 테이블';
+DROP TABLE IF EXISTS user_logs;
+DROP TABLE IF EXISTS oht_operations;
+DROP TABLE IF EXISTS box_status_history;
+DROP TABLE IF EXISTS defect_details;
+DROP TABLE IF EXISTS defect_images;
+DROP TABLE IF EXISTS alerts;
+DROP TABLE IF EXISTS statistics_hourly;
+DROP TABLE IF EXISTS statistics_daily;
+DROP TABLE IF EXISTS system_logs;
+DROP TABLE IF EXISTS system_config;
+DROP TABLE IF EXISTS box_status;
+DROP TABLE IF EXISTS inspections;
+DROP TABLE IF EXISTS users;
 
 -- ========================================
--- 2. 일별 통계 테이블 (daily_statistics)
+-- 1. inspections (검사 결과 이력)
 -- ========================================
 
-CREATE TABLE IF NOT EXISTS daily_statistics (
+CREATE TABLE IF NOT EXISTS inspections (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    camera_id VARCHAR(20) NOT NULL COMMENT '카메라 ID (left/right)',
+    defect_type VARCHAR(50) NOT NULL COMMENT '불량 유형 (정상/부품불량/납땜불량/폐기)',
+    confidence DECIMAL(5,4) NOT NULL COMMENT '신뢰도 (0.0000 ~ 1.0000)',
+    inspection_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '검사 시간',
+    image_path VARCHAR(500) NULL COMMENT '불량 이미지 파일 경로',
+    boxes JSON NULL COMMENT '바운딩 박스 정보 (JSON)',
+    gpio_pin INT NULL COMMENT '활성화된 GPIO 핀 번호',
+    gpio_duration_ms INT NULL COMMENT 'GPIO 신호 지속 시간 (밀리초)',
+    user_id INT NULL COMMENT '작업자 ID',
+    notes TEXT NULL COMMENT '비고',
 
-    -- 날짜
-    date DATE NOT NULL UNIQUE COMMENT '통계 날짜',
+    INDEX idx_inspection_time (inspection_time),
+    INDEX idx_defect_type (defect_type),
+    INDEX idx_camera_id (camera_id),
+    INDEX idx_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='PCB 검사 결과 이력';
 
-    -- 전체 통계
-    total_inspections INT NOT NULL DEFAULT 0 COMMENT '전체 검사 수',
+-- ========================================
+-- 2. defect_images (불량 이미지 메타데이터)
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS defect_images (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    inspection_id INT NOT NULL COMMENT '검사 ID (FK)',
+    image_path VARCHAR(500) NOT NULL COMMENT '이미지 파일 경로',
+    image_size_bytes INT NULL COMMENT '파일 크기 (바이트)',
+    image_width INT NULL COMMENT '이미지 너비',
+    image_height INT NULL COMMENT '이미지 높이',
+    upload_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '업로드 시간',
+
+    FOREIGN KEY (inspection_id) REFERENCES inspections(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    INDEX idx_inspection_id (inspection_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='불량 이미지 파일 정보';
+
+-- ========================================
+-- 3. defect_details (상세 불량 유형별 검출 정보)
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS defect_details (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    inspection_id INT NOT NULL COMMENT '검사 ID (FK)',
+    class_name VARCHAR(50) NOT NULL COMMENT 'YOLO 검출 클래스명 (solder_bridge, capacitor_missing 등)',
+    count INT NOT NULL DEFAULT 1 COMMENT '검출된 객체 개수',
+    avg_confidence DECIMAL(5,4) NULL COMMENT '평균 신뢰도 (0.0000 ~ 1.0000)',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시간',
+
+    FOREIGN KEY (inspection_id) REFERENCES inspections(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    INDEX idx_inspection_id (inspection_id),
+    INDEX idx_class_name (class_name),
+    INDEX idx_class_created (class_name, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='YOLO가 검출한 상세 불량 유형별 정보 (TOP 7 통계용)';
+
+-- ========================================
+-- 4. statistics_daily (일별 통계)
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS statistics_daily (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    stat_date DATE NOT NULL UNIQUE COMMENT '통계 날짜',
+    total_inspections INT NOT NULL DEFAULT 0 COMMENT '총 검사 수',
     normal_count INT NOT NULL DEFAULT 0 COMMENT '정상 개수',
     component_defect_count INT NOT NULL DEFAULT 0 COMMENT '부품 불량 개수',
     solder_defect_count INT NOT NULL DEFAULT 0 COMMENT '납땜 불량 개수',
     discard_count INT NOT NULL DEFAULT 0 COMMENT '폐기 개수',
+    defect_rate DECIMAL(5,2) GENERATED ALWAYS AS (
+        CASE
+            WHEN total_inspections > 0 THEN
+                (component_defect_count + solder_defect_count + discard_count) * 100.0 / total_inspections
+            ELSE 0
+        END
+    ) STORED COMMENT '불량률 (%, 자동 계산)',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    -- 불량률
-    defect_rate DECIMAL(5, 4) COMMENT '불량률 (0.0000 ~ 1.0000)',
-
-    -- 성능 통계
-    avg_inference_time_ms DECIMAL(7, 2) COMMENT '평균 추론 시간 (ms)',
-    avg_confidence DECIMAL(5, 4) COMMENT '평균 신뢰도',
-
-    -- 카메라별 통계
-    left_camera_count INT DEFAULT 0 COMMENT '좌측 카메라 검사 수',
-    right_camera_count INT DEFAULT 0 COMMENT '우측 카메라 검사 수',
-
-    -- 생성/수정 시각
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
-    INDEX idx_date (date)
+    INDEX idx_stat_date (stat_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='일별 통계 테이블 (C# 앱 대시보드용)';
+COMMENT='일별 검사 통계';
 
 -- ========================================
--- 3. 불량 유형별 통계 테이블 (defect_type_statistics)
+-- 4. statistics_hourly (시간별 통계)
 -- ========================================
 
-CREATE TABLE IF NOT EXISTS defect_type_statistics (
+CREATE TABLE IF NOT EXISTS statistics_hourly (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    stat_datetime DATETIME NOT NULL COMMENT '통계 시간 (YYYY-MM-DD HH:00:00)',
+    total_inspections INT NOT NULL DEFAULT 0,
+    normal_count INT NOT NULL DEFAULT 0,
+    component_defect_count INT NOT NULL DEFAULT 0,
+    solder_defect_count INT NOT NULL DEFAULT 0,
+    discard_count INT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    -- 날짜 및 불량 유형
-    date DATE NOT NULL COMMENT '통계 날짜',
-    defect_type VARCHAR(50) NOT NULL COMMENT '불량 유형',
-
-    -- 통계
-    count INT NOT NULL DEFAULT 0 COMMENT '발생 횟수',
-    avg_confidence DECIMAL(5, 4) COMMENT '평균 신뢰도',
-
-    -- 심각도별 통계
-    low_severity_count INT DEFAULT 0 COMMENT '낮은 심각도',
-    medium_severity_count INT DEFAULT 0 COMMENT '중간 심각도',
-    high_severity_count INT DEFAULT 0 COMMENT '높은 심각도',
-
-    -- 생성/수정 시각
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
-    UNIQUE KEY unique_date_type (date, defect_type),
-    INDEX idx_date (date),
-    INDEX idx_defect_type (defect_type)
+    UNIQUE KEY uk_stat_datetime (stat_datetime),
+    INDEX idx_stat_datetime (stat_datetime)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='불량 유형별 통계 테이블';
+COMMENT='시간별 검사 통계';
 
 -- ========================================
--- 4. 시스템 로그 테이블 (system_logs) - 선택
+-- 5. system_logs (시스템 로그)
 -- ========================================
 
 CREATE TABLE IF NOT EXISTS system_logs (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-
-    -- 로그 정보
-    timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '로그 시각',
-    level VARCHAR(10) NOT NULL COMMENT '로그 레벨 (DEBUG/INFO/WARNING/ERROR)',
-    component VARCHAR(50) NOT NULL COMMENT '컴포넌트 (flask_server/raspberry_pi/etc)',
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    log_level ENUM('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL') NOT NULL DEFAULT 'INFO',
+    source VARCHAR(100) NOT NULL COMMENT '로그 소스 (server/raspberry-pi-1/raspberry-pi-2/winforms)',
     message TEXT NOT NULL COMMENT '로그 메시지',
+    details JSON NULL COMMENT '상세 정보 (JSON)',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    -- 추가 정보
-    details JSON COMMENT '상세 정보 (JSON)',
-
-    INDEX idx_timestamp (timestamp),
-    INDEX idx_level (level),
-    INDEX idx_component (component)
+    INDEX idx_log_level (log_level),
+    INDEX idx_source (source),
+    INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='시스템 로그 테이블 (에러 추적용)';
+COMMENT='시스템 로그';
 
 -- ========================================
--- 5. 박스 상태 테이블 (box_status)
+-- 6. system_config (시스템 설정)
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS system_config (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    config_key VARCHAR(100) NOT NULL UNIQUE COMMENT '설정 키',
+    config_value TEXT NOT NULL COMMENT '설정 값',
+    description VARCHAR(500) NULL COMMENT '설명',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    updated_by INT NULL COMMENT '수정한 사용자 ID',
+
+    INDEX idx_config_key (config_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='시스템 설정';
+
+-- ========================================
+-- 7. users (사용자/작업자)
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE COMMENT '사용자명',
+    password_hash VARCHAR(255) NOT NULL COMMENT '비밀번호 해시',
+    full_name VARCHAR(100) NULL COMMENT '전체 이름',
+    role ENUM('admin', 'operator', 'viewer') NOT NULL DEFAULT 'viewer' COMMENT '권한',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE COMMENT '활성화 여부',
+    last_login DATETIME NULL COMMENT '마지막 로그인',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_username (username),
+    INDEX idx_role (role)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='사용자 계정';
+
+-- ========================================
+-- 8. alerts (알람/알림)
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS alerts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    alert_type ENUM('defect_rate_high', 'system_error', 'camera_offline', 'server_offline', 'box_full') NOT NULL,
+    severity ENUM('low', 'medium', 'high', 'critical') NOT NULL DEFAULT 'medium',
+    message TEXT NOT NULL COMMENT '알람 메시지',
+    details JSON NULL COMMENT '상세 정보',
+    is_resolved BOOLEAN NOT NULL DEFAULT FALSE COMMENT '해결 여부',
+    resolved_at DATETIME NULL COMMENT '해결 시간',
+    resolved_by INT NULL COMMENT '해결한 사용자 ID',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_alert_type (alert_type),
+    INDEX idx_severity (severity),
+    INDEX idx_is_resolved (is_resolved),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='알람 및 알림 (box_full 추가)';
+
+-- ========================================
+-- 9. box_status (로봇팔 박스 상태 관리)
 -- ========================================
 
 CREATE TABLE IF NOT EXISTS box_status (
@@ -148,7 +231,7 @@ CREATE TABLE IF NOT EXISTS box_status (
     category VARCHAR(50) NOT NULL COMMENT '분류 카테고리 (normal/component_defect/solder_defect)',
 
     -- 슬롯 상태
-    current_slot INT NOT NULL DEFAULT 0 COMMENT '현재 사용 중인 슬롯 번호 (0-4)',
+    current_slot INT NOT NULL DEFAULT 0 COMMENT '현재 사용 중인 슬롯 번호 (0-4, 수평 5슬롯)',
     max_slots INT NOT NULL DEFAULT 5 COMMENT '최대 슬롯 개수 (5개, 수평 배치)',
     is_full BOOLEAN NOT NULL DEFAULT FALSE COMMENT '박스 가득참 여부',
 
@@ -165,75 +248,409 @@ CREATE TABLE IF NOT EXISTS box_status (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 COMMENT='로봇팔 박스 슬롯 상태 관리 테이블 (3개 박스 × 5개 슬롯 = 15개 슬롯, 폐기는 슬롯 관리 안 함)';
 
--- 3개 박스 초기 데이터 삽입 (폐기는 제외)
+-- ========================================
+-- 10. defect_rate_history (불량률 추이 이력)
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS defect_rate_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+
+    -- 불량률 정보
+    defect_rate DECIMAL(5,2) NOT NULL COMMENT '불량률 (%)',
+    total_inspections INT NOT NULL COMMENT '해당 시점의 누적 총 검사 수',
+    defect_count INT NOT NULL COMMENT '해당 시점의 누적 불량 수',
+
+    -- 타임스탬프
+    recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '기록 시각',
+
+    -- 인덱스
+    INDEX idx_recorded_at (recorded_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='시간대별 불량률 추이 (불량률 모니터링 그래프, 이탈 포인트 분석용)';
+
+-- ========================================
+-- 11. oht_operations (OHT 운영 이력)
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS oht_operations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+
+    -- 요청 정보
+    operation_id VARCHAR(36) NOT NULL UNIQUE COMMENT 'OHT 운영 UUID',
+    category ENUM('NORMAL', 'COMPONENT_DEFECT', 'SOLDER_DEFECT') NOT NULL COMMENT 'PCB 카테고리',
+
+    -- 사용자 정보
+    user_id INT NULL COMMENT '요청한 사용자 ID (NULL이면 시스템 자동)',
+    user_role ENUM('Admin', 'Operator', 'System') NOT NULL COMMENT '사용자 역할',
+    is_auto BOOLEAN NOT NULL DEFAULT FALSE COMMENT '자동 호출 여부',
+    trigger_reason VARCHAR(50) NULL COMMENT '트리거 사유 (box_full 등)',
+
+    -- 상태
+    status ENUM('pending', 'processing', 'completed', 'failed') NOT NULL DEFAULT 'pending' COMMENT '운영 상태',
+
+    -- 타임스탬프
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '요청 생성 시간',
+    started_at DATETIME NULL COMMENT '운영 시작 시간',
+    completed_at DATETIME NULL COMMENT '운영 완료 시간',
+
+    -- 결과
+    pcb_count INT NOT NULL DEFAULT 0 COMMENT '수거한 PCB 개수',
+    success BOOLEAN NULL COMMENT '성공 여부',
+    error_message TEXT NULL COMMENT '오류 메시지',
+    execution_time_seconds DECIMAL(5, 2) NULL COMMENT '실행 시간 (초)',
+
+    -- 인덱스
+    INDEX idx_operation_id (operation_id),
+    INDEX idx_category (category),
+    INDEX idx_status (status),
+    INDEX idx_is_auto (is_auto),
+    INDEX idx_created_at (created_at),
+
+    -- 외래 키
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='OHT (Overhead Hoist Transport) 운영 이력 테이블';
+
+-- ========================================
+-- 11. user_logs (사용자 활동 로그)
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS user_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+
+    -- 사용자 정보
+    user_id INT NOT NULL COMMENT '사용자 ID',
+    username VARCHAR(50) NOT NULL COMMENT '사용자명 (참조용)',
+    user_role ENUM('Admin', 'Operator', 'Viewer') NOT NULL COMMENT '사용자 권한',
+
+    -- 활동 정보
+    action_type ENUM(
+        'login',
+        'logout',
+        'create_user',
+        'update_user',
+        'delete_user',
+        'reset_password',
+        'call_oht',
+        'export_data',
+        'view_inspection',
+        'change_settings',
+        'other'
+    ) NOT NULL COMMENT '활동 유형',
+    action_description VARCHAR(255) NULL COMMENT '활동 상세 설명',
+
+    -- 시스템 정보
+    ip_address VARCHAR(45) NULL COMMENT 'IP 주소 (IPv4/IPv6)',
+    user_agent VARCHAR(255) NULL COMMENT 'User Agent (브라우저/클라이언트 정보)',
+
+    -- 상세 정보
+    details JSON NULL COMMENT '추가 상세 정보 (JSON 형식)',
+
+    -- 타임스탬프
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '활동 발생 시간',
+
+    -- 인덱스
+    INDEX idx_user_id (user_id),
+    INDEX idx_action_type (action_type),
+    INDEX idx_created_at (created_at),
+    INDEX idx_user_action (user_id, action_type),
+
+    -- 외래 키
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='사용자 활동 이력 로그 테이블';
+
+-- ========================================
+-- 초기 데이터 삽입
+-- ========================================
+
+-- 시스템 설정 기본값
+INSERT INTO system_config (config_key, config_value, description) VALUES
+-- Flask 서버 설정
+('server_url', 'http://100.64.1.1:5000', 'Flask 서버 URL'),
+-- 카메라 설정
+('fps', '10', '카메라 FPS'),
+('jpeg_quality', '85', 'JPEG 압축 품질'),
+-- AI 모델 설정
+('defect_threshold', '0.70', '불량 판정 임계값 (신뢰도)'),
+-- GPIO 설정
+('gpio_duration_ms', '500', 'GPIO 신호 지속 시간 (밀리초)'),
+-- 데이터 관리
+('max_image_retention_days', '90', '불량 이미지 보관 기간 (일)'),
+-- 알람 설정
+('alert_defect_rate_threshold', '10.0', '알람 발생 불량률 임계값 (%)'),
+-- 목표 설정
+('daily_inspection_target', '1000', '일일 목표 검사 수 (달성률 계산용)'),
+-- 불량률 모니터링 임계값
+('defect_rate_upper_threshold', '7.0', '불량률 상한선 (%, 이탈 포인트 감지용)'),
+('defect_rate_lower_threshold', '3.0', '불량률 하한선 (%, 이탈 포인트 감지용)'),
+-- 세션 및 로그 설정
+('session_timeout_minutes', '15', '세션 타임아웃 (분)'),
+('log_level', 'INFO', '로그 레벨 (DEBUG, INFO, WARNING, ERROR, CRITICAL)'),
+-- 데이터베이스 연결 정보 (WinForms 설정 화면용, 비밀번호 제외)
+('mysql_host', 'localhost', 'MySQL 서버 호스트'),
+('mysql_user', 'root', 'MySQL 사용자명'),
+('mysql_database', 'pcb_inspection', 'MySQL 데이터베이스명');
+
+-- 기본 사용자 생성 (비밀번호: admin123, 실제로는 해시 사용)
+INSERT INTO users (username, password_hash, full_name, role) VALUES
+('admin', '$2b$12$examplehashedpassword', '관리자', 'admin'),
+('operator1', '$2b$12$examplehashedpassword', '작업자1', 'operator'),
+('viewer1', '$2b$12$examplehashedpassword', '조회자1', 'viewer');
+
+-- 박스 상태 초기화 (3개 박스, DISCARD는 제외)
 INSERT INTO box_status (box_id, category, max_slots) VALUES
     ('NORMAL', 'normal', 5),
     ('COMPONENT_DEFECT', 'component_defect', 5),
     ('SOLDER_DEFECT', 'solder_defect', 5);
 
 -- ========================================
--- 6. 샘플 데이터 삽입 (테스트용)
+-- 뷰 정의
 -- ========================================
 
--- 샘플 검사 이력 (정상 - NORMAL 박스 슬롯 0)
-INSERT INTO inspection_history (
-    camera_id, classification, confidence, total_defects,
-    defects_json, anomaly_score, inference_time_ms,
-    gpio_pin, gpio_action, box_id, slot_number
-) VALUES (
-    'left', 'normal', 0.9850, 0,
-    '[]', 0.1200, 95.23,
-    23, 'activate', 'NORMAL', 0
-);
-
--- 샘플 검사 이력 (납땜 불량 - SOLDER_DEFECT 박스 슬롯 1)
-INSERT INTO inspection_history (
-    camera_id, classification, confidence, total_defects,
-    defects_json, anomaly_score, inference_time_ms,
-    gpio_pin, gpio_action, box_id, slot_number
-) VALUES (
-    'right', 'solder_defect', 0.8720, 2,
-    '[
-        {"type": "cold_joint", "bbox": [120, 80, 200, 150], "confidence": 0.87, "severity": "medium"},
-        {"type": "solder_bridge", "bbox": [300, 200, 380, 260], "confidence": 0.72, "severity": "low"}
-    ]',
-    0.6500, 120.45,
-    27, 'activate', 'SOLDER_DEFECT', 1
-);
-
--- 샘플 일별 통계
-INSERT INTO daily_statistics (
-    date, total_inspections, normal_count,
-    component_defect_count, solder_defect_count, discard_count,
-    defect_rate, avg_inference_time_ms, avg_confidence,
-    left_camera_count, right_camera_count
-) VALUES (
-    CURDATE(), 250, 220,
-    15, 12, 3,
-    0.1200, 110.30, 0.9150,
-    125, 125
-);
+-- 실시간 통계 뷰
+CREATE OR REPLACE VIEW v_realtime_statistics AS
+SELECT
+    DATE(inspection_time) AS stat_date,
+    HOUR(inspection_time) AS stat_hour,
+    COUNT(*) AS total_inspections,
+    SUM(CASE WHEN defect_type = '정상' THEN 1 ELSE 0 END) AS normal_count,
+    SUM(CASE WHEN defect_type = '부품불량' THEN 1 ELSE 0 END) AS component_defect_count,
+    SUM(CASE WHEN defect_type = '납땜불량' THEN 1 ELSE 0 END) AS solder_defect_count,
+    SUM(CASE WHEN defect_type = '폐기' THEN 1 ELSE 0 END) AS discard_count,
+    ROUND(
+        (SUM(CASE WHEN defect_type != '정상' THEN 1 ELSE 0 END) * 100.0 / COUNT(*)),
+        2
+    ) AS defect_rate
+FROM inspections
+WHERE inspection_time >= CURDATE()
+GROUP BY stat_date, stat_hour
+ORDER BY stat_date DESC, stat_hour DESC;
 
 -- ========================================
--- 7. 테이블 목록 및 구조 확인
+-- 저장 프로시저
 -- ========================================
 
+-- 1. 일별 통계 업데이트
+DELIMITER $$
+
+DROP PROCEDURE IF EXISTS update_daily_statistics$$
+
+CREATE PROCEDURE update_daily_statistics(IN target_date DATE)
+BEGIN
+    INSERT INTO statistics_daily (
+        stat_date,
+        total_inspections,
+        normal_count,
+        component_defect_count,
+        solder_defect_count,
+        discard_count
+    )
+    SELECT
+        DATE(inspection_time) AS stat_date,
+        COUNT(*) AS total_inspections,
+        SUM(CASE WHEN defect_type = '정상' THEN 1 ELSE 0 END) AS normal_count,
+        SUM(CASE WHEN defect_type = '부품불량' THEN 1 ELSE 0 END) AS component_defect_count,
+        SUM(CASE WHEN defect_type = '납땜불량' THEN 1 ELSE 0 END) AS solder_defect_count,
+        SUM(CASE WHEN defect_type = '폐기' THEN 1 ELSE 0 END) AS discard_count
+    FROM inspections
+    WHERE DATE(inspection_time) = target_date
+    GROUP BY DATE(inspection_time)
+    ON DUPLICATE KEY UPDATE
+        total_inspections = VALUES(total_inspections),
+        normal_count = VALUES(normal_count),
+        component_defect_count = VALUES(component_defect_count),
+        solder_defect_count = VALUES(solder_defect_count),
+        discard_count = VALUES(discard_count),
+        updated_at = CURRENT_TIMESTAMP;
+END$$
+
+-- 2. 불량률 알람 체크
+DROP PROCEDURE IF EXISTS check_defect_rate_alert$$
+
+CREATE PROCEDURE check_defect_rate_alert(IN target_date DATE)
+BEGIN
+    DECLARE current_defect_rate DECIMAL(5,2);
+    DECLARE threshold DECIMAL(5,2);
+
+    -- 현재 불량률 조회
+    SELECT defect_rate INTO current_defect_rate
+    FROM statistics_daily
+    WHERE stat_date = target_date
+    LIMIT 1;
+
+    -- 임계값 조회
+    SELECT CAST(config_value AS DECIMAL(5,2)) INTO threshold
+    FROM system_config
+    WHERE config_key = 'alert_defect_rate_threshold'
+    LIMIT 1;
+
+    -- 불량률이 임계값 초과 시 알람 생성
+    IF current_defect_rate > threshold THEN
+        INSERT INTO alerts (alert_type, severity, message, details)
+        VALUES (
+            'defect_rate_high',
+            'high',
+            CONCAT('불량률이 임계값을 초과했습니다: ', current_defect_rate, '%'),
+            JSON_OBJECT(
+                'defect_rate', current_defect_rate,
+                'threshold', threshold,
+                'date', target_date
+            )
+        );
+    END IF;
+END$$
+
+DELIMITER ;
+
+-- ========================================
+-- 트리거
+-- ========================================
+
+-- 검사 결과 삽입 시 시간별 통계 자동 업데이트
+DELIMITER $$
+
+DROP TRIGGER IF EXISTS after_inspection_insert$$
+
+CREATE TRIGGER after_inspection_insert
+AFTER INSERT ON inspections
+FOR EACH ROW
+BEGIN
+    DECLARE stat_hour DATETIME;
+
+    -- 시간 단위로 반올림 (예: 2025-10-31 14:35:20 → 2025-10-31 14:00:00)
+    SET stat_hour = DATE_FORMAT(NEW.inspection_time, '%Y-%m-%d %H:00:00');
+
+    -- 시간별 통계 업데이트
+    INSERT INTO statistics_hourly (
+        stat_datetime,
+        total_inspections,
+        normal_count,
+        component_defect_count,
+        solder_defect_count,
+        discard_count
+    ) VALUES (
+        stat_hour,
+        1,
+        CASE WHEN NEW.defect_type = '정상' THEN 1 ELSE 0 END,
+        CASE WHEN NEW.defect_type = '부품불량' THEN 1 ELSE 0 END,
+        CASE WHEN NEW.defect_type = '납땜불량' THEN 1 ELSE 0 END,
+        CASE WHEN NEW.defect_type = '폐기' THEN 1 ELSE 0 END
+    )
+    ON DUPLICATE KEY UPDATE
+        total_inspections = total_inspections + 1,
+        normal_count = normal_count + CASE WHEN NEW.defect_type = '정상' THEN 1 ELSE 0 END,
+        component_defect_count = component_defect_count + CASE WHEN NEW.defect_type = '부품불량' THEN 1 ELSE 0 END,
+        solder_defect_count = solder_defect_count + CASE WHEN NEW.defect_type = '납땜불량' THEN 1 ELSE 0 END,
+        discard_count = discard_count + CASE WHEN NEW.defect_type = '폐기' THEN 1 ELSE 0 END,
+        updated_at = CURRENT_TIMESTAMP;
+END$$
+
+DELIMITER ;
+
+-- ========================================
+-- 인덱스 최적화 (복합 인덱스)
+-- ========================================
+
+-- 날짜 범위 조회용 (테이블 생성 시 이미 삭제됨)
+CREATE INDEX idx_inspection_time_defect_type
+ON inspections (inspection_time, defect_type);
+
+-- 카메라별 검색용 (테이블 생성 시 이미 삭제됨)
+CREATE INDEX idx_camera_defect_type
+ON inspections (camera_id, defect_type, inspection_time);
+
+-- ========================================
+-- 이벤트 스케줄러 설정 (자동 삭제)
+-- ========================================
+
+-- 이벤트 스케줄러 활성화
+SET GLOBAL event_scheduler = ON;
+
+-- 90일 이상 된 시스템 로그 자동 삭제 (매일 새벽 2시)
+DROP EVENT IF EXISTS delete_old_system_logs;
+
+CREATE EVENT IF NOT EXISTS delete_old_system_logs
+ON SCHEDULE EVERY 1 DAY
+STARTS CONCAT(CURDATE() + INTERVAL 1 DAY, ' 02:00:00')
+DO
+    DELETE FROM system_logs
+    WHERE created_at < DATE_SUB(NOW(), INTERVAL 90 DAY);
+
+-- 설정된 기간 이상 된 불량 이미지 메타데이터 삭제 (매일 새벽 2시 30분)
+DROP EVENT IF EXISTS delete_old_defect_images;
+
+CREATE EVENT IF NOT EXISTS delete_old_defect_images
+ON SCHEDULE EVERY 1 DAY
+STARTS CONCAT(CURDATE() + INTERVAL 1 DAY, ' 02:30:00')
+DO
+    DELETE di FROM defect_images di
+    INNER JOIN inspections i ON di.inspection_id = i.id
+    WHERE i.inspection_time < DATE_SUB(NOW(), INTERVAL (
+        SELECT CAST(config_value AS UNSIGNED)
+        FROM system_config
+        WHERE config_key = 'max_image_retention_days'
+    ) DAY);
+
+-- ========================================
+-- 테이블 확인 및 완료 메시지
+-- ========================================
+
+-- 모든 테이블 목록 표시
 SHOW TABLES;
 
 -- 각 테이블 구조 확인
-DESCRIBE inspection_history;
-DESCRIBE daily_statistics;
-DESCRIBE defect_type_statistics;
-DESCRIBE system_logs;
-DESCRIBE box_status;
+SELECT 'inspections' AS 'Table', COUNT(*) AS 'Row Count' FROM inspections
+UNION ALL
+SELECT 'defect_images', COUNT(*) FROM defect_images
+UNION ALL
+SELECT 'defect_details', COUNT(*) FROM defect_details
+UNION ALL
+SELECT 'statistics_daily', COUNT(*) FROM statistics_daily
+UNION ALL
+SELECT 'statistics_hourly', COUNT(*) FROM statistics_hourly
+UNION ALL
+SELECT 'system_logs', COUNT(*) FROM system_logs
+UNION ALL
+SELECT 'system_config', COUNT(*) FROM system_config
+UNION ALL
+SELECT 'users', COUNT(*) FROM users
+UNION ALL
+SELECT 'alerts', COUNT(*) FROM alerts
+UNION ALL
+SELECT 'box_status', COUNT(*) FROM box_status
+UNION ALL
+SELECT 'box_status_history', COUNT(*) FROM box_status_history
+UNION ALL
+SELECT 'oht_operations', COUNT(*) FROM oht_operations
+UNION ALL
+SELECT 'user_logs', COUNT(*) FROM user_logs;
 
--- 샘플 데이터 조회
-SELECT * FROM inspection_history LIMIT 5;
-SELECT * FROM daily_statistics LIMIT 5;
+-- 박스 상태 확인
 SELECT * FROM box_status ORDER BY box_id;
 
--- ========================================
--- 완료 메시지
--- ========================================
+-- 시스템 설정 확인
+SELECT * FROM system_config ORDER BY id;
 
-SELECT 'PCB 불량 검사 시스템 데이터베이스 스키마 생성 완료!' AS message;
+-- 사용자 목록 확인
+SELECT id, username, full_name, role, is_active, created_at FROM users;
+
+-- 완료 메시지
+SELECT '===================================================' AS '';
+SELECT 'PCB 불량 검사 시스템 데이터베이스 스키마 생성 완료!' AS 'Status';
+SELECT '===================================================' AS '';
+SELECT '총 13개 테이블 생성됨:' AS 'Info';
+SELECT '1. inspections (검사 결과 이력)' AS '';
+SELECT '2. defect_images (불량 이미지 메타데이터)' AS '';
+SELECT '3. defect_details (상세 불량 유형별 검출 정보) ⭐ NEW' AS '';
+SELECT '4. statistics_daily (일별 통계)' AS '';
+SELECT '5. statistics_hourly (시간별 통계)' AS '';
+SELECT '6. system_logs (시스템 로그)' AS '';
+SELECT '7. system_config (시스템 설정)' AS '';
+SELECT '8. users (사용자/작업자)' AS '';
+SELECT '9. alerts (알람/알림)' AS '';
+SELECT '10. box_status (로봇팔 박스 상태 관리)' AS '';
+SELECT '11. defect_rate_history (불량률 추이 이력) ⭐ NEW' AS '';
+SELECT '12. oht_operations (OHT 운영 이력)' AS '';
+SELECT '13. user_logs (사용자 활동 로그)' AS '';
+SELECT '===================================================' AS '';
