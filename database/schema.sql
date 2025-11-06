@@ -19,6 +19,8 @@ USE pcb_inspection;
 
 DROP TABLE IF EXISTS user_logs;
 DROP TABLE IF EXISTS oht_operations;
+DROP TABLE IF EXISTS box_status_history;
+DROP TABLE IF EXISTS defect_details;
 DROP TABLE IF EXISTS defect_images;
 DROP TABLE IF EXISTS alerts;
 DROP TABLE IF EXISTS statistics_hourly;
@@ -75,7 +77,29 @@ CREATE TABLE IF NOT EXISTS defect_images (
 COMMENT='불량 이미지 파일 정보';
 
 -- ========================================
--- 3. statistics_daily (일별 통계)
+-- 3. defect_details (상세 불량 유형별 검출 정보)
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS defect_details (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    inspection_id INT NOT NULL COMMENT '검사 ID (FK)',
+    class_name VARCHAR(50) NOT NULL COMMENT 'YOLO 검출 클래스명 (solder_bridge, capacitor_missing 등)',
+    count INT NOT NULL DEFAULT 1 COMMENT '검출된 객체 개수',
+    avg_confidence DECIMAL(5,4) NULL COMMENT '평균 신뢰도 (0.0000 ~ 1.0000)',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시간',
+
+    FOREIGN KEY (inspection_id) REFERENCES inspections(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    INDEX idx_inspection_id (inspection_id),
+    INDEX idx_class_name (class_name),
+    INDEX idx_class_created (class_name, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='YOLO가 검출한 상세 불량 유형별 정보 (TOP 7 통계용)';
+
+-- ========================================
+-- 4. statistics_daily (일별 통계)
 -- ========================================
 
 CREATE TABLE IF NOT EXISTS statistics_daily (
@@ -225,7 +249,31 @@ CREATE TABLE IF NOT EXISTS box_status (
 COMMENT='로봇팔 박스 슬롯 상태 관리 테이블 (3개 박스 × 5개 슬롯 = 15개 슬롯, 폐기는 슬롯 관리 안 함)';
 
 -- ========================================
--- 10. oht_operations (OHT 운영 이력)
+-- 10. box_status_history (박스 상태 이력)
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS box_status_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+
+    -- 박스 정보
+    box_id VARCHAR(20) NOT NULL COMMENT '박스 ID (NORMAL, COMPONENT_DEFECT, SOLDER_DEFECT)',
+
+    -- 상태 정보
+    current_slot INT NOT NULL COMMENT '당시 사용 중인 슬롯 번호 (0-4)',
+    total_pcb_count INT NOT NULL COMMENT '당시 박스에 저장된 총 PCB 개수',
+    is_full BOOLEAN NOT NULL DEFAULT FALSE COMMENT '당시 박스 가득참 여부',
+
+    -- 타임스탬프
+    recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '기록 시각',
+
+    -- 인덱스
+    INDEX idx_box_recorded (box_id, recorded_at),
+    INDEX idx_recorded_at (recorded_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='박스 상태 시간대별 이력 (모니터링 그래프, 이탈 포인트 분석용)';
+
+-- ========================================
+-- 11. oht_operations (OHT 운영 이력)
 -- ========================================
 
 CREATE TABLE IF NOT EXISTS oht_operations (
@@ -322,13 +370,31 @@ COMMENT='사용자 활동 이력 로그 테이블';
 
 -- 시스템 설정 기본값
 INSERT INTO system_config (config_key, config_value, description) VALUES
+-- Flask 서버 설정
 ('server_url', 'http://100.64.1.1:5000', 'Flask 서버 URL'),
+-- 카메라 설정
 ('fps', '10', '카메라 FPS'),
 ('jpeg_quality', '85', 'JPEG 압축 품질'),
+-- AI 모델 설정
 ('defect_threshold', '0.70', '불량 판정 임계값 (신뢰도)'),
+-- GPIO 설정
 ('gpio_duration_ms', '500', 'GPIO 신호 지속 시간 (밀리초)'),
+-- 데이터 관리
 ('max_image_retention_days', '90', '불량 이미지 보관 기간 (일)'),
-('alert_defect_rate_threshold', '10.0', '알람 발생 불량률 임계값 (%)');
+-- 알람 설정
+('alert_defect_rate_threshold', '10.0', '알람 발생 불량률 임계값 (%)'),
+-- 목표 설정
+('daily_inspection_target', '1000', '일일 목표 검사 수 (달성률 계산용)'),
+-- 박스 모니터링 임계값
+('box_upper_threshold', '7', '박스 상한선 (이탈 포인트 감지용)'),
+('box_lower_threshold', '3', '박스 하한선 (이탈 포인트 감지용)'),
+-- 세션 및 로그 설정
+('session_timeout_minutes', '15', '세션 타임아웃 (분)'),
+('log_level', 'INFO', '로그 레벨 (DEBUG, INFO, WARNING, ERROR, CRITICAL)'),
+-- 데이터베이스 연결 정보 (WinForms 설정 화면용, 비밀번호 제외)
+('mysql_host', 'localhost', 'MySQL 서버 호스트'),
+('mysql_user', 'root', 'MySQL 사용자명'),
+('mysql_database', 'pcb_inspection', 'MySQL 데이터베이스명');
 
 -- 기본 사용자 생성 (비밀번호: admin123, 실제로는 해시 사용)
 INSERT INTO users (username, password_hash, full_name, role) VALUES
@@ -542,6 +608,8 @@ SELECT 'inspections' AS 'Table', COUNT(*) AS 'Row Count' FROM inspections
 UNION ALL
 SELECT 'defect_images', COUNT(*) FROM defect_images
 UNION ALL
+SELECT 'defect_details', COUNT(*) FROM defect_details
+UNION ALL
 SELECT 'statistics_daily', COUNT(*) FROM statistics_daily
 UNION ALL
 SELECT 'statistics_hourly', COUNT(*) FROM statistics_hourly
@@ -555,6 +623,8 @@ UNION ALL
 SELECT 'alerts', COUNT(*) FROM alerts
 UNION ALL
 SELECT 'box_status', COUNT(*) FROM box_status
+UNION ALL
+SELECT 'box_status_history', COUNT(*) FROM box_status_history
 UNION ALL
 SELECT 'oht_operations', COUNT(*) FROM oht_operations
 UNION ALL
@@ -573,16 +643,18 @@ SELECT id, username, full_name, role, is_active, created_at FROM users;
 SELECT '===================================================' AS '';
 SELECT 'PCB 불량 검사 시스템 데이터베이스 스키마 생성 완료!' AS 'Status';
 SELECT '===================================================' AS '';
-SELECT '총 11개 테이블 생성됨:' AS 'Info';
+SELECT '총 13개 테이블 생성됨:' AS 'Info';
 SELECT '1. inspections (검사 결과 이력)' AS '';
 SELECT '2. defect_images (불량 이미지 메타데이터)' AS '';
-SELECT '3. statistics_daily (일별 통계)' AS '';
-SELECT '4. statistics_hourly (시간별 통계)' AS '';
-SELECT '5. system_logs (시스템 로그)' AS '';
-SELECT '6. system_config (시스템 설정)' AS '';
-SELECT '7. users (사용자/작업자)' AS '';
-SELECT '8. alerts (알람/알림)' AS '';
-SELECT '9. box_status (로봇팔 박스 상태 관리)' AS '';
-SELECT '10. oht_operations (OHT 운영 이력)' AS '';
-SELECT '11. user_logs (사용자 활동 로그)' AS '';
+SELECT '3. defect_details (상세 불량 유형별 검출 정보) ⭐ NEW' AS '';
+SELECT '4. statistics_daily (일별 통계)' AS '';
+SELECT '5. statistics_hourly (시간별 통계)' AS '';
+SELECT '6. system_logs (시스템 로그)' AS '';
+SELECT '7. system_config (시스템 설정)' AS '';
+SELECT '8. users (사용자/작업자)' AS '';
+SELECT '9. alerts (알람/알림)' AS '';
+SELECT '10. box_status (로봇팔 박스 상태 관리)' AS '';
+SELECT '11. box_status_history (박스 상태 이력) ⭐ NEW' AS '';
+SELECT '12. oht_operations (OHT 운영 이력)' AS '';
+SELECT '13. user_logs (사용자 활동 로그)' AS '';
 SELECT '===================================================' AS '';
