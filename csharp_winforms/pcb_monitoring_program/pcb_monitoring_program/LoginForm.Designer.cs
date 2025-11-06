@@ -38,13 +38,13 @@
             btn_login = new Button();
             pictureBox1 = new PictureBox();
             pictureBox2 = new PictureBox();
-            pictureBox3 = new PictureBox();
+            picturebox_Login_background = new PictureBox();
             label3 = new Label();
             pictureBox4 = new PictureBox();
             pictureBox5 = new PictureBox();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)pictureBox3).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)picturebox_Login_background).BeginInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox4).BeginInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox5).BeginInit();
             SuspendLayout();
@@ -149,15 +149,15 @@
             pictureBox2.TabIndex = 14;
             pictureBox2.TabStop = false;
             // 
-            // pictureBox3
+            // picturebox_Login_background
             // 
-            pictureBox3.Image = (Image)resources.GetObject("pictureBox3.Image");
-            pictureBox3.Location = new Point(645, 240);
-            pictureBox3.Name = "pictureBox3";
-            pictureBox3.Size = new Size(630, 600);
-            pictureBox3.SizeMode = PictureBoxSizeMode.Zoom;
-            pictureBox3.TabIndex = 15;
-            pictureBox3.TabStop = false;
+            picturebox_Login_background.Image = (Image)resources.GetObject("picturebox_Login_background.Image");
+            picturebox_Login_background.Location = new Point(645, 240);
+            picturebox_Login_background.Name = "picturebox_Login_background";
+            picturebox_Login_background.Size = new Size(630, 600);
+            picturebox_Login_background.SizeMode = PictureBoxSizeMode.Zoom;
+            picturebox_Login_background.TabIndex = 15;
+            picturebox_Login_background.TabStop = false;
             // 
             // label3
             // 
@@ -209,12 +209,12 @@
             Controls.Add(label2);
             Controls.Add(label1);
             Controls.Add(pictureBox5);
-            Controls.Add(pictureBox3);
+            Controls.Add(picturebox_Login_background);
             Name = "LoginForm";
             Text = "LoginForm";
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();
-            ((System.ComponentModel.ISupportInitialize)pictureBox3).EndInit();
+            ((System.ComponentModel.ISupportInitialize)picturebox_Login_background).EndInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox4).EndInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox5).EndInit();
             ResumeLayout(false);
@@ -232,7 +232,7 @@
         private Button btn_login;
         private PictureBox pictureBox1;
         private PictureBox pictureBox2;
-        private PictureBox pictureBox3;
+        private PictureBox picturebox_Login_background;
         private Label label3;
         private PictureBox pictureBox4;
         private PictureBox pictureBox5;
