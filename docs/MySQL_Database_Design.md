@@ -1,8 +1,13 @@
-# MySQL 데이터베이스 설계 - PCB 검사 시스템
+# MySQL 데이터베이스 설계 - PCB 검사 시스템 ⭐ (이중 모델 아키텍처)
 
 ## 개요
 
-PCB 불량 검사 시스템의 검사 이력, 통계, 시스템 로그를 저장하는 MySQL 데이터베이스 스키마 설계입니다.
+PCB 불량 검사 시스템의 **양면 동시 검사 이력**, 통계, 시스템 로그를 저장하는 MySQL 데이터베이스 스키마 설계입니다.
+
+**⭐ 이중 모델 아키텍처 특징**:
+- **Component Model (부품 검출)**: FPIC-Component, 25 클래스
+- **Solder Model (납땜 불량)**: SolDef_AI, 5-6 클래스
+- **Result Fusion (결과 융합)**: Flask 서버에서 두 모델 결과를 융합하여 최종 판정 (normal, component_defect, solder_defect, discard)
 
 ---
 
@@ -20,28 +25,98 @@ USE pcb_inspection;
 
 ## 테이블 스키마
 
-### 1. inspections (검사 결과 이력)
+### 1. inspections (양면 동시 검사 결과 이력) ⭐ 이중 모델
 
 ```sql
 CREATE TABLE inspections (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    camera_id VARCHAR(20) NOT NULL COMMENT '카메라 ID (left/right)',
-    defect_type VARCHAR(50) NOT NULL COMMENT '불량 유형 (정상/부품불량/납땜불량/폐기)',
-    confidence DECIMAL(5,4) NOT NULL COMMENT '신뢰도 (0.0000 ~ 1.0000)',
+
+    -- 융합 결과 (최종 판정)
+    fusion_decision VARCHAR(50) NOT NULL COMMENT '융합 결과 판정 (normal/component_defect/solder_defect/discard)',
+    fusion_severity_level INT NOT NULL DEFAULT 0 COMMENT '융합 심각도 레벨 (0-3)',
+
+    -- Component Model 결과 (좌측 카메라, 부품 검출)
+    component_defects JSON NULL COMMENT '부품 불량 목록 (JSON 배열)',
+    component_defect_count INT NOT NULL DEFAULT 0 COMMENT '부품 불량 개수',
+    component_inference_time_ms DECIMAL(6,2) NULL COMMENT 'Component 모델 추론 시간 (밀리초)',
+
+    -- Solder Model 결과 (우측 카메라, 납땜 검출)
+    solder_defects JSON NULL COMMENT '납땜 불량 목록 (JSON 배열)',
+    solder_defect_count INT NOT NULL DEFAULT 0 COMMENT '납땜 불량 개수',
+    solder_inference_time_ms DECIMAL(6,2) NULL COMMENT 'Solder 모델 추론 시간 (밀리초)',
+
+    -- 검사 메타데이터
     inspection_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '검사 시간',
-    image_path VARCHAR(500) NULL COMMENT '불량 이미지 파일 경로',
-    boxes JSON NULL COMMENT '바운딩 박스 정보 (JSON)',
+    total_inference_time_ms DECIMAL(6,2) NULL COMMENT '전체 추론 시간 (양면 병렬)',
+
+    -- 이미지 정보
+    left_image_path VARCHAR(500) NULL COMMENT '좌측 카메라 이미지 경로 (부품면)',
+    right_image_path VARCHAR(500) NULL COMMENT '우측 카메라 이미지 경로 (납땜면)',
+
+    -- GPIO 제어 정보
     gpio_pin INT NULL COMMENT '활성화된 GPIO 핀 번호',
     gpio_duration_ms INT NULL COMMENT 'GPIO 신호 지속 시간 (밀리초)',
+
+    -- 사용자 및 비고
     user_id INT NULL COMMENT '작업자 ID',
     notes TEXT NULL COMMENT '비고',
 
     INDEX idx_inspection_time (inspection_time),
-    INDEX idx_defect_type (defect_type),
-    INDEX idx_camera_id (camera_id),
+    INDEX idx_fusion_decision (fusion_decision),
+    INDEX idx_component_defect_count (component_defect_count),
+    INDEX idx_solder_defect_count (solder_defect_count),
     INDEX idx_user_id (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='PCB 검사 결과 이력';
+COMMENT='PCB 양면 동시 검사 결과 이력 (이중 YOLO 모델 아키텍처)';
+```
+
+**JSON 데이터 구조 예시**:
+
+**component_defects** (부품 불량):
+```json
+[
+  {
+    "type": "missing_component",
+    "confidence": 0.95,
+    "bbox": [120, 85, 150, 110],
+    "class_id": 3,
+    "class_name": "resistor"
+  },
+  {
+    "type": "misalignment",
+    "confidence": 0.88,
+    "bbox": [200, 150, 230, 175],
+    "class_id": 7,
+    "class_name": "capacitor"
+  }
+]
+```
+
+**solder_defects** (납땜 불량):
+```json
+[
+  {
+    "type": "cold_joint",
+    "confidence": 0.92,
+    "bbox": [310, 220, 335, 245],
+    "class_id": 1,
+    "class_name": "solder_joint"
+  },
+  {
+    "type": "insufficient_solder",
+    "confidence": 0.87,
+    "bbox": [405, 180, 425, 200],
+    "class_id": 2,
+    "class_name": "solder_pad"
+  },
+  {
+    "type": "solder_bridge",
+    "confidence": 0.93,
+    "bbox": [125, 95, 160, 115],
+    "class_id": 3,
+    "class_name": "solder_bridge"
+  }
+]
 ```
 
 ### 2. defect_images (불량 이미지 메타데이터)
@@ -65,17 +140,21 @@ CREATE TABLE defect_images (
 COMMENT='불량 이미지 파일 정보';
 ```
 
-### 3. statistics_daily (일별 통계)
+### 3. statistics_daily (일별 통계) ⭐ 이중 모델 융합 결과 기반
 
 ```sql
 CREATE TABLE statistics_daily (
     id INT AUTO_INCREMENT PRIMARY KEY,
     stat_date DATE NOT NULL UNIQUE COMMENT '통계 날짜',
-    total_inspections INT NOT NULL DEFAULT 0 COMMENT '총 검사 수',
-    normal_count INT NOT NULL DEFAULT 0 COMMENT '정상 개수',
-    component_defect_count INT NOT NULL DEFAULT 0 COMMENT '부품 불량 개수',
-    solder_defect_count INT NOT NULL DEFAULT 0 COMMENT '납땜 불량 개수',
-    discard_count INT NOT NULL DEFAULT 0 COMMENT '폐기 개수',
+
+    -- 검사 통계 (융합 결과 기반)
+    total_inspections INT NOT NULL DEFAULT 0 COMMENT '총 검사 수 (양면 동시)',
+    normal_count INT NOT NULL DEFAULT 0 COMMENT '정상 개수 (fusion_decision=normal)',
+    component_defect_count INT NOT NULL DEFAULT 0 COMMENT '부품 불량 개수 (fusion_decision=component_defect)',
+    solder_defect_count INT NOT NULL DEFAULT 0 COMMENT '납땜 불량 개수 (fusion_decision=solder_defect)',
+    discard_count INT NOT NULL DEFAULT 0 COMMENT '폐기 개수 (fusion_decision=discard)',
+
+    -- 불량률 (자동 계산)
     defect_rate DECIMAL(5,2) GENERATED ALWAYS AS (
         CASE
             WHEN total_inspections > 0 THEN
@@ -83,32 +162,43 @@ CREATE TABLE statistics_daily (
             ELSE 0
         END
     ) STORED COMMENT '불량률 (%, 자동 계산)',
+
+    -- 평균 추론 시간
+    avg_component_inference_ms DECIMAL(6,2) NULL COMMENT 'Component 모델 평균 추론 시간 (밀리초)',
+    avg_solder_inference_ms DECIMAL(6,2) NULL COMMENT 'Solder 모델 평균 추론 시간 (밀리초)',
+    avg_total_inference_ms DECIMAL(6,2) NULL COMMENT '전체 평균 추론 시간 (밀리초)',
+
+    -- 타임스탬프
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     INDEX idx_stat_date (stat_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='일별 검사 통계';
+COMMENT='일별 검사 통계 (이중 모델 융합 결과 기반)';
 ```
 
-### 4. statistics_hourly (시간별 통계)
+### 4. statistics_hourly (시간별 통계) ⭐ 이중 모델 융합 결과 기반
 
 ```sql
 CREATE TABLE statistics_hourly (
     id INT AUTO_INCREMENT PRIMARY KEY,
     stat_datetime DATETIME NOT NULL COMMENT '통계 시간 (YYYY-MM-DD HH:00:00)',
-    total_inspections INT NOT NULL DEFAULT 0,
-    normal_count INT NOT NULL DEFAULT 0,
-    component_defect_count INT NOT NULL DEFAULT 0,
-    solder_defect_count INT NOT NULL DEFAULT 0,
-    discard_count INT NOT NULL DEFAULT 0,
+
+    -- 검사 통계 (융합 결과 기반)
+    total_inspections INT NOT NULL DEFAULT 0 COMMENT '총 검사 수',
+    normal_count INT NOT NULL DEFAULT 0 COMMENT '정상 개수 (fusion_decision=normal)',
+    component_defect_count INT NOT NULL DEFAULT 0 COMMENT '부품 불량 개수 (fusion_decision=component_defect)',
+    solder_defect_count INT NOT NULL DEFAULT 0 COMMENT '납땜 불량 개수 (fusion_decision=solder_defect)',
+    discard_count INT NOT NULL DEFAULT 0 COMMENT '폐기 개수 (fusion_decision=discard)',
+
+    -- 타임스탬프
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     UNIQUE KEY uk_stat_datetime (stat_datetime),
     INDEX idx_stat_datetime (stat_datetime)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='시간별 검사 통계';
+COMMENT='시간별 검사 통계 (이중 모델 융합 결과 기반)';
 ```
 
 ### 5. system_logs (시스템 로그)
@@ -197,8 +287,8 @@ CREATE TABLE box_status (
     category VARCHAR(50) NOT NULL COMMENT '분류 카테고리 (normal/component_defect/solder_defect)',
 
     -- 슬롯 상태
-    current_slot INT NOT NULL DEFAULT 0 COMMENT '현재 사용 중인 슬롯 번호 (0-4, 수평 5슬롯)',
-    max_slots INT NOT NULL DEFAULT 5 COMMENT '최대 슬롯 개수 (5개, 수평 배치)',
+    current_slot INT NOT NULL DEFAULT 0 COMMENT '현재 사용 중인 슬롯 번호 (0-2, 수평 3슬롯)',
+    max_slots INT NOT NULL DEFAULT 3 COMMENT '최대 슬롯 개수 (3개, 수평 배치)',
     is_full BOOLEAN NOT NULL DEFAULT FALSE COMMENT '박스 가득참 여부',
 
     -- 통계
@@ -212,23 +302,23 @@ CREATE TABLE box_status (
     INDEX idx_category (category),
     INDEX idx_is_full (is_full)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='로봇팔 박스 슬롯 상태 관리 테이블 (3개 박스 × 5개 슬롯 = 15개 슬롯, 폐기는 슬롯 관리 안 함)';
+COMMENT='로봇팔 박스 슬롯 상태 관리 테이블 (3개 박스 × 3개 슬롯 = 9개 슬롯, 폐기는 슬롯 관리 안 함)';
 ```
 
 **설명**:
 - **총 3개 박스**: 정상, 부품불량, 납땜불량
-- **각 박스: 5개 슬롯** (수평 배치, slot 0~4)
-- **총 15개 슬롯** = 3 카테고리 × 5 슬롯
+- **각 박스: 3개 슬롯** (수평 배치, slot 0~2)
+- **총 9개 슬롯** = 3 카테고리 × 3 슬롯
 - **DISCARD 처리**: 슬롯 관리 없이 고정 위치에 떨어뜨리기 (프로젝트 데모용)
 - **슬롯 할당 로직**:
-  1. 각 박스는 slot 0부터 4까지 순차 채움
-  2. 사용률은 WinForms + Flask 서버에서 0/5 → 5/5로 표시
-  3. 박스가 가득 차면(5/5): LED 알림 + WinForms 알림 + OHT 자동 호출(`trigger_reason='box_full'`)
+  1. 각 박스는 slot 0부터 2까지 순차 채움
+  2. 사용률은 WinForms + Flask 서버에서 0/3 → 3/3로 표시
+  3. 박스가 가득 차면(3/3): LED 알림 + WinForms 알림 + OHT 자동 호출(`trigger_reason='box_full'`)
 
 **박스 ID 구조**:
-- `NORMAL`: 정상 PCB (5개 슬롯)
-- `COMPONENT_DEFECT`: 부품 불량 (5개 슬롯)
-- `SOLDER_DEFECT`: 납땜 불량 (5개 슬롯)
+- `NORMAL`: 정상 PCB (3개 슬롯)
+- `COMPONENT_DEFECT`: 부품 불량 (3개 슬롯)
+- `SOLDER_DEFECT`: 납땜 불량 (3개 슬롯)
 - `DISCARD`: 폐기 (슬롯 관리 안 함, box_status 테이블에 저장 안 함)
 
 ### 10. oht_operations (OHT 운영 이력) ⭐ 신규
@@ -502,7 +592,7 @@ WHERE category = 'normal';
 
 ## 뷰 (View) 정의
 
-### 실시간 통계 뷰
+### 실시간 통계 뷰 ⭐ 이중 모델 융합 결과 기반
 
 ```sql
 CREATE VIEW v_realtime_statistics AS
@@ -510,25 +600,40 @@ SELECT
     DATE(inspection_time) AS stat_date,
     HOUR(inspection_time) AS stat_hour,
     COUNT(*) AS total_inspections,
-    SUM(CASE WHEN defect_type = '정상' THEN 1 ELSE 0 END) AS normal_count,
-    SUM(CASE WHEN defect_type = '부품불량' THEN 1 ELSE 0 END) AS component_defect_count,
-    SUM(CASE WHEN defect_type = '납땜불량' THEN 1 ELSE 0 END) AS solder_defect_count,
-    SUM(CASE WHEN defect_type = '폐기' THEN 1 ELSE 0 END) AS discard_count,
+    SUM(CASE WHEN fusion_decision = 'normal' THEN 1 ELSE 0 END) AS normal_count,
+    SUM(CASE WHEN fusion_decision = 'component_defect' THEN 1 ELSE 0 END) AS component_defect_count,
+    SUM(CASE WHEN fusion_decision = 'solder_defect' THEN 1 ELSE 0 END) AS solder_defect_count,
+    SUM(CASE WHEN fusion_decision = 'discard' THEN 1 ELSE 0 END) AS discard_count,
     ROUND(
-        (SUM(CASE WHEN defect_type != '정상' THEN 1 ELSE 0 END) * 100.0 / COUNT(*)),
+        (SUM(CASE WHEN fusion_decision != 'normal' THEN 1 ELSE 0 END) * 100.0 / COUNT(*)),
         2
-    ) AS defect_rate
+    ) AS defect_rate,
+    AVG(component_inference_time_ms) AS avg_component_inference_ms,
+    AVG(solder_inference_time_ms) AS avg_solder_inference_ms,
+    AVG(total_inference_time_ms) AS avg_total_inference_ms
 FROM inspections
 WHERE inspection_time >= CURDATE()
 GROUP BY stat_date, stat_hour
 ORDER BY stat_date DESC, stat_hour DESC;
 ```
 
+**뷰 사용 예시**:
+```sql
+-- 오늘 실시간 통계 조회
+SELECT * FROM v_realtime_statistics
+WHERE stat_date = CURDATE();
+
+-- 최근 1시간 통계
+SELECT * FROM v_realtime_statistics
+WHERE stat_date = CURDATE()
+AND stat_hour = HOUR(NOW());
+```
+
 ---
 
 ## 저장 프로시저
 
-### 1. 일별 통계 업데이트
+### 1. 일별 통계 업데이트 ⭐ 이중 모델 융합 결과 기반
 
 ```sql
 DELIMITER $$
@@ -541,15 +646,21 @@ BEGIN
         normal_count,
         component_defect_count,
         solder_defect_count,
-        discard_count
+        discard_count,
+        avg_component_inference_ms,
+        avg_solder_inference_ms,
+        avg_total_inference_ms
     )
     SELECT
         DATE(inspection_time) AS stat_date,
         COUNT(*) AS total_inspections,
-        SUM(CASE WHEN defect_type = '정상' THEN 1 ELSE 0 END) AS normal_count,
-        SUM(CASE WHEN defect_type = '부품불량' THEN 1 ELSE 0 END) AS component_defect_count,
-        SUM(CASE WHEN defect_type = '납땜불량' THEN 1 ELSE 0 END) AS solder_defect_count,
-        SUM(CASE WHEN defect_type = '폐기' THEN 1 ELSE 0 END) AS discard_count
+        SUM(CASE WHEN fusion_decision = 'normal' THEN 1 ELSE 0 END) AS normal_count,
+        SUM(CASE WHEN fusion_decision = 'component_defect' THEN 1 ELSE 0 END) AS component_defect_count,
+        SUM(CASE WHEN fusion_decision = 'solder_defect' THEN 1 ELSE 0 END) AS solder_defect_count,
+        SUM(CASE WHEN fusion_decision = 'discard' THEN 1 ELSE 0 END) AS discard_count,
+        AVG(component_inference_time_ms) AS avg_component_inference_ms,
+        AVG(solder_inference_time_ms) AS avg_solder_inference_ms,
+        AVG(total_inference_time_ms) AS avg_total_inference_ms
     FROM inspections
     WHERE DATE(inspection_time) = target_date
     GROUP BY DATE(inspection_time)
@@ -559,6 +670,9 @@ BEGIN
         component_defect_count = VALUES(component_defect_count),
         solder_defect_count = VALUES(solder_defect_count),
         discard_count = VALUES(discard_count),
+        avg_component_inference_ms = VALUES(avg_component_inference_ms),
+        avg_solder_inference_ms = VALUES(avg_solder_inference_ms),
+        avg_total_inference_ms = VALUES(avg_total_inference_ms),
         updated_at = CURRENT_TIMESTAMP;
 END$$
 
@@ -610,7 +724,7 @@ DELIMITER ;
 
 ## 트리거
 
-### 검사 결과 삽입 시 시간별 통계 업데이트
+### 검사 결과 삽입 시 시간별 통계 업데이트 ⭐ 이중 모델 융합 결과 기반
 
 ```sql
 DELIMITER $$
@@ -621,10 +735,10 @@ FOR EACH ROW
 BEGIN
     DECLARE stat_hour DATETIME;
 
-    -- 시간 단위로 반올림 (예: 2025-10-22 14:35:20 → 2025-10-22 14:00:00)
+    -- 시간 단위로 반올림 (예: 2025-10-31 14:35:20 → 2025-10-31 14:00:00)
     SET stat_hour = DATE_FORMAT(NEW.inspection_time, '%Y-%m-%d %H:00:00');
 
-    -- 시간별 통계 업데이트
+    -- 시간별 통계 업데이트 (융합 결과 기반)
     INSERT INTO statistics_hourly (
         stat_datetime,
         total_inspections,
@@ -635,17 +749,17 @@ BEGIN
     ) VALUES (
         stat_hour,
         1,
-        CASE WHEN NEW.defect_type = '정상' THEN 1 ELSE 0 END,
-        CASE WHEN NEW.defect_type = '부품불량' THEN 1 ELSE 0 END,
-        CASE WHEN NEW.defect_type = '납땜불량' THEN 1 ELSE 0 END,
-        CASE WHEN NEW.defect_type = '폐기' THEN 1 ELSE 0 END
+        CASE WHEN NEW.fusion_decision = 'normal' THEN 1 ELSE 0 END,
+        CASE WHEN NEW.fusion_decision = 'component_defect' THEN 1 ELSE 0 END,
+        CASE WHEN NEW.fusion_decision = 'solder_defect' THEN 1 ELSE 0 END,
+        CASE WHEN NEW.fusion_decision = 'discard' THEN 1 ELSE 0 END
     )
     ON DUPLICATE KEY UPDATE
         total_inspections = total_inspections + 1,
-        normal_count = normal_count + CASE WHEN NEW.defect_type = '정상' THEN 1 ELSE 0 END,
-        component_defect_count = component_defect_count + CASE WHEN NEW.defect_type = '부품불량' THEN 1 ELSE 0 END,
-        solder_defect_count = solder_defect_count + CASE WHEN NEW.defect_type = '납땜불량' THEN 1 ELSE 0 END,
-        discard_count = discard_count + CASE WHEN NEW.defect_type = '폐기' THEN 1 ELSE 0 END,
+        normal_count = normal_count + CASE WHEN NEW.fusion_decision = 'normal' THEN 1 ELSE 0 END,
+        component_defect_count = component_defect_count + CASE WHEN NEW.fusion_decision = 'component_defect' THEN 1 ELSE 0 END,
+        solder_defect_count = solder_defect_count + CASE WHEN NEW.fusion_decision = 'solder_defect' THEN 1 ELSE 0 END,
+        discard_count = discard_count + CASE WHEN NEW.fusion_decision = 'discard' THEN 1 ELSE 0 END,
         updated_at = CURRENT_TIMESTAMP;
 END$$
 
@@ -656,16 +770,20 @@ DELIMITER ;
 
 ## 인덱스 최적화
 
-### 복합 인덱스
+### 복합 인덱스 ⭐ 이중 모델 융합 결과 기반
 
 ```sql
--- 날짜 범위 조회용
-CREATE INDEX idx_inspection_time_defect_type
-ON inspections (inspection_time, defect_type);
+-- 날짜 범위 조회용 (융합 결과 기반)
+CREATE INDEX idx_inspection_time_fusion
+ON inspections (inspection_time, fusion_decision);
 
--- 카메라별 검색용
-CREATE INDEX idx_camera_defect_type
-ON inspections (camera_id, defect_type, inspection_time);
+-- 불량 개수 기반 검색
+CREATE INDEX idx_component_solder_counts
+ON inspections (component_defect_count, solder_defect_count, inspection_time);
+
+-- 성능 분석용
+CREATE INDEX idx_inference_times
+ON inspections (total_inference_time_ms, inspection_time);
 ```
 
 ---
@@ -739,10 +857,11 @@ crontab -e
 
 ## Python 연결 예제
 
-### PyMySQL 사용
+### PyMySQL 사용 ⭐ 이중 모델 융합 결과 기반
 
 ```python
 import pymysql
+import json
 
 # 연결
 conn = pymysql.connect(
@@ -756,20 +875,58 @@ conn = pymysql.connect(
 
 try:
     with conn.cursor() as cursor:
-        # 검사 결과 삽입
+        # 양면 동시 검사 결과 삽입 (이중 모델 융합)
         sql = """INSERT INTO inspections
-                 (camera_id, defect_type, confidence, image_path, boxes, gpio_pin, gpio_duration_ms)
-                 VALUES (%s, %s, %s, %s, %s, %s, %s)"""
-        cursor.execute(sql, ('left', '부품불량', 0.95, '/path/to/image.jpg', '[]', 17, 500))
+                 (fusion_decision, fusion_severity_level,
+                  component_defects, component_defect_count, component_inference_time_ms,
+                  solder_defects, solder_defect_count, solder_inference_time_ms,
+                  total_inference_time_ms,
+                  left_image_path, right_image_path,
+                  gpio_pin, gpio_duration_ms)
+                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+
+        # Component Model 결과
+        component_defects = json.dumps([
+            {"type": "missing_component", "confidence": 0.95, "bbox": [120, 85, 150, 110], "class_name": "resistor"}
+        ])
+
+        # Solder Model 결과
+        solder_defects = json.dumps([
+            {"type": "cold_joint", "confidence": 0.92, "bbox": [310, 220, 335, 245], "class_name": "solder_joint"}
+        ])
+
+        cursor.execute(sql, (
+            'component_defect',  # fusion_decision
+            2,                    # fusion_severity_level
+            component_defects,    # component_defects (JSON)
+            1,                    # component_defect_count
+            65.5,                 # component_inference_time_ms
+            solder_defects,       # solder_defects (JSON)
+            1,                    # solder_defect_count
+            45.2,                 # solder_inference_time_ms
+            85.3,                 # total_inference_time_ms
+            '/images/left/pcb_001.jpg',   # left_image_path
+            '/images/right/pcb_001.jpg',  # right_image_path
+            17,                   # gpio_pin (component_defect = GPIO 17)
+            500                   # gpio_duration_ms
+        ))
     conn.commit()
 
-    # 검사 이력 조회
+    # 검사 이력 조회 (융합 결과 기반)
     with conn.cursor() as cursor:
-        sql = "SELECT * FROM inspections ORDER BY inspection_time DESC LIMIT 10"
+        sql = """SELECT id, fusion_decision,
+                        component_defect_count, solder_defect_count,
+                        total_inference_time_ms, inspection_time
+                 FROM inspections
+                 ORDER BY inspection_time DESC
+                 LIMIT 10"""
         cursor.execute(sql)
         results = cursor.fetchall()
         for row in results:
-            print(row)
+            print(f"ID: {row['id']}, Decision: {row['fusion_decision']}, "
+                  f"Component: {row['component_defect_count']}, "
+                  f"Solder: {row['solder_defect_count']}, "
+                  f"Time: {row['total_inference_time_ms']}ms")
 
 finally:
     conn.close()
@@ -779,10 +936,12 @@ finally:
 
 ## C# 연결 예제
 
-### MySql.Data 사용
+### MySql.Data 사용 ⭐ 이중 모델 융합 결과 기반
 
 ```csharp
 using MySql.Data.MySqlClient;
+using Newtonsoft.Json;
+using System.Collections.Generic;
 
 string connStr = "server=localhost;user=root;database=pcb_inspection;password=your_password;";
 MySqlConnection conn = new MySqlConnection(connStr);
@@ -791,20 +950,70 @@ try
 {
     conn.Open();
 
-    // 검사 결과 삽입
+    // Component Model 결과 (JSON)
+    var componentDefects = new List<object>
+    {
+        new { type = "missing_component", confidence = 0.95, bbox = new[] { 120, 85, 150, 110 }, class_name = "resistor" }
+    };
+
+    // Solder Model 결과 (JSON)
+    var solderDefects = new List<object>
+    {
+        new { type = "cold_joint", confidence = 0.92, bbox = new[] { 310, 220, 335, 245 }, class_name = "solder_joint" }
+    };
+
+    // 양면 동시 검사 결과 삽입 (이중 모델 융합)
     string sql = @"INSERT INTO inspections
-                   (camera_id, defect_type, confidence, image_path, gpio_pin, gpio_duration_ms)
-                   VALUES (@camera_id, @defect_type, @confidence, @image_path, @gpio_pin, @gpio_duration_ms)";
+                   (fusion_decision, fusion_severity_level,
+                    component_defects, component_defect_count, component_inference_time_ms,
+                    solder_defects, solder_defect_count, solder_inference_time_ms,
+                    total_inference_time_ms,
+                    left_image_path, right_image_path,
+                    gpio_pin, gpio_duration_ms)
+                   VALUES (@fusion_decision, @fusion_severity_level,
+                           @component_defects, @component_defect_count, @component_inference_time_ms,
+                           @solder_defects, @solder_defect_count, @solder_inference_time_ms,
+                           @total_inference_time_ms,
+                           @left_image_path, @right_image_path,
+                           @gpio_pin, @gpio_duration_ms)";
 
     MySqlCommand cmd = new MySqlCommand(sql, conn);
-    cmd.Parameters.AddWithValue("@camera_id", "left");
-    cmd.Parameters.AddWithValue("@defect_type", "부품불량");
-    cmd.Parameters.AddWithValue("@confidence", 0.95);
-    cmd.Parameters.AddWithValue("@image_path", "/path/to/image.jpg");
-    cmd.Parameters.AddWithValue("@gpio_pin", 17);
+    cmd.Parameters.AddWithValue("@fusion_decision", "component_defect");
+    cmd.Parameters.AddWithValue("@fusion_severity_level", 2);
+    cmd.Parameters.AddWithValue("@component_defects", JsonConvert.SerializeObject(componentDefects));
+    cmd.Parameters.AddWithValue("@component_defect_count", 1);
+    cmd.Parameters.AddWithValue("@component_inference_time_ms", 65.5);
+    cmd.Parameters.AddWithValue("@solder_defects", JsonConvert.SerializeObject(solderDefects));
+    cmd.Parameters.AddWithValue("@solder_defect_count", 1);
+    cmd.Parameters.AddWithValue("@solder_inference_time_ms", 45.2);
+    cmd.Parameters.AddWithValue("@total_inference_time_ms", 85.3);
+    cmd.Parameters.AddWithValue("@left_image_path", "/images/left/pcb_001.jpg");
+    cmd.Parameters.AddWithValue("@right_image_path", "/images/right/pcb_001.jpg");
+    cmd.Parameters.AddWithValue("@gpio_pin", 17);  // component_defect = GPIO 17
     cmd.Parameters.AddWithValue("@gpio_duration_ms", 500);
 
     cmd.ExecuteNonQuery();
+
+    // 검사 이력 조회 (융합 결과 기반)
+    string selectSql = @"SELECT id, fusion_decision,
+                                component_defect_count, solder_defect_count,
+                                total_inference_time_ms, inspection_time
+                         FROM inspections
+                         ORDER BY inspection_time DESC
+                         LIMIT 10";
+
+    MySqlCommand selectCmd = new MySqlCommand(selectSql, conn);
+    using (MySqlDataReader reader = selectCmd.ExecuteReader())
+    {
+        while (reader.Read())
+        {
+            Console.WriteLine($"ID: {reader["id"]}, " +
+                            $"Decision: {reader["fusion_decision"]}, " +
+                            $"Component: {reader["component_defect_count"]}, " +
+                            $"Solder: {reader["solder_defect_count"]}, " +
+                            $"Time: {reader["total_inference_time_ms"]}ms");
+        }
+    }
 }
 finally
 {
@@ -995,11 +1204,20 @@ mysql -u pcb_admin -p pcb_inspection < /home/pcb_user/mysql_backups/pcb_inspecti
 ---
 
 **작성일**: 2025-10-28
-**최종 수정일**: 2025-10-23
-**버전**: 1.1
+**최종 수정일**: 2025-10-31
+**버전**: 2.0 ⭐ (이중 모델 아키텍처)
 **데이터베이스**: MySQL 8.0
 **문자 인코딩**: UTF-8 (utf8mb4)
 **주요 변경사항**:
-- 보안 설정 섹션 추가 (사용자 계정 관리, 권한 설정)
-- 네트워크 보안 및 방화벽 설정 추가
-- 백업 및 복구 전략 추가
+- **2.0 (2025-10-31)**: 이중 YOLO 모델 아키텍처 적용
+  - inspections 테이블 완전 재설계: 양면 동시 검사 결과 저장
+  - 융합 결과 기반 통계 (fusion_decision: normal/component_defect/solder_defect/discard)
+  - Component Model (부품 검출) + Solder Model (납땜 검출) 결과 분리 저장
+  - JSON 필드 추가: component_defects, solder_defects
+  - 추론 시간 필드 추가: component_inference_time_ms, solder_inference_time_ms, total_inference_time_ms
+  - 이미지 경로 분리: left_image_path (부품면), right_image_path (납땜면)
+  - 통계 테이블, 뷰, 프로시저, 트리거 모두 융합 결과 기반으로 업데이트
+  - Python/C# 연결 예제 업데이트 (이중 모델 데이터 삽입/조회)
+- **1.1 (2025-10-23)**: 보안 설정 섹션 추가 (사용자 계정 관리, 권한 설정)
+  - 네트워크 보안 및 방화벽 설정 추가
+  - 백업 및 복구 전략 추가
