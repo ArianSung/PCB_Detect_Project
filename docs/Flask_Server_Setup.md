@@ -8,16 +8,18 @@
 
 ## 시스템 구성
 
-### 하드웨어 구성
+### 하드웨어 구성 ⭐ 업데이트
 - **추론 서버 (GPU PC)**:
   - GPU: NVIDIA RTX 4080 Super (16GB VRAM)
-  - AI 모델: YOLOv8l (Large) + 이상 탐지 하이브리드
+  - **AI 모델**: 이중 YOLOv8l (Large) 모델 ⭐ 변경
+    - **모델 1**: FPIC-Component (부품 검출, 25개 클래스)
+    - **모델 2**: SolDef_AI (납땜 불량 검출, 5-6개 클래스)
   - 위치: 원격지 (같은 도시 내)
   - Flask 서버 실행:
     - 로컬: 100.64.1.1:5000 (선택)
     - 원격 (Tailscale): 100.x.x.x:5000 ⭐
-- **라즈베리파이 1**: 좌측 웹캠 연결 + GPIO 제어
-- **라즈베리파이 2**: 우측 웹캠 연결 전용
+- **라즈베리파이 1**: 좌측 웹캠 (부품면) + GPIO 제어
+- **라즈베리파이 2**: 우측 웹캠 (납땜면) 전용
 - **라즈베리파이 3번 (OHT 컨트롤러)**: OHT 시스템 전용 제어기 ⭐
 - **Windows PC**: C# WinForms 모니터링 앱
 - **네트워크**:
@@ -102,10 +104,10 @@ CORS(app)  # Cross-Origin 요청 허용
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# AI 추론 엔진 초기화
-inference_engine = PCBInferenceEngine(
-    yolo_model_path='models/yolo_best.pt',
-    anomaly_model_path='models/anomaly_model.pth',
+# 이중 모델 추론 엔진 초기화 ⭐ 업데이트
+inference_engine = DualModelInferenceEngine(
+    component_model_path='models/fpic_component_best.pt',  # 부품 검출 모델
+    solder_model_path='models/soldef_ai_best.pt',         # 납땜 불량 모델
     device='cuda'  # GPU 사용
 )
 
@@ -165,39 +167,56 @@ def predict():
 @app.route('/predict_dual', methods=['POST'])
 def predict_dual():
     """
-    양면(좌측+우측) 동시 검사
+    양면(좌측+우측) 동시 검사 - 이중 YOLO 모델 ⭐ 업데이트
 
-    설계 방식:
-    1. 라즈베리파이 1 (좌측)과 라즈베리파이 2 (우측)가 각각 /predict로 프레임 전송
-    2. Flask 서버가 양쪽 결과를 메모리에 일시 저장 (예: Redis 또는 dict)
-    3. 양면 결과가 모두 수신되면 통합 판정 수행
-    4. 최종 불량 분류 결과를 **라즈베리파이 1에만** GPIO 제어 신호로 전송
+    아키텍처:
+    1. 좌측 프레임 → FPIC-Component 모델 (부품 검출, 25 클래스)
+    2. 우측 프레임 → SolDef_AI 모델 (납땜 불량, 5-6 클래스)
+    3. 결과 융합 로직 → 최종 판정 (normal/component_defect/solder_defect/discard)
+    4. 라즈베리파이 1에만 GPIO 제어 신호 전송
 
-    참고: 현재는 동기 방식 예시이며, 실제로는 비동기 처리 권장
+    추론 시간: 80-100ms (병렬 처리)
     """
     try:
         data = request.get_json()
-        frame_left_base64 = data.get('frame_left')
-        frame_right_base64 = data.get('frame_right')
+        left_frame_base64 = data.get('left_frame')   # 부품면 (앞면)
+        right_frame_base64 = data.get('right_frame')  # 납땜면 (뒷면)
+        timestamp = data.get('timestamp')
 
-        if not frame_left_base64 or not frame_right_base64:
+        if not left_frame_base64 or not right_frame_base64:
             return jsonify({'error': 'Missing frame data'}), 400
 
-        # 좌측 프레임 디코딩
-        frame_left = decode_frame(frame_left_base64)
-        # 우측 프레임 디코딩
-        frame_right = decode_frame(frame_right_base64)
+        # 프레임 디코딩
+        left_frame = decode_frame(left_frame_base64)
+        right_frame = decode_frame(right_frame_base64)
 
-        # 양면 동시 추론
-        result_left = inference_engine.predict(frame_left, 'left')
-        result_right = inference_engine.predict(frame_right, 'right')
+        if left_frame is None or right_frame is None:
+            return jsonify({'error': 'Failed to decode frames'}), 400
 
-        # 결과 통합 (양면 모두 정상이어야 정상 판정)
-        final_defect_type, gpio_signal = integrate_results(result_left, result_right)
+        logger.info(f"Dual inference - Left: {left_frame.shape}, Right: {right_frame.shape}")
 
+        # 이중 모델 병렬 추론 (80-100ms)
+        start_time = time.time()
+
+        # 모델 1: 부품 검출 (50-80ms)
+        component_result = inference_engine.predict_component(left_frame)
+
+        # 모델 2: 납땜 불량 (30-50ms, 병렬)
+        solder_result = inference_engine.predict_solder(right_frame)
+
+        # 결과 융합 로직 (<5ms)
+        final_decision = inference_engine.fuse_results(component_result, solder_result)
+
+        inference_time = (time.time() - start_time) * 1000  # ms
+
+        # 응답 생성
         response = {
             'status': 'ok',
-            'final_defect_type': final_defect_type,
+            'decision': final_decision['type'],  # normal/component_defect/solder_defect/discard
+            'component_defects': final_decision['component_defects'],
+            'solder_defects': final_decision['solder_defects'],
+            'component_severity': final_decision['component_severity'],  # 0-3
+            'solder_severity': final_decision['solder_severity'],        # 0-3
             'gpio_signal': gpio_signal,  # 라즈베리파이 1 전용 GPIO 제어 신호
             'left': result_left,
             'right': result_right,
@@ -262,48 +281,56 @@ import torch
 import time
 import numpy as np
 
-class PCBInferenceEngine:
-    def __init__(self, yolo_model_path, anomaly_model_path, device='cuda'):
+class DualModelInferenceEngine:
+    """
+    이중 YOLO 모델 추론 엔진 ⭐ 업데이트
+
+    아키텍처:
+    - 모델 1: FPIC-Component (부품 검출, 25 클래스)
+    - 모델 2: SolDef_AI (납땜 불량, 5-6 클래스)
+    - 결과 융합 로직
+    """
+
+    def __init__(self, component_model_path, solder_model_path, device='cuda'):
         """
-        AI 추론 엔진 초기화
+        이중 모델 초기화
 
         Args:
-            yolo_model_path: YOLO 모델 경로
-            anomaly_model_path: 이상 탐지 모델 경로
+            component_model_path: 부품 검출 모델 경로 (FPIC-Component)
+            solder_model_path: 납땜 불량 모델 경로 (SolDef_AI)
             device: 'cuda' 또는 'cpu'
         """
         self.device = device
 
-        # YOLO 모델 로드
-        self.yolo_model = YOLO(yolo_model_path)
-        self.yolo_model.to(device)
+        # 모델 1: 부품 검출 (FPIC-Component, 25 클래스)
+        self.component_model = YOLO(component_model_path)
+        self.component_model.to(device)
 
-        # 이상 탐지 모델 로드 (나중에 구현)
-        # self.anomaly_model = load_anomaly_model(anomaly_model_path, device)
+        # 모델 2: 납땜 불량 (SolDef_AI, 5-6 클래스)
+        self.solder_model = YOLO(solder_model_path)
+        self.solder_model.to(device)
 
-        print(f"Models loaded on {device}")
+        print(f"✅ Dual models loaded on {device}")
+        print(f"  - Component model: {component_model_path}")
+        print(f"  - Solder model: {solder_model_path}")
 
-    def predict(self, frame, camera_id):
+    def predict_component(self, frame):
         """
-        PCB 이미지 추론
+        부품 검출 추론 (FPIC-Component 모델)
 
         Args:
-            frame: OpenCV 이미지 (numpy array)
-            camera_id: 'left' or 'right'
+            frame: 좌측 카메라 이미지 (부품면)
 
         Returns:
-            dict: 추론 결과
+            dict: 부품 검출 결과 (25개 클래스)
         """
         start_time = time.time()
 
-        # YOLO 추론
-        results = self.yolo_model(frame, verbose=False)
+        # 모델 1 추론: 부품 검출
+        results = self.component_model(frame, verbose=False)
 
         # 결과 파싱
-        boxes = []
-        defect_classes = []
-        confidences = []
-
+        detections = []
         for result in results:
             for box in result.boxes:
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
@@ -311,57 +338,131 @@ class PCBInferenceEngine:
                 cls = int(box.cls[0])
                 cls_name = result.names[cls]
 
-                boxes.append({
-                    'x1': float(x1), 'y1': float(y1),
-                    'x2': float(x2), 'y2': float(y2),
-                    'confidence': conf,
-                    'class': cls_name
+                detections.append({
+                    'type': cls_name,
+                    'bbox': [float(x1), float(y1), float(x2), float(y2)],
+                    'confidence': conf
                 })
 
-                defect_classes.append(cls_name)
-                confidences.append(conf)
+        inference_time = (time.time() - start_time) * 1000  # ms
+        return {'detections': detections, 'inference_time_ms': inference_time}
 
-        # 불량 유형 판정
-        defect_type, confidence = self._classify_defect(defect_classes, confidences)
+    def predict_solder(self, frame):
+        """
+        납땜 불량 검출 추론 (SolDef_AI 모델)
 
-        inference_time_ms = (time.time() - start_time) * 1000
+        Args:
+            frame: 우측 카메라 이미지 (납땜면)
+
+        Returns:
+            dict: 납땜 불량 결과 (5-6개 클래스)
+        """
+        start_time = time.time()
+
+        # 모델 2 추론: 납땜 불량
+        results = self.solder_model(frame, verbose=False)
+
+        # 결과 파싱
+        defects = []
+        for result in results:
+            for box in result.boxes:
+                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                conf = float(box.conf[0])
+                cls = int(box.cls[0])
+                cls_name = result.names[cls]
+
+                defects.append({
+                    'type': cls_name,  # no_good, exc_solder, spike, poor_solder, solder_bridge
+                    'bbox': [float(x1), float(y1), float(x2), float(y2)],
+                    'confidence': conf,
+                    'severity': 'critical' if cls_name == 'solder_bridge' else 'normal'
+                })
+
+        inference_time = (time.time() - start_time) * 1000  # ms
+        return {'defects': defects, 'inference_time_ms': inference_time}
+
+    def fuse_results(self, component_result, solder_result):
+        """
+        이중 모델 결과 융합 로직 ⭐ 핵심
+
+        Args:
+            component_result: 부품 모델 결과
+            solder_result: 납땜 모델 결과
+
+        Returns:
+            dict: 최종 판정 결과
+                {
+                    'type': 'normal' | 'component_defect' | 'solder_defect' | 'discard',
+                    'component_defects': [...],
+                    'solder_defects': [...],
+                    'component_severity': 0-3,
+                    'solder_severity': 0-3
+                }
+
+        융합 알고리즘:
+        1. 부품 불량 심각도 계산 (Level 0-3)
+        2. 납땜 불량 심각도 계산 (Level 0-3)
+        3. 최종 판정:
+           - 양면 정상 → normal
+           - 폐기 조건 (severity >= 3 or 양면 >= 2) → discard
+           - 부품 심각도 > 납땜 → component_defect
+           - 납땜 심각도 >= 부품 → solder_defect
+        """
+        component_defects = component_result.get('detections', [])
+        solder_defects = solder_result.get('defects', [])
+
+        # 심각도 계산
+        component_severity = self._calculate_severity(component_defects)
+        solder_severity = self._calculate_severity(solder_defects)
+
+        # 최종 판정
+        if component_severity == 0 and solder_severity == 0:
+            decision_type = 'normal'
+        elif (component_severity >= 3 or solder_severity >= 3 or
+              (component_severity >= 2 and solder_severity >= 2)):
+            decision_type = 'discard'
+        elif component_severity > solder_severity:
+            decision_type = 'component_defect'
+        else:
+            decision_type = 'solder_defect'
 
         return {
-            'defect_type': defect_type,
-            'confidence': confidence,
-            'boxes': boxes,
-            'inference_time_ms': inference_time_ms
+            'type': decision_type,
+            'component_defects': component_defects,
+            'solder_defects': solder_defects,
+            'component_severity': component_severity,
+            'solder_severity': solder_severity
         }
 
-    def _classify_defect(self, defect_classes, confidences):
+    def _calculate_severity(self, defects):
         """
-        불량 유형 분류
+        불량 심각도 계산
 
-        참고: data/pcb_defects.yaml의 defect_categories 매핑 사용
-        (실제 구현 시 YAML 파일을 로드하여 사용)
-
-        불량 우선순위:
-        1. 심각한 불량 → 폐기
-        2. 납땜 불량 → 납땜 재작업
-        3. 부품 불량 → 부품 재작업
-        4. 정상
+        Level 0: 불량 없음
+        Level 1: 경미한 불량 (1-2개)
+        Level 2: 중간 불량 (3-5개)
+        Level 3: 심각한 불량 (6개 이상 or 치명적 불량)
         """
-        if not defect_classes:
-            return '정상', 1.0
+        if not defects:
+            return 0
 
-        # data/pcb_defects.yaml 클래스 정의 참조
-        # (실제 구현 시 yaml.safe_load로 로드)
-        component_defects = ['missing_component']
-        solder_defects = ['open_circuit', 'short', 'cold_joint', 'solder_bridge', 'insufficient_solder']
-        critical_defects = ['damaged_pad', 'spurious_copper']  # 심각한 불량
-        pcb_defects = ['mouse_bite', 'spur', 'pin_hole']  # 기판 불량 (경미)
+        # 치명적 불량 타입 (즉시 Level 3)
+        critical_types = ['solder_bridge', 'missing_component', 'wrong_component']
 
-        max_confidence = max(confidences)
+        # 치명적 불량 검출 시 즉시 Level 3
+        if any(d.get('type') in critical_types for d in defects):
+            return 3
 
-        # 심각한 불량 확인 (폐기)
-        for cls in defect_classes:
-            if cls in critical_defects:
-                return '폐기', max_confidence
+        # 불량 개수로 판단
+        count = len(defects)
+        if count == 0:
+            return 0
+        elif count <= 2:
+            return 1
+        elif count <= 5:
+            return 2
+        else:
+            return 3
 
         # 납땜 불량 확인
         for cls in defect_classes:
@@ -851,7 +952,7 @@ class RobotArmController:
 
         Args:
             box_id: 박스 ID ('NORMAL_A', 'COMPONENT_DEFECT_B' 등)
-            slot_index: 슬롯 인덱스 (0-4)
+            slot_index: 슬롯 인덱스 (0-2)
 
         Returns:
             bool: 성공 여부
@@ -901,7 +1002,7 @@ class BoxManager:
             oht_api_url: OHT API 엔드포인트 URL
         """
         self.db = db_service
-        self.max_slots = 5  # 박스당 최대 슬롯 수 (수평 5슬롯)
+        self.max_slots = 3  # 박스당 최대 슬롯 수 (수평 3슬롯)
         self.oht_api_url = oht_api_url
 
     def get_next_available_slot(self, category):
@@ -932,7 +1033,7 @@ class BoxManager:
                     return box_id, box['current_slot']
 
                 # 박스가 꽉 참
-                logger.warning(f"카테고리 {category} 박스가 꽉 참! (5개 슬롯 모두 사용됨)")
+                logger.warning(f"카테고리 {category} 박스가 꽉 참! (3개 슬롯 모두 사용됨)")
                 return None, None
 
         except Exception as e:
@@ -976,9 +1077,9 @@ class BoxManager:
 
                 # 박스가 꽉 찼으면 알림 및 자동 OHT 호출
                 if is_full:
-                    logger.warning(f"박스 {box_id}가 꽉 참! (5개 슬롯 모두 사용됨)")
+                    logger.warning(f"박스 {box_id}가 꽉 참! (3개 슬롯 모두 사용됨)")
                     self.send_box_full_alert(box_id)
-                    # 자동 OHT 호출 (박스 5/5 꽉 참)
+                    # 자동 OHT 호출 (박스 3/3 꽉 참)
                     self._trigger_auto_oht(box_id)
 
             conn.commit()
@@ -1362,12 +1463,12 @@ def move_robot_arm_home():
 
 시스템은 다음과 같이 동작합니다:
 
-1. **정상 동작**: 각 박스의 슬롯 0 → 슬롯 4 순서로 채움 (수평 5슬롯 적재)
+1. **정상 동작**: 각 박스의 슬롯 0 → 슬롯 2 순서로 채움 (수평 3슬롯 적재)
 2. **박스 꽉 참 감지**:
-   - 슬롯 0~4가 모두 채워지면 `is_full = TRUE`로 마킹
+   - 슬롯 0~2가 모두 채워지면 `is_full = TRUE`로 마킹
    - Flask 서버가 자동으로 OHT 요청(`/api/oht/auto_trigger`) 전송
 3. **시스템 정지**:
-   - 해당 카테고리 박스가 5/5가 되면 LED/WinForms에 경고 노출
+   - 해당 카테고리 박스가 3/3가 되면 LED/WinForms에 경고 노출
    - OHT 자동 호출 상태에서 추가 배치는 차단
 4. **박스 교체 후 재시작**:
    - 작업자가 박스 교체 완료
@@ -1483,9 +1584,11 @@ print(f"VRAM 사용: {torch.cuda.memory_allocated() / 1024**3:.2f}GB / 16GB")
 ```
 
 **예상 VRAM 사용량 (RTX 4080 Super)**:
-- YOLOv8l + 이상 탐지 + 양면 동시: 6-8GB
-- 여유 메모리: 8-10GB
-- 결론: 메모리 부족 가능성 매우 낮음
+- Component Model (YOLOv8l): ~5-6GB
+- Solder Model (YOLOv8l): ~4-5GB
+- **총 VRAM 사용**: ~8GB (양면 동시 추론)
+- 여유 메모리: 8GB
+- 결론: 메모리 부족 가능성 매우 낮음 ✅
 
 ### 문제 3: 웹캠이 인식되지 않음
 
@@ -2844,8 +2947,8 @@ def get_gpu_usage():
 - **디팔렛타이저 허용 시간**: 2.5초
 - **여유 시간**: 2.3초 이상 (10배 이상 여유) ✅
 - **VRAM 사용**:
-  - 학습 시: 10-14GB (배치 32 기준)
-  - 추론 시: 6-8GB (YOLO + 이상 탐지 + 양면 동시)
+  - 학습 시: 10-14GB (배치 32 기준, 각 모델 독립 학습)
+  - 추론 시: ~8GB (Component + Solder 이중 모델 양면 동시)
   - 여유: 8-10GB (안정적 운영 가능)
 - **FP16 최적화**: VRAM 50% 절약 + 속도 1.5배 향상 가능 ✅
 

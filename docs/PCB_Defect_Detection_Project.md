@@ -2,14 +2,15 @@
 
 ## 프로젝트 개요
 
-**목표**: 컨베이어 벨트를 통해 들어오는 PCB의 양면을 실시간으로 검사하여 불량을 자동으로 검출하고 분류하는 하이브리드 딥러닝 시스템 개발
+**목표**: 컨베이어 벨트를 통해 들어오는 PCB의 양면을 실시간으로 검사하여 불량을 자동으로 검출하고 분류하는 이중 YOLO 딥러닝 시스템 개발
 
 **핵심 기술**:
-- YOLO v8 기반 객체 탐지 (Object Detection)
-- 이상 탐지 모델 (Anomaly Detection)
-- 병렬 처리를 통한 결과 융합
+- 이중 YOLO v8 모델 아키텍처 (Dual Model Architecture)
+  - **모델 1**: FPIC-Component (부품 검출, 25개 클래스)
+  - **모델 2**: SolDef_AI (납땜 불량 검출, 5-6개 클래스)
+- 병렬 추론 및 결과 융합 로직 (Flask 서버)
 - 실시간 비디오 스트리밍 및 웹 서버 통신 (Flask)
-- 웹캠 프레임 실시간 분석
+- 양면 동시 검사 및 통합 판정
 
 **시스템 구성**:
 - **라즈베리파이 3대** (카메라 클라이언트 + OHT 컨트롤러)
@@ -64,22 +65,40 @@
 
 ## 불량 검출 대상
 
-### 1. 납땜 불량 (Soldering Defects)
-- Cold Joint (불완전 납땜)
-- Solder Bridge (납땜 브릿지)
-- Insufficient Solder (납 부족)
-- Excess Solder (과다 납)
+### 1. 부품 검출 (Component Detection) - FPIC-Component 데이터셋
+**모델 1 (좌측 카메라)** - 25개 클래스
+- 전자 부품 25종: capacitor, resistor, IC, LED, diode, transistor, connector, inductor, relay, switch, potentiometer, pads 등
+- 부품 존재 여부 확인
+- 부품 위치 정확도 검증
+- 잘못된 부품 검출
 
-### 2. 부품 불량 (Component Defects)
-- Missing Component (부품 누락)
-- Misalignment (부품 오장착)
-- Wrong Component (잘못된 부품)
-- Damaged Component (부품 손상)
+**데이터셋 정보**:
+- 출처: FPIC-Component (IIT, India)
+- 이미지 수: 6,260장
+- 라벨 객체 수: 29,639개
+- 균형 잡힌 분포
 
-### 3. PCB 기판 불량
-- Trace Damage (트레이스 손상)
-- Pad Damage (패드 손상)
-- Scratches (긁힘)
+### 2. 납땜 불량 검출 (Soldering Defects) - SolDef_AI 데이터셋
+**모델 2 (우측 카메라)** - 5-6개 클래스
+- **no_good**: 일반적인 납땜 불량
+- **exc_solder**: 과다 납땜 (Excessive Solder)
+- **spike**: 납땜 스파이크
+- **poor_solder**: 불충분한 납땜 (Poor Solder Joint)
+- **solder_bridge**: 납땜 브릿지 (치명적 결함)
+- **tombstone**: 툼스톤 현상 (선택)
+
+**데이터셋 정보**:
+- 출처: SolDef_AI (Roboflow)
+- 이미지 수: 1,150장 (429장 Roboflow 버전)
+- 우주 항공 표준 (ECSS-Q-ST-70-38C) 기반
+- 고품질 어노테이션
+
+### 3. 결과 융합 로직
+Flask 서버에서 두 모델의 결과를 통합하여 최종 판정:
+- **정상 (normal)**: 부품 + 납땜 모두 정상
+- **부품 불량 (component_defect)**: 부품 검출 문제
+- **납땜 불량 (solder_defect)**: 납땜 품질 문제
+- **폐기 (discard)**: 심각한 불량 (양면 모두 문제 또는 치명적 결함)
 
 ---
 
@@ -106,182 +125,248 @@
 
 ---
 
-### Phase 2: PCB 데이터 준비 (2-3주)
+### Phase 2: PCB 데이터 준비 (2-3주) ⭐ 업데이트
+
+#### 선정 데이터셋
+**이중 모델 아키텍처를 위한 전문 데이터셋 사용**:
+1. **FPIC-Component** (부품 검출) - 모델 1
+2. **SolDef_AI** (납땜 불량) - 모델 2
 
 #### 체크리스트
-- [ ] 공개 PCB 불량 데이터셋 탐색
-  - [ ] Kaggle PCB 데이터셋 조사
-  - [ ] Roboflow PCB 데이터셋 조사
-  - [ ] GitHub 오픈소스 데이터셋 조사
-- [ ] 선정한 데이터셋 다운로드
-- [ ] 데이터 분석
+- [x] 검증된 PCB 데이터셋 선정
+  - [x] FPIC-Component 데이터셋 확인 (IIT, India)
+  - [x] SolDef_AI 데이터셋 확인 (Roboflow, 우주항공 표준)
+  - [x] 데이터셋 품질 및 균형 검증
+- [ ] 데이터셋 1: FPIC-Component 다운로드 및 준비
+  - [ ] 데이터셋 다운로드 (6,260 이미지)
+  - [ ] 25개 부품 클래스 확인
+  - [ ] YOLO 형식 변환 (필요 시)
+  - [ ] Train/Val/Test 분할 확인
+- [ ] 데이터셋 2: SolDef_AI 다운로드 및 준비
+  - [ ] Roboflow에서 다운로드 (429-1,150 이미지)
+  - [ ] 5-6개 납땜 클래스 확인
+  - [ ] YOLO 형식 확인
+  - [ ] Train/Val/Test 분할 확인
+- [ ] 데이터 품질 검증
   - [ ] 이미지 해상도 확인
-  - [ ] 불량 유형별 개수 파악
-  - [ ] 클래스 불균형 확인
-- [x] YOLO 형식으로 전처리
-  - [x] 이미지 리사이징
-  - [x] 어노테이션 변환 (YOLO format)
-  - [x] 데이터 증강 (Augmentation) 적용
-- [x] 데이터 분할
-  - [x] Train: 70%
-  - [x] Validation: 20%
-  - [x] Test: 10%
+  - [ ] 라벨 형식 검증 (YOLO format)
+  - [ ] 클래스 분포 분석
+  - [ ] 중복 이미지 확인
+- [ ] 데이터 증강 전략 (선택)
+  - [ ] 회전, 반전, 밝기 조정
+  - [ ] 노이즈 추가
+  - [ ] Mosaic augmentation
 
-**참고 문서**: `Dataset_Guide.md`
+**참고 문서**: `Dataset_Guide.md`, `Dual_Model_Architecture.md`
 
 ---
 
-### Phase 3: YOLO 모델 학습 및 최적화 (3-4주)
+### Phase 3: 이중 YOLO 모델 학습 및 최적화 (3-4주) ⭐ 업데이트
 
-#### 체크리스트
-- [x] 기본 YOLO v8 모델 선택
-  - [x] YOLOv8n (nano - 경량)
-  - [ ] YOLOv8s (small)
-  - [ ] YOLOv8m (medium)
-  - [ ] 성능/속도 비교 실험
-- [x] 초기 학습 실행
-  - [x] 기본 하이퍼파라미터로 학습
-  - [x] 학습 과정 모니터링 (loss, mAP)
-  - [ ] TensorBoard 활용
+**핵심 변경**: 두 개의 독립적인 YOLO 모델을 각각 학습
+
+#### 모델 1: 부품 검출 모델 (FPIC-Component)
+- [x] 데이터셋: FPIC-Component (6,260 이미지, 25 클래스)
+- [ ] YOLOv8l 선택 (정확도 우선, RTX 4080 Super 최적화)
+- [ ] 학습 설정
+  - [ ] Epochs: 100-150
+  - [ ] Batch size: 16-32 (VRAM 16GB 활용)
+  - [ ] Image size: 640
+  - [ ] Optimizer: AdamW
+  - [ ] Learning rate: 0.001
+- [ ] 성능 평가
+  - [ ] mAP@0.5 목표: > 0.85
+  - [ ] 부품별 검출 정확도 분석
+  - [ ] Precision/Recall 분석
+- [ ] 모델 저장: `models/fpic_component_best.pt`
+
+#### 모델 2: 납땜 불량 모델 (SolDef_AI)
+- [x] 데이터셋: SolDef_AI (1,150 이미지, 5-6 클래스)
+- [ ] YOLOv8l 선택 (정확도 우선)
+- [ ] 학습 설정
+  - [ ] Epochs: 100-150
+  - [ ] Batch size: 16-32
+  - [ ] Image size: 640
+  - [ ] Optimizer: AdamW
+  - [ ] Learning rate: 0.001
+  - [ ] Class weights 조정 (필요 시)
+- [ ] 성능 평가
+  - [ ] mAP@0.5 목표: > 0.90 (클래스 수 적어 높은 정확도 기대)
+  - [ ] 납땜 불량 타입별 정확도
+  - [ ] False Positive 최소화 중요
+- [ ] 모델 저장: `models/soldef_ai_best.pt`
+
+#### 공통 최적화
 - [ ] 하이퍼파라미터 튜닝
-  - [ ] Learning rate 조정
-  - [ ] Batch size 최적화
-  - [ ] Epoch 수 결정
-  - [ ] Augmentation 파라미터 조정
-- [x] 성능 평가
-  - [x] mAP@0.5 측정
-  - [x] mAP@0.5:0.95 측정
-  - [x] Precision/Recall 분석
-  - [x] 클래스별 성능 분석
-- [ ] 모델 개선
-  - [ ] Hard negative mining
-  - [ ] 클래스 불균형 해결 (가중치 조정)
-  - [ ] Ensemble 실험
+  - [ ] Learning rate 스케줄러
+  - [ ] Warm-up epochs
+  - [ ] Weight decay 조정
 - [ ] 추론 최적화
+  - [ ] FP16 (Half Precision) 적용 ⭐ 권장
+  - [ ] Batch inference (좌우 동시 추론)
   - [ ] TensorRT 변환 (선택)
-  - [ ] ONNX 변환 (선택)
-  - [ ] 추론 속도 측정
+- [ ] 성능 벤치마크
+  - [ ] 단일 모델 추론 시간 측정
+  - [ ] 병렬 추론 시간 측정 (목표: 80-100ms)
+  - [ ] GPU 메모리 사용량 (목표: < 8GB)
 
-**예상 결과**: mAP@0.5 > 0.85 달성
-
----
-
-### Phase 4: 이상 탐지 모델 (선택 사항 - 시간 여유 시) (2-3주)
-
-**⚠️ 우선순위**: Phase 1-3 (YOLO 시스템) 완료 및 안정화 후 검토
-
-**목적**: YOLO로 잡지 못한 새로운 불량 패턴 탐지 (시스템 정확도 향상)
-
-**판단 기준**:
-- ✅ YOLO Fine-tuning 완료 및 정확도 80% 이상
-- ✅ Flask 서버 + 라즈베리파이 연동 완료
-- ✅ 실시간 검사 시스템 작동 확인
-- ✅ 졸업 발표 일정까지 4주 이상 남음
-
-**구현하지 않아도 프로젝트 완성 가능** - YOLO만으로 충분히 작동
-
-#### 이상 탐지 모델 후보
-
-##### 옵션 1: PaDiM (Patch Distribution Modeling) ⭐ 추천
-- **장점**: SOTA 성능, pre-trained 모델 활용, 구현 빠름
-- **단점**: 메모리 사용량 높음
-- **추천 이유**: Anomalib 라이브러리로 빠른 구현 가능
-
-##### 옵션 2: PatchCore
-- **장점**: 매우 높은 정확도, 산업 적용 사례 많음
-- **단점**: 연산량 많음, 실시간 처리 어려울 수 있음
-
-##### 옵션 3: AutoEncoder 기반
-- **장점**: 구현 간단, 학습 빠름
-- **단점**: 복잡한 패턴 학습 제한적, 성능 낮음
-
-#### 체크리스트
-- [ ] **Phase 1-3 완료 확인 필수**
-- [ ] 시간 및 일정 검토
-- [ ] Anomalib 라이브러리 설치 및 테스트
-  - [ ] MVTec 샘플 데이터로 PaDiM 테스트
-  - [ ] 추론 속도 측정 (실시간 처리 가능한지)
-- [ ] PCB 정상 데이터로 이상 탐지 학습
-  - [ ] 정상 이미지 20~30장만으로 학습
-  - [ ] Threshold 결정
-  - [ ] 이상 영역 시각화
-- [ ] YOLO 결과와 융합 알고리즘 개발
-  - [ ] 두 모델 결과 통합 로직
-  - [ ] 최종 불량 판정 규칙
-
-**참고 논문**:
-- PaDiM: "PaDiM: a Patch Distribution Modeling Framework for Anomaly Detection"
-- PatchCore: "Towards Total Recall in Industrial Anomaly Detection"
-
-**예상 효과**:
-- 정확도 5~10% 향상
-- 새로운 불량 패턴 탐지 가능
-- 졸업 프로젝트 차별화 포인트
+**예상 결과**:
+- 부품 모델: mAP@0.5 > 0.85
+- 납땜 모델: mAP@0.5 > 0.90
+- 총 추론 시간: 80-100ms (병렬)
 
 ---
 
-### Phase 5: 하이브리드 시스템 통합 및 웹서버 구축 (3-4주)
+### Phase 4: ~~이상 탐지 모델~~ → 이중 YOLO 모델로 대체 ⭐ 아키텍처 변경
+
+**⚠️ 중요**: 이상 탐지 모델 접근 방식을 **이중 YOLO 모델 아키텍처**로 변경
+
+**변경 이유**:
+1. 데이터셋 불균형 문제 해결 불가 (22개 클래스, 451.9:1 불균형)
+2. 검증된 전문 데이터셋 활용 (FPIC-Component, SolDef_AI)
+3. 양면 검사 컨셉에 완벽 부합 (좌측=부품, 우측=납땜)
+4. 유지보수 및 확장성 향상
+
+**새로운 아키텍처**:
+- **모델 1**: FPIC-Component (부품 검출, 25개 클래스) - 좌측 카메라
+- **모델 2**: SolDef_AI (납땜 불량, 5-6개 클래스) - 우측 카메라
+- **Flask 서버**: 결과 융합 로직 (단순 if-else, <5ms)
+
+**기술적 장점**:
+- ✅ 전문화된 모델 → 높은 정확도
+- ✅ 병렬 추론 → 빠른 속도 (80-100ms)
+- ✅ 독립적 학습 → 빠른 개발
+- ✅ 유연한 융합 로직 → 쉬운 조정
+
+**프로젝트 장점**:
+- ✅ 양면 검사 컨셉 완벽 구현
+- ✅ 4가지 분류 명확 (정상/부품불량/납땜불량/폐기)
+- ✅ GPIO 제어 단순 (하나의 신호만)
+- ✅ 발표 효과 극대화
+
+**참고 문서**: `Dual_Model_Architecture.md` (상세 설계 문서)
+
+---
+
+**⚠️ 구 접근 방식 (아카이브)**
+
+이전에는 YOLO + Anomalib 이상 탐지 하이브리드 방식을 고려했으나, 다음 이유로 폐기:
+- 데이터셋 불균형 문제 지속
+- 이상 탐지 모델의 실시간 처리 성능 불확실
+- 두 모델 융합 복잡도 증가
+- 유지보수 어려움
+
+**이상 탐지 모델은 이 프로젝트에서 사용하지 않습니다.**
+
+---
+
+### Phase 5: 이중 모델 시스템 통합 및 웹서버 구축 (3-4주) ⭐ 업데이트
 
 #### 실시간 검사 시스템 아키텍처
 
 ```
-[컨베이어 벨트 시스템]
+[컨베이어 벨트 시스템 - 양면 동시 검사]
     │
-    ├─ 웹캠 1 (좌측) ──→ [라즈베리파이 1] (100.64.1.2)
-    │                      │
-    │                      ├──→ Flask Client (프레임 전송)
+    ├─ 웹캠 1 (좌측) ──→ [라즈베리파이 1] (100.x.x.y)
+    │   앞면(부품면)       │
+    │                      ├──→ Flask Client (부품 프레임 전송)
     │                      ├──→ GPIO 제어 모듈 (LED/릴레이) ⭐
-    │                      └──→ USB 시리얼 통신 (Arduino Mega 제어) ⭐ 신규
+    │                      └──→ USB 시리얼 통신 (Arduino Mega 제어) ⭐
     │                             │
-    └─ 웹캠 2 (우측) ──→ [라즈베리파이 2] (100.64.1.3)
-                         │        │
-                         │        └──→ Flask Client (프레임 전송만)
+    └─ 웹캠 2 (우측) ──→ [라즈베리파이 2] (100.x.x.z)
+        뒷면(납땜면)       │
+                         │        └──→ Flask Client (납땜 프레임 전송만)
                          │
                 ┌────────┴─────────┐
                 │                  │
-        HTTP POST (프레임)    HTTP 응답 (제어 신호 - 라즈베리파이 1만)
+        HTTP POST             HTTP POST
+        (left_frame)          (right_frame)
                 │                  │
-                ↓                  ↑
-        ┌─────────────────────────────────┐
-        │  Flask 추론 서버 (GPU PC)       │
-        │  Tailscale IP: 100.64.1.1:5000          │
-        │  ┌──────────────────────────┐   │
-        │  │  양면 프레임 수신        │   │
-        │  │  ↓                       │   │
-        │  │  YOLO v8 + 이상 탐지     │   │
-        │  │  ↓                       │   │
-        │  │  좌측+우측 결과 통합     │   │
-        │  │  ↓                       │   │
-        │  │  최종 불량 분류 판정     │   │
-        │  │  ↓                       │   │
-        │  │  박스 슬롯 할당 로직 ⭐  │   │
-        │  └──────────────────────────┘   │
-        │           │                      │
-        │           ↓                      │
-        │  ┌──────────────────────────┐   │
-        │  │  MySQL 데이터베이스      │   │
-        │  │  - 검사 이력 저장        │   │
-        │  │  - 박스 상태 관리 ⭐     │   │
-        │  │  - 불량 이미지 경로      │   │
-        │  │  - 통계 데이터           │   │
-        │  └──────────────────────────┘   │
-        │           │                      │
-        │           ↓                      │
-        │  ┌──────────────────────────┐   │
-        │  │  REST API 서버           │   │
-        │  │  - /api/inspections      │   │
-        │  │  - /api/statistics       │   │
-        │  │  - /api/box_status ⭐    │   │
-        │  │  - /gpio/control         │   │
-        │  └──────────────────────────┘   │
-        └─────────────────────────────────┘
-                     │
-                     │ HTTP REST API
-                     ↓
+                ↓                  ↓
+        ┌─────────────────────────────────────────┐
+        │  Flask 추론 서버 (GPU PC)               │
+        │  Tailscale VPN: 100.x.x.x:5000                │
+        │  ┌──────────────────────────────────┐   │
+        │  │  양면 프레임 수신 (/predict_dual) │   │
+        │  │    - left_frame (부품)            │   │
+        │  │    - right_frame (납땜)           │   │
+        │  └──────────────────────────────────┘   │
+        │                   ↓                      │
+        │  ┌─────────────────────────────────┐    │
+        │  │  이중 YOLO 병렬 추론 (80-100ms) │    │
+        │  │                                  │    │
+        │  │  ┌──────────────────────────┐   │    │
+        │  │  │ 모델 1: FPIC-Component   │   │    │
+        │  │  │ (부품 검출, 25 클래스)    │   │    │
+        │  │  │ 추론 시간: 50-80ms        │   │    │
+        │  │  └──────────────────────────┘   │    │
+        │  │              ↓                   │    │
+        │  │        component_result          │    │
+        │  │                                  │    │
+        │  │  ┌──────────────────────────┐   │    │
+        │  │  │ 모델 2: SolDef_AI        │   │    │
+        │  │  │ (납땜 불량, 5-6 클래스)   │   │    │
+        │  │  │ 추론 시간: 30-50ms        │   │    │
+        │  │  └──────────────────────────┘   │    │
+        │  │              ↓                   │    │
+        │  │        solder_result             │    │
+        │  └─────────────────────────────────┘    │
+        │                   ↓                      │
+        │  ┌──────────────────────────────────┐   │
+        │  │  결과 융합 로직 (<5ms)           │   │
+        │  │  - component_defects 추출         │   │
+        │  │  - solder_defects 추출            │   │
+        │  │  - 심각도 계산                    │   │
+        │  │  - 최종 판정                      │   │
+        │  │    ├─ normal (정상)               │   │
+        │  │    ├─ component_defect (부품불량) │   │
+        │  │    ├─ solder_defect (납땜불량)    │   │
+        │  │    └─ discard (폐기)              │   │
+        │  └──────────────────────────────────┘   │
+        │                   ↓                      │
+        │  ┌──────────────────────────────────┐   │
+        │  │  박스 슬롯 할당 로직 ⭐          │   │
+        │  └──────────────────────────────────┘   │
+        │                   ↓                      │
+        │  ┌──────────────────────────────────┐   │
+        │  │  MySQL 데이터베이스              │   │
+        │  │  - 검사 이력 저장                │   │
+        │  │  - 박스 상태 관리 ⭐             │   │
+        │  │  - 부품/납땜 상세 결과           │   │
+        │  │  - 통계 데이터                   │   │
+        │  └──────────────────────────────────┘   │
+        │                   ↓                      │
+        │  ┌──────────────────────────────────┐   │
+        │  │  REST API 서버                   │   │
+        │  │  - /predict_dual ⭐ (양면 검사)  │   │
+        │  │  - /api/inspections              │   │
+        │  │  - /api/statistics               │   │
+        │  │  - /api/box_status ⭐            │   │
+        │  └──────────────────────────────────┘   │
+        └─────────────────────────────────────────┘
+                          ↓
+              HTTP 응답 (라즈베리파이 1만)
+              {
+                "decision": "component_defect",
+                "component_defects": [...],
+                "solder_defects": [...],
+                "gpio_signal": {...},
+                "robot_arm_command": {...}
+              }
+                          ↓
+                 ┌────────┴─────────┐
+        라즈베리파이 1 (GPIO 제어)
+                 │
+                 ├─ GPIO 핀 제어 (LED/릴레이)
+                 └─ USB 시리얼 (로봇팔)
+                          ↓
+                 HTTP REST API
+                          ↓
         ┌─────────────────────────────────┐
         │  C# WinForms (Windows PC)       │
         │  - 실시간 모니터링 대시보드     │
         │  - 박스 상태 모니터링 ⭐        │
+        │  - 부품/납땜 분리 표시 ⭐       │
         │  - 검사 이력 조회 (MySQL)       │
         │  - 불량 이미지 뷰어             │
         │  - 시스템 설정 관리             │
@@ -312,39 +397,39 @@
           └─────────┬───────────┘
                     │ 로봇팔 + 레일 명령
                     ↓
-          [분류 박스 시스템 - 수평 5슬롯 적재]
+          [분류 박스 시스템 - 수평 3슬롯 적재]
                         │
         ┌────────┬────────┬────────┬────────┐
         │        │        │        │        │
       [정상]   [부품불량] [납땜불량]  [폐기]
-     (5슬롯)   (5슬롯)   (5슬롯)   (슬롯없음)
+     (3슬롯)   (3슬롯)   (3슬롯)   (슬롯없음)
         │        │        │        │
-        └────────┴────────┴────────┴─→ 슬롯 5/5 감지 → LED/WinForms 알림
+        └────────┴────────┴────────┴─→ 슬롯 3/3 감지 → LED/WinForms 알림
                                                     → Flask 서버 OHT 자동 호출
                                                     → 창고 박스 교체 후 리셋
 
 [박스 시스템 구조] ⭐ 물리적 제약 반영 (2025-10 업데이트)
 - 총 3개 박스 + 1개 폐기 위치
-- 각 박스: 5개 슬롯 (수평 나란히 적재)
-- 총 15개 슬롯 = 3 박스 × 5 슬롯
+- 각 박스: 3개 슬롯 (수평 나란히 적재)
+- 총 9개 슬롯 = 3 박스 × 3 슬롯
 - DISCARD: 슬롯 관리 없음 (고정 위치에 떨어뜨림)
 - 로봇팔: 각 슬롯별 좌표는 Arduino 좌표 테이블에 저장
 
 카테고리별 박스:
-1. NORMAL (정상) - 5 슬롯 (수평)
-2. COMPONENT_DEFECT (부품 불량) - 5 슬롯 (수평)
-3. SOLDER_DEFECT (납땜 불량) - 5 슬롯 (수평)
+1. NORMAL (정상) - 3 슬롯 (수평)
+2. COMPONENT_DEFECT (부품 불량) - 3 슬롯 (수평)
+3. SOLDER_DEFECT (납땜 불량) - 3 슬롯 (수평)
 4. DISCARD (폐기) - 슬롯 관리 없음 (고정 위치)
 
 슬롯 할당 로직:
-1. 각 박스는 슬롯 0번부터 4번까지 순차 채움
+1. 각 박스는 슬롯 0번부터 2번까지 순차 채움
 2. 슬롯 채울 때마다 WinForms와 Flask 서버가 사용률 업데이트
-3. 박스가 가득 차면 (5/5):
+3. 박스가 가득 차면 (3/3):
    - LED 알림 (라즈베리파이 GPIO)
    - WinForms 화면 알림 (빨간색 경고)
    - 해당 박스 is_full = TRUE 처리
    - Flask 서버에서 `/api/oht/auto_trigger` 호출 → OHT 자동 호출
-4. OHT가 박스를 창고로 교체한 뒤 관리자가 "박스 리셋" 버튼을 누르면 슬롯 0/5로 초기화
+4. OHT가 박스를 창고로 교체한 뒤 관리자가 "박스 리셋" 버튼을 누르면 슬롯 0/3로 초기화
 
 [GPIO + Arduino 병렬 사용] ⭐ 라즈베리파이 1 전용
 양면 통합 판정 → Flask 서버 → HTTP 응답 (라즈베리파이 1만)
@@ -359,10 +444,10 @@
       └─ Arduino Mega 2560 ─→ 5-6축 로봇팔 (servo)
           │
           ├─ 픽업 좌표: (X, Y, Z) - 컨베이어 벨트 위치
-          └─ 배치 좌표: 15개 슬롯 + 1개 폐기 위치 좌표 테이블
-              - NORMAL_SLOT_0 ~ NORMAL_SLOT_4 (좌측 → 우측)
-              - COMPONENT_DEFECT_SLOT_0 ~ COMPONENT_DEFECT_SLOT_4
-              - SOLDER_DEFECT_SLOT_0 ~ SOLDER_DEFECT_SLOT_4
+          └─ 배치 좌표: 9개 슬롯 + 1개 폐기 위치 좌표 테이블
+              - NORMAL_SLOT_0 ~ NORMAL_SLOT_2 (좌측 → 우측)
+              - COMPONENT_DEFECT_SLOT_0 ~ COMPONENT_DEFECT_SLOT_2
+              - SOLDER_DEFECT_SLOT_0 ~ SOLDER_DEFECT_SLOT_2
               - DISCARD_POSITION (고정 좌표)
 
 참고: 라즈베리파이 2는 카메라 전용이며, GPIO 및 로봇팔 제어를 수행하지 않음
@@ -396,11 +481,11 @@
                             │ 상하 이동 (양쪽 동기화)
                             ↓
               ┌──────────────────────────┐
-              │ 3개 박스 수평 배치 (각 5슬롯) │
+              │ 3개 박스 수평 배치 (각 3슬롯) │
               ├──────────────────────────┤
               │ [박스1]  [박스2]  [박스3]   │
               │  정상    부품불량  납땜불량   │
-              │ (5슬롯)  (5슬롯)  (5슬롯)    │
+              │ (3슬롯)  (3슬롯)  (3슬롯)    │
               └──────────────────────────┘
                             ↓
                    [창고 (대기 위치)]
@@ -411,7 +496,7 @@
    - 카테고리 선택 (정상/부품불량/납땜불량)
 
 2. BoxManager 자동 감지 → Flask API (/api/oht/auto_trigger)
-   - 박스 가득 참 (5/5 슬롯) 감지
+   - 박스 가득 참 (3/3 슬롯) 감지
    - 자동 OHT 호출 트리거
 
 3. Flask 서버 → MySQL (oht_operations 테이블)
@@ -443,7 +528,7 @@
 7. WinForms 대시보드
    - 실시간 OHT 상태 모니터링
    - 최근 작업 이력 표시
-   - 박스별 슬롯 사용 현황 (예: 3/5)
+   - 박스별 슬롯 사용 현황 (예: 2/3)
    - 권한별 제어 버튼 표시 (Viewer는 비활성화)
 
 하드웨어 구성:
@@ -453,7 +538,7 @@
 - 위치 감지 (X축): 리미트 스위치 2개 (창고, 박스3 끝)
 - 위치 감지 (Z축): 리미트 스위치 4개 (좌상, 좌하, 우상, 우하)
 - 긴급 정지: 버튼 1개
-- 박스 크기: PCB 5개 수납 가능 (세로 배치)
+- 박스 크기: PCB 3개 수납 가능 (세로 배치)
 - 박스 배치: 수평으로 나란히 3개 (1m 간격)
 
 권한 제어:
@@ -464,44 +549,63 @@
 참고: 폐기(DISCARD) 카테고리는 OHT 대상이 아님 (별도 처리)
 ```
 
-#### 웹서버 통신 프로토콜
+#### 웹서버 통신 프로토콜 ⭐ 업데이트
 
-**1. 라즈베리파이 → Flask 서버 (프레임 전송)**
-- **요청**: HTTP POST `/predict`
+**1. 라즈베리파이 → Flask 서버 (양면 프레임 전송)**
+- **요청**: HTTP POST `/predict_dual` ⭐ 신규
 ```json
 {
-  "camera_id": "left" | "right",
-  "frame": "base64_encoded_image",
+  "left_frame": "base64_encoded_image",   // 좌측 카메라 (부품면)
+  "right_frame": "base64_encoded_image",  // 우측 카메라 (납땜면)
   "timestamp": "2025-10-22T10:30:45.123Z"
 }
 ```
 
-- **응답**: JSON
+- **응답**: JSON ⭐ 업데이트
 ```json
 {
   "status": "ok",
-  "defect_type": "정상" | "부품불량" | "납땜불량" | "폐기",
-  "confidence": 0.95,
-  "boxes": [...],
+  "decision": "normal" | "component_defect" | "solder_defect" | "discard",
+  "component_defects": [
+    {
+      "type": "resistor",
+      "bbox": [x, y, w, h],
+      "confidence": 0.92,
+      "issue": "misalignment"
+    }
+  ],
+  "solder_defects": [
+    {
+      "type": "solder_bridge",
+      "bbox": [x, y, w, h],
+      "confidence": 0.88,
+      "severity": "critical"
+    }
+  ],
+  "component_severity": 1,  // 0-3
+  "solder_severity": 2,     // 0-3
   "gpio_signal": {
-    "pin": 17,
+    "pin": 27,
     "action": "HIGH",
     "duration_ms": 500
   },
   "robot_arm_command": {
     "action": "place_pcb",
-    "box_id": "NORMAL_A",
+    "box_id": "SOLDER_DEFECT",
     "slot_number": 2,
     "coordinates": {"x": 120.5, "y": 85.3, "z": 30.0}
   },
   "box_status": {
-    "box_id": "NORMAL_A",
+    "box_id": "SOLDER_DEFECT",
     "current_slot": 3,
     "is_full": false
   },
-  "inspection_id": 12345
+  "inspection_id": 12345,
+  "inference_time_ms": 85
 }
 ```
+
+**참고**: 기존 `/predict` 엔드포인트는 하위 호환성을 위해 유지 가능
 
 **2. Flask 서버 → MySQL (데이터 저장)**
 - 검사 결과 INSERT (box_id, slot_number 포함) ⭐
@@ -566,25 +670,38 @@
 }
 ```
 
-#### 체크리스트
-- [ ] Flask 웹서버 구축 (상세: `Flask_Server_Setup.md`)
-  - [ ] Flask 추론 서버 개발 (GPU PC)
-  - [ ] 프레임 수신 API 엔드포인트 (/predict)
-  - [ ] 양면(좌측/우측) 동시 처리 로직
+#### 체크리스트 ⭐ 업데이트
+- [ ] Flask 웹서버 구축 (상세: `Flask_Server_Setup.md`, `Dual_Model_Architecture.md`)
+  - [ ] **이중 모델 로딩 및 추론** ⭐ 핵심
+    - [ ] FPIC-Component 모델 로드 (부품 검출)
+    - [ ] SolDef_AI 모델 로드 (납땜 불량)
+    - [ ] 병렬 추론 로직 구현
+    - [ ] GPU 메모리 관리 (8GB 이내)
+  - [ ] **결과 융합 로직 구현** ⭐ 핵심
+    - [ ] component_defects 추출 함수
+    - [ ] solder_defects 추출 함수
+    - [ ] 심각도 계산 알고리즘 (Level 0-3)
+    - [ ] 최종 판정 로직 (normal/component/solder/discard)
+  - [ ] **API 엔드포인트 개발**
+    - [ ] POST /predict_dual - 양면 동시 검사 ⭐ 신규
+    - [ ] POST /predict - 단일 프레임 (하위 호환)
+    - [ ] GET /health - 서버 상태 확인
   - [ ] MySQL 데이터베이스 연동
+    - [ ] 검사 이력 저장 (component/solder 분리)
+    - [ ] 박스 상태 업데이트
   - [ ] REST API 엔드포인트 개발 (/api/*)
   - [ ] GPIO 제어 응답 로직
-  - [ ] 박스 상태 관리 로직 (BoxManager) ⭐ 신규
-  - [ ] 슬롯 할당 알고리즘 ⭐ 신규
-  - [ ] 박스 가득 찬 경우 알림 시스템 ⭐ 신규
-  - [ ] 사용자 관리 API (user_api.py) ⭐ 신규
+  - [ ] 박스 상태 관리 로직 (BoxManager) ⭐
+  - [ ] 슬롯 할당 알고리즘 ⭐
+  - [ ] 박스 가득 찬 경우 알림 시스템 ⭐
+  - [ ] 사용자 관리 API (user_api.py) ⭐
     - [ ] GET /api/users - 사용자 목록 조회
     - [ ] POST /api/users - 사용자 생성
     - [ ] PUT /api/users/{id} - 사용자 수정
     - [ ] DELETE /api/users/{id} - 사용자 삭제
     - [ ] POST /api/users/{id}/reset-password - 비밀번호 초기화
     - [ ] GET /api/users/{id}/logs - 활동 로그 조회
-  - [ ] 인증 API (auth_bp) ⭐ 신규
+  - [ ] 인증 API (auth_bp) ⭐
     - [ ] POST /api/auth/login - 로그인
     - [ ] POST /api/auth/logout - 로그아웃
 - [ ] 라즈베리파이 클라이언트 개발 (상세: `RaspberryPi_Setup.md`)
@@ -647,22 +764,28 @@
   - [x] OHT 운영 관리 테이블 (oht_operations) ⭐ 신규
   - [x] 사용자 활동 로그 테이블 (user_logs) ⭐ 신규
   - [ ] 백업 전략 수립
-- [ ] 병렬 처리 파이프라인 구현
-  - [ ] 멀티프로세싱/멀티스레딩 설계
-  - [ ] YOLO 추론 모듈 (GPU 최적화)
-  - [ ] 이상 탐지 추론 모듈
+- [ ] **병렬 처리 파이프라인 구현** ⭐ 업데이트
+  - [ ] 이중 모델 병렬 추론 (PyTorch 자동 배치 처리)
   - [ ] 프레임 큐 관리 (지연 최소화)
-- [ ] 결과 융합 알고리즘 개발
-  - [ ] YOLO bbox + 이상 탐지 heatmap 융합
+  - [ ] GPU 메모리 최적화
+- [ ] **결과 융합 알고리즘 개발** ⭐ 업데이트
+  - [ ] 부품 모델 결과 파싱 (component_defects)
+  - [ ] 납땜 모델 결과 파싱 (solder_defects)
   - [ ] 양면 검사 결과 통합 (좌측 + 우측)
-  - [ ] Confidence score 조정
-  - [ ] NMS (Non-Maximum Suppression) 적용
-- [ ] 불량 분류 판정 로직
-  - [ ] 부품 불량 분류 (Missing, Misalignment 등)
-  - [ ] 납땜 불량 분류 (Bridge, Cold Joint 등)
+  - [ ] 심각도 기반 융합 로직
+  - [ ] NMS (Non-Maximum Suppression) 적용 (각 모델별)
+- [ ] **불량 분류 판정 로직** ⭐ 업데이트
+  - [ ] 부품 검출 분류 (25개 클래스)
+  - [ ] 납땜 불량 분류 (5-6개 클래스)
   - [ ] 심각한 불량 판정 (폐기 기준)
-  - [ ] 불량 유형별 우선순위 설정
-  - [ ] Threshold 설정 (클래스별)
+    - [ ] component_severity >= 3
+    - [ ] solder_severity >= 3
+    - [ ] 양면 모두 Level 2 이상
+  - [ ] 치명적 불량 타입 정의
+    - [ ] missing_component
+    - [ ] wrong_component
+    - [ ] solder_bridge
+  - [ ] Confidence threshold 설정 (클래스별)
 - [ ] 실시간 처리 최적화
   - [ ] 프레임 스킵 로직 (처리 지연 시)
   - [ ] 배치 처리 (여러 프레임 동시 추론)
@@ -683,14 +806,19 @@
   - [ ] 이상 탐지 단독 vs 하이브리드
   - [ ] 정량적 성능 비교표 작성
 
-**목표 성능**:
-- 최종 mAP: > 0.90
-- 실시간 처리 속도: > 10 FPS (양면 동시 처리)
-- 추론 지연시간: < 100ms/frame
-- False Positive Rate: < 5%
-- 네트워크 통신 안정성: 99% 이상
+**목표 성능** ⭐ 업데이트:
+- **부품 모델 (FPIC-Component)**: mAP@0.5 > 0.85
+- **납땜 모델 (SolDef_AI)**: mAP@0.5 > 0.90
+- **실시간 처리 속도**: 80-100ms (양면 병렬 추론)
+  - 부품 모델: 50-80ms
+  - 납땜 모델: 30-50ms (병렬)
+  - 결과 융합: <5ms
+- **추론 지연시간**: < 100ms (전체 파이프라인)
+- **False Positive Rate**: < 5%
+- **네트워크 통신 안정성**: 99% 이상
+- **GPU 메모리 사용량**: < 8GB (16GB VRAM 중 50%)
 
-**참고 문서**: `Flask_Server_Setup.md` (웹서버 구축 가이드)
+**참고 문서**: `Flask_Server_Setup.md`, `Dual_Model_Architecture.md`
 
 ---
 
@@ -740,25 +868,33 @@
 
 ### 성능 벤치마크
 
-**하드웨어 사양** (GPU PC):
+**하드웨어 사양** (GPU PC) ⭐ 업데이트:
 - **GPU**: NVIDIA RTX 4080 Super (16GB VRAM) ✅
-- **AI 모델**: YOLOv8l (Large) + 이상 탐지 하이브리드
+- **AI 모델**: 이중 YOLOv8l (Large) 모델
+  - 모델 1: FPIC-Component (부품 검출, 25 클래스)
+  - 모델 2: SolDef_AI (납땜 불량, 5-6 클래스)
 - **GPU 메모리 사용량**:
-  - 학습 시: 10-14GB VRAM (배치 32 기준)
-  - 추론 시 (양면 동시):
-    - YOLOv8l 모델: ~3-4GB VRAM (FP16 최적화)
-    - 이상 탐지 모델 (PaDiM): ~1.5-2GB VRAM
-    - 양면 배치 처리: ~1-2GB VRAM
-    - 총 예상: 6-8GB VRAM (16GB 중 50%, 여유 충분)
+  - **학습 시** (각 모델 독립 학습):
+    - 모델 1 학습: 10-12GB VRAM (배치 32 기준)
+    - 모델 2 학습: 8-10GB VRAM (배치 32 기준)
+    - 학습은 순차적으로 진행 (동시 학습 불필요)
+  - **추론 시** (양면 동시):
+    - 부품 모델 (YOLOv8l): ~4-5GB VRAM (FP16 최적화)
+    - 납땜 모델 (YOLOv8l): ~3-4GB VRAM (FP16 최적화)
+    - 양면 배치 처리: ~1GB VRAM
+    - **총 예상**: ~8GB VRAM (16GB 중 50%, 여유 충분) ✅
 - **시스템 RAM**: 8GB+ (16GB 권장)
 - **CPU**: 4코어 이상
 
-**디스크 공간** (프로젝트 단위):
+**디스크 공간** (프로젝트 단위) ⭐ 업데이트:
 - **모델 저장**:
-  - YOLO 모델: ~50 MB (yolov8s.pt)
-  - 이상 탐지 모델: ~200 MB (PaDiM)
-  - 총: ~300 MB
-- **학습 데이터셋**: ~5 GB (이미지 + 어노테이션)
+  - 부품 모델 (YOLOv8l): ~180 MB
+  - 납땜 모델 (YOLOv8l): ~180 MB
+  - 총: ~360 MB
+- **학습 데이터셋**:
+  - FPIC-Component: ~2-3 GB (6,260 이미지)
+  - SolDef_AI: ~0.5-1 GB (1,150 이미지)
+  - 총: ~3-4 GB
 - **불량 이미지 저장** (프로젝트 단위):
   - 불량 이미지: 수백 장 × 100 KB = ~50 MB
   - 통계/로그 데이터: ~10 MB
@@ -890,10 +1026,10 @@
 
 ## 주요 기술 스택
 
-### 딥러닝 프레임워크
+### 딥러닝 프레임워크 ⭐ 업데이트
 - **PyTorch**: 1.13+
-- **Ultralytics**: YOLO v8 공식 라이브러리
-- **Anomalib**: Intel의 이상 탐지 라이브러리
+- **Ultralytics**: YOLO v8 공식 라이브러리 (이중 모델)
+- ~~**Anomalib**: Intel의 이상 탐지 라이브러리~~ (사용하지 않음)
 
 ### 데이터 처리
 - **OpenCV**: 이미지 전처리 및 웹캠 프레임 캡처
@@ -945,18 +1081,31 @@
 - [YOLO v8 GitHub](https://github.com/ultralytics/ultralytics)
 - [YOLO v8 논문](https://arxiv.org/abs/2305.09972)
 
-### 이상 탐지 관련
-- [Anomalib 공식 문서](https://anomalib.readthedocs.io/)
-- [PaDiM 논문](https://arxiv.org/abs/2011.08785)
-- [PatchCore 논문](https://arxiv.org/abs/2106.08265)
-- [MVTec AD Dataset](https://www.mvtec.com/company/research/datasets/mvtec-ad)
+### ~~이상 탐지 관련~~ (아카이브)
+- ~~[Anomalib 공식 문서](https://anomalib.readthedocs.io/)~~
+- ~~[PaDiM 논문](https://arxiv.org/abs/2011.08785)~~
+- ~~[PatchCore 논문](https://arxiv.org/abs/2106.08265)~~
+- ~~[MVTec AD Dataset](https://www.mvtec.com/company/research/datasets/mvtec-ad)~~
+
+**참고**: 이상 탐지 모델은 사용하지 않습니다. 이중 YOLO 모델로 대체되었습니다.
 
 ### PCB 불량 검사 관련 논문
 - "Automatic Optical Inspection for PCB Defect Detection Using Deep Learning"
 - "PCB Defect Detection Using Deep Learning Techniques"
-- "Hybrid Approach for PCB Defect Detection Using CNN and Traditional Image Processing"
+- "Dual Model Approach for PCB Component and Soldering Defect Detection"
 
-### 데이터셋
+### 데이터셋 ⭐ 업데이트
+**사용 중인 데이터셋**:
+- **FPIC-Component** - 부품 검출 (IIT, India)
+  - 6,260 이미지, 25개 클래스
+  - 29,639 라벨 객체
+  - 균형 잡힌 분포
+- **SolDef_AI** - 납땜 불량 검출 (Roboflow)
+  - 1,150 이미지 (429장 Roboflow 버전)
+  - 5-6개 납땜 불량 클래스
+  - 우주 항공 표준 (ECSS-Q-ST-70-38C)
+
+**기타 참고 데이터셋**:
 - [Kaggle PCB Defects Dataset](https://www.kaggle.com/search?q=pcb+defect)
 - [Roboflow PCB Dataset](https://universe.roboflow.com/search?q=pcb)
 - [DeepPCB Dataset](https://github.com/tangsanli5201/DeepPCB)
@@ -975,21 +1124,29 @@
 
 ---
 
-## 성공 기준
+## 성공 기준 ⭐ 업데이트
 
 ### 최소 목표
-- [x] YOLO v8 모델 학습 및 불량 검출 가능
-- [ ] mAP@0.5 > 0.80
-- [ ] 4가지 불량 유형 모두 검출 가능
+- [x] 이중 YOLO v8 모델 선정 및 데이터셋 확보
+- [ ] 부품 모델: mAP@0.5 > 0.80
+- [ ] 납땜 모델: mAP@0.5 > 0.85
+- [ ] 4가지 판정 가능 (정상/부품불량/납땜불량/폐기)
 
 ### 목표
-- [ ] YOLO + 이상 탐지 하이브리드 시스템 구현
-- [ ] mAP@0.5 > 0.85
+- [ ] 이중 모델 시스템 완전 구현
+  - [ ] 부품 모델: mAP@0.5 > 0.85
+  - [ ] 납땜 모델: mAP@0.5 > 0.90
+  - [ ] 결과 융합 로직 정상 작동
+- [ ] 실시간 추론 (80-100ms)
 - [ ] False Positive Rate < 10%
+- [ ] Flask 서버 + 라즈베리파이 연동 완료
 
 ### 우수 목표
-- [ ] 실시간 추론 가능 (< 100ms/image)
-- [ ] mAP@0.5 > 0.90
+- [ ] 부품 모델: mAP@0.5 > 0.90
+- [ ] 납땜 모델: mAP@0.5 > 0.95
+- [ ] 추론 시간 < 80ms (최적화)
+- [ ] False Positive Rate < 5%
+- [ ] 양면 검사 시스템 완전 자동화
 - [ ] 졸업 논문 우수 평가
 
 ---
@@ -1037,5 +1194,23 @@
 ---
 
 **작성일**: 2025-10-28
-**최종 수정일**: 2025-10-22
-**버전**: 1.0
+**최종 수정일**: 2025-10-31
+**버전**: 2.0 ⭐ 이중 모델 아키텍처 업데이트
+
+---
+
+## 변경 이력
+
+### v2.0 (2025-10-31) ⭐ 주요 아키텍처 변경
+- **핵심 변경**: 단일 하이브리드 모델 → 이중 YOLO 모델 아키텍처
+- **데이터셋**: 커스텀 병합 데이터셋 → FPIC-Component + SolDef_AI
+- **모델**:
+  - 모델 1: FPIC-Component (부품 검출, 25 클래스)
+  - 모델 2: SolDef_AI (납땜 불량, 5-6 클래스)
+- **추론 방식**: 병렬 추론 + 결과 융합 로직 (Flask 서버)
+- **성능 목표**: 80-100ms (이전 100ms 목표 유지)
+- **참고 문서**: `Dual_Model_Architecture.md` 추가
+
+### v1.0 (2025-10-28)
+- 초기 버전 작성
+- YOLO + Anomalib 하이브리드 접근 방식

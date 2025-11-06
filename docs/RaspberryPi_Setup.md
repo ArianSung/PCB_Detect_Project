@@ -1,11 +1,16 @@
-# 라즈베리파이 4 PCB 검사 시스템 설정 가이드
+# 라즈베리파이 4 PCB 검사 시스템 설정 가이드 ⭐ (이중 모델 아키텍처)
 
 ## 개요
 
-이 가이드는 라즈베리파이 4를 사용하여 웹캠 프레임 캡처, GPIO 제어, OHT 시스템 제어를 수행하는 방법을 설명합니다.
+이 가이드는 라즈베리파이 4를 사용하여 **양면 동시 웹캠 캡처**, GPIO 제어, OHT 시스템 제어를 수행하는 방법을 설명합니다.
+
+**⭐ 이중 모델 아키텍처**:
+- **Component Model (부품 검출)**: 좌측 카메라 → FPIC-Component 모델 (25 클래스)
+- **Solder Model (납땜 불량)**: 우측 카메라 → SolDef_AI 모델 (5-6 클래스)
+- **Result Fusion (결과 융합)**: Flask 서버에서 두 결과를 융합하여 최종 판정
 
 **시스템 구성**:
-- **라즈베리파이 1 (Tailscale: 100.64.1.2)**: 좌측 웹캠 + GPIO 출력 (분류 게이트, LED 제어)
+- **라즈베리파이 1 (Tailscale: 100.64.1.2)**: 좌측 웹캠 + GPIO 출력 (분류 게이트, LED 제어) ⭐ 양면 동시 전송
 - **라즈베리파이 2 (Tailscale: 100.64.1.3)**: 우측 웹캠 전용 (GPIO 제어 없음)
 - **라즈베리파이 3번 (Tailscale: 100.64.1.4, HW: Raspberry Pi 4 Model B)**: OHT 시스템 전용 제어기 ⭐
 
@@ -186,11 +191,14 @@ python3 test_camera.py 0
 
 ---
 
-## Phase 4: GPIO 설정 및 릴레이 제어 ⭐ 라즈베리파이 1 전용
+## Phase 4: GPIO 설정 및 릴레이 제어 ⭐ 라즈베리파이 1 전용 (이중 모델 융합 결과 기반)
+
+**⭐ 이중 모델 아키텍처에서의 GPIO 제어**:
+- Flask 서버가 **양면(좌측+우측) 동시 검사** 후 두 모델 결과를 융합 (Result Fusion)
+- 최종 판정 (normal, component_defect, solder_defect, discard)을 라즈베리파이 1에 전송
+- GPIO 제어는 **융합 결과(fusion_result)**에 따라 실행
 
 **중요**: GPIO 제어는 **라즈베리파이 1 (100.64.1.2)에만** 적용됩니다.
-- Flask 서버가 양면(좌측+우측) 검사 결과를 통합 판정
-- 최종 불량 분류 결과를 라즈베리파이 1에만 전송
 - 라즈베리파이 2 (100.64.1.3)와 라즈베리파이 3번 (100.64.1.4)는 카메라/OHT 전용 (GPIO 사용 안 함)
 
 ### 4-1. GPIO 핀 매핑 (BCM 모드)
@@ -299,15 +307,21 @@ sudo python3 test_gpio.py
 
 ## Phase 5: Flask Client 및 GPIO 통합
 
-### 5-1. 프로젝트 구조
+### 5-1. 프로젝트 구조 (이중 모델 아키텍처)
 
 ```
 ~/pcb_inspection_client/
-├── camera_client.py       # 웹캠 + GPIO 통합 클라이언트
-├── gpio_controller.py     # GPIO 제어 모듈
+├── dual_camera_client.py  # 양면 동시 캡처 + GPIO 통합 클라이언트 ⭐ 신규
+├── gpio_controller.py     # GPIO 제어 모듈 (융합 결과 기반)
 ├── config.py              # 설정 파일
+├── test_camera.py         # 카메라 테스트 스크립트
 └── start.sh               # 자동 시작 스크립트
 ```
+
+**⭐ 주요 변경사항**:
+- `camera_client.py` (단일 카메라) → `dual_camera_client.py` (양면 동시 캡처)
+- API 엔드포인트: `/predict` → `/predict_dual`
+- GPIO 제어: 단일 모델 결과 → 융합 결과 (normal, component_defect, solder_defect, discard)
 
 ### 5-2. GPIO 제어 모듈
 
@@ -322,14 +336,22 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class GPIOController:
-    """GPIO 릴레이 제어 클래스"""
+    """GPIO 릴레이 제어 클래스 (이중 모델 융합 결과 기반)"""
 
-    # GPIO 핀 매핑
+    # GPIO 핀 매핑 (Flask API 융합 결과와 매칭)
     PIN_MAP = {
+        'normal': 23,              # 정상
+        'component_defect': 17,    # 부품 불량
+        'solder_defect': 27,       # 납땜 불량
+        'discard': 22              # 폐기
+    }
+
+    # 한글 매핑 (호환성)
+    PIN_MAP_KR = {
+        '정상': 23,
         '부품불량': 17,
         '납땜불량': 27,
-        '폐기': 22,
-        '정상': 23
+        '폐기': 22
     }
 
     def __init__(self):
@@ -346,17 +368,20 @@ class GPIOController:
 
     def trigger(self, defect_type, duration_ms=500):
         """
-        불량 유형에 따라 GPIO 신호 출력
+        불량 유형에 따라 GPIO 신호 출력 (이중 모델 융합 결과 기반)
 
         Args:
-            defect_type: '정상', '부품불량', '납땜불량', '폐기'
+            defect_type: 'normal', 'component_defect', 'solder_defect', 'discard'
+                        또는 한글: '정상', '부품불량', '납땜불량', '폐기'
             duration_ms: 신호 지속 시간 (밀리초)
         """
-        if defect_type not in self.PIN_MAP:
+        # 영문 키 우선, 한글 키 호환
+        pin = self.PIN_MAP.get(defect_type) or self.PIN_MAP_KR.get(defect_type)
+
+        if pin is None:
             logger.warning(f"알 수 없는 불량 유형: {defect_type}")
             return
 
-        pin = self.PIN_MAP[defect_type]
         logger.info(f"GPIO 신호 출력: {defect_type} (핀 {pin}, {duration_ms}ms)")
 
         try:
@@ -382,9 +407,9 @@ def get_gpio_controller():
     return _gpio_controller
 ```
 
-### 5-3. 통합 카메라 클라이언트
+### 5-3. 양면 동시 캡처 통합 클라이언트 ⭐ (이중 모델 아키텍처)
 
-**camera_client.py**
+**dual_camera_client.py** (라즈베리파이 1 전용)
 
 ```python
 import cv2
@@ -398,63 +423,105 @@ from gpio_controller import get_gpio_controller
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class CameraClient:
-    """웹캠 프레임 전송 및 GPIO 제어 통합 클라이언트"""
+class DualCameraClient:
+    """양면 동시 웹캠 캡처 및 이중 모델 추론 클라이언트 (라즈베리파이 1 전용)"""
 
-    def __init__(self, camera_id, camera_index, server_url, fps=10):
-        self.camera_id = camera_id
-        self.camera_index = camera_index
+    def __init__(self, left_camera_index, right_camera_index, server_url, fps=10):
+        """
+        Args:
+            left_camera_index: 좌측 카메라 인덱스 (보통 0)
+            right_camera_index: 우측 카메라 인덱스 (보통 1)
+            server_url: Flask 서버 URL
+            fps: 프레임 전송 속도
+        """
+        self.left_camera_index = left_camera_index
+        self.right_camera_index = right_camera_index
         self.server_url = server_url
         self.fps = fps
         self.frame_interval = 1.0 / fps
 
-        # 웹캠 초기화
-        self.cap = cv2.VideoCapture(camera_index)
-        if not self.cap.isOpened():
-            raise RuntimeError(f"카메라 {camera_index} 열기 실패")
+        # 좌측 웹캠 초기화 (부품 검출용)
+        self.cap_left = cv2.VideoCapture(left_camera_index)
+        if not self.cap_left.isOpened():
+            raise RuntimeError(f"좌측 카메라 {left_camera_index} 열기 실패")
 
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        self.cap.set(cv2.CAP_PROP_FPS, fps)
+        # 우측 웹캠 초기화 (납땜 검출용)
+        self.cap_right = cv2.VideoCapture(right_camera_index)
+        if not self.cap_right.isOpened():
+            raise RuntimeError(f"우측 카메라 {right_camera_index} 열기 실패")
+
+        # 해상도 설정
+        for cap in [self.cap_left, self.cap_right]:
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            cap.set(cv2.CAP_PROP_FPS, fps)
 
         # GPIO 컨트롤러 초기화
         self.gpio = get_gpio_controller()
 
-        logger.info(f"카메라 클라이언트 초기화: {camera_id} (인덱스 {camera_index})")
+        logger.info(f"양면 카메라 클라이언트 초기화 완료")
+        logger.info(f"  - 좌측 카메라: {left_camera_index} (부품 검출)")
+        logger.info(f"  - 우측 카메라: {right_camera_index} (납땜 검출)")
+        logger.info(f"  - Flask 서버: {server_url}")
 
     def encode_frame(self, frame):
         """프레임을 JPEG → Base64 인코딩"""
         _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
         return base64.b64encode(buffer).decode('utf-8')
 
-    def send_frame(self, frame):
-        """프레임을 Flask 서버로 전송하고 GPIO 제어"""
-        try:
-            frame_base64 = self.encode_frame(frame)
+    def send_dual_frames(self, left_frame, right_frame):
+        """
+        양면 프레임을 Flask 서버로 동시 전송 (이중 모델 추론 요청)
 
+        Args:
+            left_frame: 좌측 카메라 프레임 (부품면)
+            right_frame: 우측 카메라 프레임 (납땜면)
+
+        Returns:
+            dict: Flask 서버 응답 (fusion_result, component_result, solder_result)
+        """
+        try:
+            # 양면 프레임 인코딩
+            left_base64 = self.encode_frame(left_frame)
+            right_base64 = self.encode_frame(right_frame)
+
+            # API 요청 데이터 (양면 동시 전송)
             data = {
-                'camera_id': self.camera_id,
-                'frame': frame_base64,
-                'timestamp': datetime.now().isoformat()
+                'left_frame': {
+                    'image': left_base64,
+                    'camera_id': 'left',
+                    'timestamp': datetime.now().isoformat()
+                },
+                'right_frame': {
+                    'image': right_base64,
+                    'camera_id': 'right',
+                    'timestamp': datetime.now().isoformat()
+                }
             }
 
+            # Flask 서버로 이중 모델 추론 요청
             response = requests.post(
-                f"{self.server_url}/predict",
+                f"{self.server_url}/predict_dual",
                 json=data,
                 timeout=5
             )
 
             if response.status_code == 200:
                 result = response.json()
-                defect_type = result.get('defect_type', '정상')
-                confidence = result.get('confidence', 0.0)
 
-                logger.info(f"[{self.camera_id}] 결과: {defect_type} (신뢰도: {confidence:.2f})")
+                # 융합 결과 출력
+                fusion_result = result.get('fusion_result', {})
+                decision = fusion_result.get('decision', 'normal')
+                component_count = len(result.get('component_result', {}).get('defects', []))
+                solder_count = len(result.get('solder_result', {}).get('defects', []))
 
-                # GPIO 신호 출력
-                gpio_signal = result.get('gpio_signal', {})
-                duration_ms = gpio_signal.get('duration_ms', 500)
-                self.gpio.trigger(defect_type, duration_ms)
+                logger.info(
+                    f"[이중 모델 결과] 판정: {decision} "
+                    f"(부품불량: {component_count}개, 납땜불량: {solder_count}개)"
+                )
+
+                # GPIO 신호 출력 (융합 결과 기반)
+                self.gpio.trigger(decision, duration_ms=500)
 
                 return result
             else:
@@ -465,21 +532,24 @@ class CameraClient:
             logger.error("요청 타임아웃")
             return None
         except Exception as e:
-            logger.error(f"프레임 전송 오류: {str(e)}")
+            logger.error(f"양면 프레임 전송 오류: {str(e)}")
             return None
 
     def run(self):
-        """메인 루프"""
-        logger.info(f"카메라 클라이언트 시작: {self.camera_id}")
+        """메인 루프 (양면 동시 캡처 및 전송)"""
+        logger.info("양면 카메라 클라이언트 시작")
 
         frame_count = 0
         last_send_time = time.time()
 
         try:
             while True:
-                ret, frame = self.cap.read()
-                if not ret:
-                    logger.warning("프레임 읽기 실패")
+                # 양면 프레임 동시 캡처
+                ret_left, left_frame = self.cap_left.read()
+                ret_right, right_frame = self.cap_right.read()
+
+                if not ret_left or not ret_right:
+                    logger.warning("프레임 읽기 실패 (좌측 또는 우측)")
                     continue
 
                 frame_count += 1
@@ -487,7 +557,7 @@ class CameraClient:
 
                 # FPS 제어
                 if current_time - last_send_time >= self.frame_interval:
-                    self.send_frame(frame)
+                    self.send_dual_frames(left_frame, right_frame)
                     last_send_time = current_time
 
                 # 프레임 정보 출력 (100프레임마다)
@@ -498,44 +568,57 @@ class CameraClient:
             logger.info("사용자에 의해 중단됨")
 
         finally:
-            self.cap.release()
+            self.cap_left.release()
+            self.cap_right.release()
             self.gpio.cleanup()
-            logger.info("카메라 클라이언트 종료")
+            logger.info("양면 카메라 클라이언트 종료")
 
 if __name__ == '__main__':
     import sys
     import os
 
-    # 설정
-    CAMERA_ID = sys.argv[1] if len(sys.argv) > 1 else 'left'
-    CAMERA_INDEX = int(sys.argv[2]) if len(sys.argv) > 2 else 0
-    # 환경 변수 우선, 인자 전달 다음, 기본값으로 Tailscale IP 사용
+    # 설정 (라즈베리파이 1 전용)
+    LEFT_CAMERA_INDEX = int(sys.argv[1]) if len(sys.argv) > 1 else 0   # 좌측 카메라 (부품)
+    RIGHT_CAMERA_INDEX = int(sys.argv[2]) if len(sys.argv) > 2 else 1  # 우측 카메라 (납땜)
     SERVER_URL = sys.argv[3] if len(sys.argv) > 3 else os.getenv('FLASK_SERVER_URL', 'http://100.64.1.1:5000')
     FPS = int(sys.argv[4]) if len(sys.argv) > 4 else 10
 
-    # 클라이언트 실행
-    client = CameraClient(CAMERA_ID, CAMERA_INDEX, SERVER_URL, FPS)
+    # 양면 동시 캡처 클라이언트 실행
+    client = DualCameraClient(LEFT_CAMERA_INDEX, RIGHT_CAMERA_INDEX, SERVER_URL, FPS)
     client.run()
 ```
 
 ---
 
-## Phase 6: 자동 시작 설정
+## Phase 6: 자동 시작 설정 ⭐ (이중 모델 아키텍처)
 
-### 6-1. systemd 서비스 생성 (2가지 버전)
+### 6-1. 시스템 구성 방식 선택
 
-#### 버전 1: 라즈베리파이 1 (좌측 카메라 + GPIO 제어) - Tailscale: 100.64.1.2
+**⭐ 권장 방식: 양면 카메라 모두 라즈베리파이 1에 연결**
+- 라즈베리파이 1: 좌/우 웹캠 2대 + GPIO 제어
+- 라즈베리파이 2: 사용하지 않거나 OHT 전용으로 재활용
+- 장점: 양면 프레임이 완벽히 동기화됨, 네트워크 지연 없음
 
-**camera-client-left.service**
+**대안 방식: 라즈베리파이 2대 분산**
+- 라즈베리파이 1: 좌측 카메라 + GPIO 제어
+- 라즈베리파이 2: 우측 카메라 전용
+- Flask 서버가 좌/우 프레임을 시간순으로 매칭
+- 단점: 프레임 동기화 어려움, 네트워크 지연 발생 가능
+
+**본 가이드는 권장 방식(양면 카메라 모두 RPi 1 연결)을 기준으로 작성되었습니다.**
+
+### 6-2. systemd 서비스 생성 (라즈베리파이 1 - 양면 동시 캡처)
+
+**dual-camera-client.service** (권장)
 
 ```bash
-sudo nano /etc/systemd/system/camera-client-left.service
+sudo nano /etc/systemd/system/dual-camera-client.service
 ```
 
 내용:
 ```ini
 [Unit]
-Description=PCB Inspection Camera Client - Left (with GPIO)
+Description=PCB Dual Camera Client - Component + Solder Detection
 After=network.target
 
 [Service]
@@ -543,87 +626,66 @@ Type=simple
 User=pi
 WorkingDirectory=/home/pi/pcb_inspection_client
 Environment="FLASK_SERVER_URL=http://100.64.1.1:5000"
-ExecStart=/usr/bin/python3 /home/pi/pcb_inspection_client/camera_client.py left 0 $FLASK_SERVER_URL 10
+ExecStart=/usr/bin/python3 /home/pi/pcb_inspection_client/dual_camera_client.py 0 1 $FLASK_SERVER_URL 10
 Restart=always
 RestartSec=10
-Environment="ENABLE_GPIO=1"
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-**참고**: 이 버전은 GPIO 제어 기능이 포함되어 있으며, Flask 서버로부터 GPIO 제어 신호를 수신합니다.
+**파라미터 설명**:
+- `0`: 좌측 카메라 인덱스 (부품 검출용, /dev/video0)
+- `1`: 우측 카메라 인덱스 (납땜 검출용, /dev/video1)
+- `$FLASK_SERVER_URL`: Flask 서버 URL (Tailscale VPN: 100.64.1.1:5000)
+- `10`: FPS (초당 10프레임 전송)
 
----
-
-#### 버전 2: 라즈베리파이 2 (우측 카메라 전용) - Tailscale: 100.64.1.3
-
-**camera-client-right.service**
-
-```bash
-sudo nano /etc/systemd/system/camera-client-right.service
-```
-
-내용:
-```ini
-[Unit]
-Description=PCB Inspection Camera Client - Right (Camera Only)
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/pcb_inspection_client
-Environment="FLASK_SERVER_URL=http://100.64.1.1:5000"
-ExecStart=/usr/bin/python3 /home/pi/pcb_inspection_client/camera_client.py right 0 $FLASK_SERVER_URL 10
-Restart=always
-RestartSec=10
-Environment="ENABLE_GPIO=0"
-
-[Install]
-WantedBy=multi-user.target
-```
-
-**참고**: 이 버전은 카메라 전용이며, GPIO 제어 기능이 비활성화되어 있습니다.
-
-### 6-2. 서비스 활성화
-
-#### 라즈베리파이 1 (좌측 + GPIO)
+### 6-3. 서비스 활성화 (라즈베리파이 1 - 양면 동시 캡처)
 
 ```bash
 # 서비스 리로드
 sudo systemctl daemon-reload
 
 # 서비스 활성화 (부팅 시 자동 시작)
-sudo systemctl enable camera-client-left.service
+sudo systemctl enable dual-camera-client.service
 
 # 서비스 시작
-sudo systemctl start camera-client-left.service
+sudo systemctl start dual-camera-client.service
 
 # 서비스 상태 확인
-sudo systemctl status camera-client-left.service
+sudo systemctl status dual-camera-client.service
 
-# 로그 확인
-sudo journalctl -u camera-client-left.service -f
+# 로그 확인 (실시간)
+sudo journalctl -u dual-camera-client.service -f
+
+# 로그 확인 (최근 100줄)
+sudo journalctl -u dual-camera-client.service -n 100
 ```
 
-#### 라즈베리파이 2 (우측 전용)
+**예상 로그 출력**:
+```
+양면 카메라 클라이언트 초기화 완료
+  - 좌측 카메라: 0 (부품 검출)
+  - 우측 카메라: 1 (납땜 검출)
+  - Flask 서버: http://100.64.1.1:5000
+양면 카메라 클라이언트 시작
+[이중 모델 결과] 판정: component_defect (부품불량: 2개, 납땜불량: 0개)
+GPIO 신호 출력: component_defect (핀 17, 500ms)
+전송 프레임 수: 100
+```
+
+### 6-4. 수동 실행 (테스트용)
 
 ```bash
-# 서비스 리로드
-sudo systemctl daemon-reload
+# 양면 동시 캡처 클라이언트 수동 실행
+cd ~/pcb_inspection_client
+python3 dual_camera_client.py 0 1 http://100.64.1.1:5000 10
 
-# 서비스 활성화 (부팅 시 자동 시작)
-sudo systemctl enable camera-client-right.service
-
-# 서비스 시작
-sudo systemctl start camera-client-right.service
-
-# 서비스 상태 확인
-sudo systemctl status camera-client-right.service
-
-# 로그 확인
-sudo journalctl -u camera-client-right.service -f
+# 파라미터:
+# - 0: 좌측 카메라 (/dev/video0)
+# - 1: 우측 카메라 (/dev/video1)
+# - http://100.64.1.1:5000: Flask 서버 URL
+# - 10: FPS
 ```
 
 ---
@@ -759,7 +821,7 @@ tailscale ip -4
 #          100.64.1.3 (라즈베리파이 2)
 ```
 
-### camera_client.py 설정 수정
+### dual_camera_client.py 설정 수정 (이중 모델 아키텍처)
 
 ```python
 # Tailscale IP로 서버 URL 설정
@@ -768,6 +830,10 @@ SERVER_URL = 'http://100.64.1.1:5000'  # GPU PC의 Tailscale IP
 # 또는 환경 변수로 관리
 import os
 SERVER_URL = os.getenv('FLASK_SERVER_URL', 'http://100.64.1.1:5000')
+
+# 양면 동시 캡처 클라이언트 실행
+client = DualCameraClient(0, 1, SERVER_URL, 10)
+client.run()
 ```
 
 ### 환경 변수 설정 (권장)
@@ -778,15 +844,19 @@ echo 'export FLASK_SERVER_URL="http://100.64.1.1:5000"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### 클라이언트 실행 및 테스트
+### 클라이언트 실행 및 테스트 (이중 모델 아키텍처)
 
 ```bash
 cd ~/pcb_project/raspberry_pi
-python3 camera_client.py left 0 http://100.64.1.1:5000 10
+python3 dual_camera_client.py 0 1 http://100.64.1.1:5000 10
 
-# 출력에서 네트워크 지연 확인:
-# [left] Result: 정상 (confidence: 0.95, inference: 18.5ms)
-# Total latency: 125ms  ← 전체 처리 시간 (목표 300ms 이내)
+# 출력에서 네트워크 지연 및 융합 결과 확인:
+# 양면 카메라 클라이언트 초기화 완료
+#   - 좌측 카메라: 0 (부품 검출)
+#   - 우측 카메라: 1 (납땜 검출)
+# [이중 모델 결과] 판정: solder_defect (부품불량: 0개, 납땜불량: 3개)
+# GPIO 신호 출력: solder_defect (핀 27, 500ms)
+# Total latency: 125ms  ← 전체 처리 시간 (목표 300ms 이내) ✅
 ```
 
 ### 네트워크 연결 테스트
@@ -803,15 +873,15 @@ curl http://100.64.1.1:5000/health
 # {"status":"ok","timestamp":"2025-10-23T10:30:00"}
 ```
 
-### systemd 서비스 파일 수정 (Tailscale IP 사용)
+### systemd 서비스 파일 수정 (Tailscale IP 사용 - 이중 모델)
 
 ```bash
-sudo nano /etc/systemd/system/camera-client-left.service
+sudo nano /etc/systemd/system/dual-camera-client.service
 ```
 
 ```ini
 [Unit]
-Description=PCB Camera Client (Left) - Tailscale
+Description=PCB Dual Camera Client - Component + Solder (Tailscale)
 After=network.target tailscaled.service
 Wants=tailscaled.service
 
@@ -820,7 +890,7 @@ Type=simple
 User=pi
 WorkingDirectory=/home/pi/pcb_project/raspberry_pi
 Environment="FLASK_SERVER_URL=http://100.64.1.1:5000"
-ExecStart=/usr/bin/python3 camera_client.py left 0 http://100.64.1.1:5000 10
+ExecStart=/usr/bin/python3 dual_camera_client.py 0 1 http://100.64.1.1:5000 10
 Restart=always
 RestartSec=10
 
@@ -828,10 +898,16 @@ RestartSec=10
 WantedBy=multi-user.target
 ```
 
+**파라미터 설명**:
+- `0`: 좌측 카메라 (부품 검출, /dev/video0)
+- `1`: 우측 카메라 (납땜 검출, /dev/video1)
+- `http://100.64.1.1:5000`: Flask 서버 Tailscale IP
+- `10`: FPS
+
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl restart camera-client-left.service
-sudo systemctl status camera-client-left.service
+sudo systemctl restart dual-camera-client.service
+sudo systemctl status dual-camera-client.service
 ```
 
 ### 성능 확인
@@ -1331,8 +1407,14 @@ OHT 시스템의 상세한 하드웨어 사양, 제어 로직, API 설계는 다
 ---
 
 **작성일**: 2025-10-28
-**최종 수정일**: 2025-10-23
-**버전**: 1.1
+**최종 수정일**: 2025-10-31
+**버전**: 2.0 ⭐ (이중 모델 아키텍처)
 **하드웨어**: Raspberry Pi 4 Model B
 **OS**: Raspberry Pi OS 64-bit (Bullseye/Bookworm)
-**주요 변경사항**: Tailscale VPN 원격 연결 섹션 추가
+**주요 변경사항**:
+- **2.0 (2025-10-31)**: 이중 YOLO 모델 아키텍처 적용
+  - 양면 동시 캡처 클라이언트 (`dual_camera_client.py`)
+  - API 엔드포인트 변경: `/predict` → `/predict_dual`
+  - GPIO 제어: 융합 결과 기반 (normal, component_defect, solder_defect, discard)
+  - Component Model (FPIC-Component, 25 클래스) + Solder Model (SolDef_AI, 5-6 클래스)
+- **1.1 (2025-10-23)**: Tailscale VPN 원격 연결 섹션 추가
