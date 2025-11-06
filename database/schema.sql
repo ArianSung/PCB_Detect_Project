@@ -14,6 +14,22 @@ COLLATE utf8mb4_unicode_ci;
 USE pcb_inspection;
 
 -- ========================================
+-- 기존 테이블 삭제 (외래 키 제약 조건 순서 고려)
+-- ========================================
+
+DROP TABLE IF EXISTS user_logs;
+DROP TABLE IF EXISTS oht_operations;
+DROP TABLE IF EXISTS defect_images;
+DROP TABLE IF EXISTS alerts;
+DROP TABLE IF EXISTS statistics_hourly;
+DROP TABLE IF EXISTS statistics_daily;
+DROP TABLE IF EXISTS system_logs;
+DROP TABLE IF EXISTS system_config;
+DROP TABLE IF EXISTS box_status;
+DROP TABLE IF EXISTS inspections;
+DROP TABLE IF EXISTS users;
+
+-- ========================================
 -- 1. inspections (검사 결과 이력)
 -- ========================================
 
