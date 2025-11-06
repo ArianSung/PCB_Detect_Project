@@ -490,13 +490,11 @@ DELIMITER ;
 -- 인덱스 최적화 (복합 인덱스)
 -- ========================================
 
--- 날짜 범위 조회용
-DROP INDEX IF EXISTS idx_inspection_time_defect_type ON inspections;
+-- 날짜 범위 조회용 (테이블 생성 시 이미 삭제됨)
 CREATE INDEX idx_inspection_time_defect_type
 ON inspections (inspection_time, defect_type);
 
--- 카메라별 검색용
-DROP INDEX IF EXISTS idx_camera_defect_type ON inspections;
+-- 카메라별 검색용 (테이블 생성 시 이미 삭제됨)
 CREATE INDEX idx_camera_defect_type
 ON inspections (camera_id, defect_type, inspection_time);
 
