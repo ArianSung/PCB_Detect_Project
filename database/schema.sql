@@ -475,11 +475,13 @@ DELIMITER ;
 -- ========================================
 
 -- 날짜 범위 조회용
-CREATE INDEX IF NOT EXISTS idx_inspection_time_defect_type
+DROP INDEX IF EXISTS idx_inspection_time_defect_type ON inspections;
+CREATE INDEX idx_inspection_time_defect_type
 ON inspections (inspection_time, defect_type);
 
 -- 카메라별 검색용
-CREATE INDEX IF NOT EXISTS idx_camera_defect_type
+DROP INDEX IF EXISTS idx_camera_defect_type ON inspections;
+CREATE INDEX idx_camera_defect_type
 ON inspections (camera_id, defect_type, inspection_time);
 
 -- ========================================
