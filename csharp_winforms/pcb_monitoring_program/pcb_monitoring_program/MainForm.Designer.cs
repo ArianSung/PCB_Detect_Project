@@ -42,7 +42,7 @@
             // 
             // btnDashboard
             // 
-            btnDashboard.Font = new Font("맑은 고딕", 15.75F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            btnDashboard.Font = new Font("Arial", 15.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
             btnDashboard.Location = new Point(60, 193);
             btnDashboard.Name = "btnDashboard";
             btnDashboard.Size = new Size(140, 100);
@@ -53,7 +53,7 @@
             // 
             // btnStatistics
             // 
-            btnStatistics.Font = new Font("맑은 고딕", 15.75F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            btnStatistics.Font = new Font("Arial", 15.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
             btnStatistics.Location = new Point(60, 324);
             btnStatistics.Name = "btnStatistics";
             btnStatistics.Size = new Size(140, 100);
@@ -64,7 +64,7 @@
             // 
             // btnMonitoring
             // 
-            btnMonitoring.Font = new Font("맑은 고딕", 15.75F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            btnMonitoring.Font = new Font("Arial", 15.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
             btnMonitoring.Location = new Point(60, 455);
             btnMonitoring.Name = "btnMonitoring";
             btnMonitoring.Size = new Size(140, 100);
@@ -75,7 +75,7 @@
             // 
             // btnUserManagement
             // 
-            btnUserManagement.Font = new Font("맑은 고딕", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            btnUserManagement.Font = new Font("Arial", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
             btnUserManagement.Location = new Point(60, 586);
             btnUserManagement.Name = "btnUserManagement";
             btnUserManagement.Size = new Size(140, 100);
@@ -86,7 +86,7 @@
             // 
             // btnSetting
             // 
-            btnSetting.Font = new Font("맑은 고딕", 15.75F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            btnSetting.Font = new Font("Arial", 15.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
             btnSetting.Location = new Point(60, 717);
             btnSetting.Name = "btnSetting";
             btnSetting.Size = new Size(140, 100);
@@ -105,21 +105,21 @@
             // labelTitle
             // 
             labelTitle.AutoSize = true;
-            labelTitle.Font = new Font("맑은 고딕", 36F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            labelTitle.Font = new Font("Arial", 36F, FontStyle.Bold, GraphicsUnit.Point, 0);
             labelTitle.ForeColor = SystemColors.Window;
-            labelTitle.Location = new Point(958, 28);
+            labelTitle.Location = new Point(910, 28);
             labelTitle.Name = "labelTitle";
-            labelTitle.Size = new Size(236, 65);
+            labelTitle.Size = new Size(248, 56);
             labelTitle.TabIndex = 6;
             labelTitle.Text = "Loading...";
             // 
             // labelTime
             // 
             labelTime.AutoSize = true;
-            labelTime.Font = new Font("맑은 고딕", 24F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            labelTime.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
             labelTime.Location = new Point(1445, 67);
             labelTime.Name = "labelTime";
-            labelTime.Size = new Size(238, 45);
+            labelTime.Size = new Size(231, 36);
             labelTime.TabIndex = 7;
             labelTime.Text = "Time Loading...";
             // 
@@ -134,7 +134,7 @@
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(64, 64, 64);
-            ClientSize = new Size(1904, 1041);
+            ClientSize = new Size(1904, 1051);
             Controls.Add(labelTime);
             Controls.Add(labelTitle);
             Controls.Add(panelContent);

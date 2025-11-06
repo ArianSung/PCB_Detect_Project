@@ -43,6 +43,7 @@
             cardRate = new Panel();
             cardTarget = new Panel();
             cardCategory = new Panel();
+            flowLegend = new FlowLayoutPanel();
             ((System.ComponentModel.ISupportInitialize)DefectRateChart).BeginInit();
             ((System.ComponentModel.ISupportInitialize)DefectCategoryChart).BeginInit();
             ((System.ComponentModel.ISupportInitialize)chart3).BeginInit();
@@ -53,6 +54,7 @@
             // 
             // DefectRateChart
             // 
+            DefectRateChart.BackColor = Color.Transparent;
             chartArea1.Name = "ChartArea1";
             DefectRateChart.ChartAreas.Add(chartArea1);
             legend1.Name = "Legend1";
@@ -104,6 +106,7 @@
             // 
             // cardRate
             // 
+            cardRate.Controls.Add(flowLegend);
             cardRate.Controls.Add(DefectRateChart);
             cardRate.Location = new Point(24, 29);
             cardRate.Name = "cardRate";
@@ -125,6 +128,13 @@
             cardCategory.Name = "cardCategory";
             cardCategory.Size = new Size(360, 240);
             cardCategory.TabIndex = 0;
+            // 
+            // flowLegend
+            // 
+            flowLegend.Location = new Point(249, 13);
+            flowLegend.Name = "flowLegend";
+            flowLegend.Size = new Size(108, 215);
+            flowLegend.TabIndex = 4;
             // 
             // DashboardView
             // 
@@ -154,5 +164,6 @@
         private Panel cardRate;
         private Panel cardTarget;
         private Panel cardCategory;
+        private FlowLayoutPanel flowLegend;
     }
 }
