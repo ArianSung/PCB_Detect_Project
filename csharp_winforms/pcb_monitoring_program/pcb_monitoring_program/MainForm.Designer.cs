@@ -38,6 +38,11 @@
             labelTitle = new Label();
             labelTime = new Label();
             timerClock = new System.Windows.Forms.Timer(components);
+            labelusername = new Label();
+            labeluserauthority = new Label();
+            pictureBox2 = new PictureBox();
+            btnLogout = new Button();
+            ((System.ComponentModel.ISupportInitialize)pictureBox2).BeginInit();
             SuspendLayout();
             // 
             // btnDashboard
@@ -97,31 +102,35 @@
             // 
             // panelContent
             // 
+            panelContent.ForeColor = Color.White;
             panelContent.Location = new Point(263, 129);
             panelContent.Name = "panelContent";
             panelContent.Size = new Size(1600, 900);
             panelContent.TabIndex = 5;
+            panelContent.Paint += panelContent_Paint;
             // 
             // labelTitle
             // 
-            labelTitle.AutoSize = true;
             labelTitle.Font = new Font("Arial", 36F, FontStyle.Bold, GraphicsUnit.Point, 0);
             labelTitle.ForeColor = SystemColors.Window;
-            labelTitle.Location = new Point(910, 28);
+            labelTitle.ImageAlign = ContentAlignment.TopLeft;
+            labelTitle.Location = new Point(273, 28);
             labelTitle.Name = "labelTitle";
-            labelTitle.Size = new Size(248, 56);
+            labelTitle.Size = new Size(1590, 56);
             labelTitle.TabIndex = 6;
             labelTitle.Text = "Loading...";
+            labelTitle.TextAlign = ContentAlignment.MiddleCenter;
             // 
             // labelTime
             // 
             labelTime.AutoSize = true;
             labelTime.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            labelTime.Location = new Point(1445, 67);
+            labelTime.Location = new Point(1670, 4);
             labelTime.Name = "labelTime";
             labelTime.Size = new Size(231, 36);
             labelTime.TabIndex = 7;
             labelTime.Text = "Time Loading...";
+            labelTime.TextAlign = ContentAlignment.TopRight;
             // 
             // timerClock
             // 
@@ -129,25 +138,79 @@
             timerClock.Interval = 1000;
             timerClock.Tick += timerClock_Tick;
             // 
+            // labelusername
+            // 
+            labelusername.AutoSize = true;
+            labelusername.BackColor = Color.FromArgb(64, 64, 64);
+            labelusername.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            labelusername.ForeColor = Color.White;
+            labelusername.Location = new Point(95, 22);
+            labelusername.Name = "labelusername";
+            labelusername.Size = new Size(71, 25);
+            labelusername.TabIndex = 9;
+            labelusername.Text = "이   름";
+            // 
+            // labeluserauthority
+            // 
+            labeluserauthority.AutoSize = true;
+            labeluserauthority.BackColor = Color.FromArgb(64, 64, 64);
+            labeluserauthority.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            labeluserauthority.Location = new Point(95, 47);
+            labeluserauthority.Name = "labeluserauthority";
+            labeluserauthority.Size = new Size(97, 25);
+            labeluserauthority.TabIndex = 10;
+            labeluserauthority.Text = "[ 관리자 ]";
+            labeluserauthority.Click += labeluserauthority_Click;
+            // 
+            // pictureBox2
+            // 
+            pictureBox2.BackColor = Color.FromArgb(64, 64, 64);
+            pictureBox2.ErrorImage = null;
+            pictureBox2.Image = Properties.Resources.Main_user_user_white;
+            pictureBox2.InitialImage = null;
+            pictureBox2.Location = new Point(22, 19);
+            pictureBox2.Name = "pictureBox2";
+            pictureBox2.Size = new Size(67, 80);
+            pictureBox2.SizeMode = PictureBoxSizeMode.Zoom;
+            pictureBox2.TabIndex = 11;
+            pictureBox2.TabStop = false;
+            // 
+            // btnLogout
+            // 
+            btnLogout.Font = new Font("Arial", 15.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            btnLogout.Location = new Point(18, 13);
+            btnLogout.Name = "btnLogout";
+            btnLogout.Size = new Size(245, 90);
+            btnLogout.TabIndex = 12;
+            btnLogout.Text = " Log out ";
+            btnLogout.TextAlign = ContentAlignment.BottomRight;
+            btnLogout.UseVisualStyleBackColor = true;
+            btnLogout.Click += btnLogout_Click;
+            // 
             // MainForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(64, 64, 64);
             ClientSize = new Size(1904, 1051);
+            Controls.Add(pictureBox2);
+            Controls.Add(labeluserauthority);
+            Controls.Add(labelusername);
             Controls.Add(labelTime);
-            Controls.Add(labelTitle);
             Controls.Add(panelContent);
             Controls.Add(btnSetting);
             Controls.Add(btnUserManagement);
             Controls.Add(btnMonitoring);
             Controls.Add(btnStatistics);
             Controls.Add(btnDashboard);
+            Controls.Add(btnLogout);
+            Controls.Add(labelTitle);
             ForeColor = SystemColors.Window;
             Name = "MainForm";
             Text = "PCB_Detect_Monitoring";
             WindowState = FormWindowState.Maximized;
             Load += MainForm_Load;
+            ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();
             ResumeLayout(false);
             PerformLayout();
         }
@@ -163,5 +226,9 @@
         private Label labelTitle;
         private Label labelTime;
         private System.Windows.Forms.Timer timerClock;
+        private Label labelusername;
+        private Label labeluserauthority;
+        private PictureBox pictureBox2;
+        private Button btnLogout;
     }
 }
