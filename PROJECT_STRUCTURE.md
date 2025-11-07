@@ -52,5 +52,5 @@ work_project/
 ├── notebooks/
 ├── logs/
 ├── yolo11n.pt
-└── yolov8l.pt
+└── yolo11l.pt
 ```

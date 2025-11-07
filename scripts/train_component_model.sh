@@ -4,7 +4,7 @@
 #
 # 목적: PCB 부품 검출 모델 학습 (25개 클래스)
 # 데이터: data/processed/fpic_component_yolo/ (6,260 이미지)
-# 모델: YOLOv8 Large
+# 모델: YOLOv11l Large
 # 예상 시간: 10-15시간 (RTX 4080 Super)
 ################################################################################
 
@@ -35,7 +35,7 @@ echo ""
 # 학습 시작
 echo "학습 파라미터:"
 echo "  - Data: $DATA_YAML"
-echo "  - Model: yolov8l.pt"
+echo "  - Model: yolo11l.pt"
 echo "  - Epochs: 200"
 echo "  - Batch: 16 (Gradient Accumulation: 자동)"
 echo "  - Image Size: 640"
@@ -45,10 +45,10 @@ echo "  - Learning Rate: 0.001"
 echo "  - Patience: 50 (Early Stopping)"
 echo ""
 
-# YOLOv8 학습 실행
+# YOLOv11l 학습 실행
 /home/sys1041/miniconda3/envs/pcb_defect/bin/yolo detect train \
     data="$DATA_YAML" \
-    model=yolov8l.pt \
+    model=yolo11l.pt \
     epochs=200 \
     batch=16 \
     imgsz=640 \

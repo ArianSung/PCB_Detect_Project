@@ -17,13 +17,13 @@ mkdir -p logs
 
 echo "=== 최종 최적화 학습 시작 ==="
 echo "데이터셋: 9,291개 이미지, 136,746개 객체, 29개 클래스"
-echo "모델: YOLOv8 Large (43.6M parameters)"
+echo "모델: YOLOv11l Large (25.3M parameters)"
 echo "목표: mAP50 95%+"
 echo ""
 
 /home/sys1041/miniconda3/envs/pcb_defect/bin/yolo detect train \
   data=/home/sys1041/work_project/data/processed/complete_pcb_model/data.yaml \
-  model=yolov8l.pt \
+  model=yolo11l.pt \
   epochs=300 \
   batch=16 \
   imgsz=640 \
