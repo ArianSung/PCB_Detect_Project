@@ -4,13 +4,13 @@
 #
 # 목적: 납땜 불량 검출 모델 최대 성능 학습 (5개 클래스)
 # 데이터: data/processed/soldef_ai_yolo/ (428 이미지)
-# 모델: YOLOv8 Extra-Large (68M params)
+# 모델: YOLOv11l Extra-Large (56.9M params)
 # 예상 시간: 6-8시간 (RTX 4080 Super)
 # 예상 성능: mAP@0.5 = 0.90-0.93 (기존 0.8375 대비 +6-9%)
 ################################################################################
 #
 # 최적화 기법:
-# 1. YOLOv8x 모델 (68M params, 기존 43M)
+# 1. YOLOv11lx 모델 (56.9M params, 기존 25.3M)
 # 2. 이미지 해상도 960 (기존 640)
 # 3. 데이터 증강 강화 (mixup, copy_paste, hsv, flipud)
 # 4. Cosine Annealing 학습률 스케줄링
@@ -52,7 +52,7 @@ echo "  - Images: 428 (train: 299, val: 86)"
 echo "  - Classes: 5"
 echo ""
 echo "모델 설정:"
-echo "  - Model: yolov8l.pt (43M params) ⬆️"
+echo "  - Model: yolo11l.pt (25.3M params) ⬆️"
 echo "  - Image Size: 800 ⬆️"
 echo "  - Batch: 16 (Effective: 64 via Gradient Accumulation)"
 echo "  - Epochs: 200"
@@ -86,10 +86,10 @@ echo "예상 시간: 8-10시간"
 echo "========================================="
 echo ""
 
-# YOLOv8 최적화 학습 실행
+# YOLOv11l 최적화 학습 실행
 /home/sys1041/miniconda3/envs/pcb_defect/bin/yolo detect train \
     data="$DATA_YAML" \
-    model=yolov8l.pt \
+    model=yolo11l.pt \
     epochs=200 \
     batch=16 \
     imgsz=800 \
@@ -148,6 +148,6 @@ echo "  - Metrics: runs/detect/solder_model_optimized/results.csv"
 echo "  - Plots: runs/detect/solder_model_optimized/*.png"
 echo ""
 echo "성능 비교:"
-echo "  - 기존 모델 (YOLOv8l, imgsz=640): mAP@0.5 = 0.8375"
-echo "  - 최적화 모델 (YOLOv8x, imgsz=960): mAP@0.5 = ?"
+echo "  - 기존 모델 (YOLOv11ll, imgsz=640): mAP@0.5 = 0.8375"
+echo "  - 최적화 모델 (YOLOv11lx, imgsz=960): mAP@0.5 = ?"
 echo ""

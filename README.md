@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![YOLOv8](https://img.shields.io/badge/YOLO-v8-00FFFF.svg)](https://github.com/ultralytics/ultralytics)
+[![YOLOv11l](https://img.shields.io/badge/YOLO-v11l-00FFFF.svg)](https://github.com/ultralytics/ultralytics)
 [![Flask](https://img.shields.io/badge/Flask-2.0+-000000.svg)](https://flask.palletsprojects.com/)
 
 > 컨베이어 벨트를 통해 들어오는 PCB의 양면을 실시간으로 검사하여 불량을 자동 검출하고 분류하는 하이브리드 딥러닝 시스템
@@ -22,7 +22,7 @@
 
 ## 🎯 프로젝트 개요
 
-본 프로젝트는 **YOLO v8 객체 탐지**와 **이상 탐지(Anomaly Detection)** 기술을 결합한 하이브리드 딥러닝 시스템으로, PCB(인쇄회로기판) 제조 공정에서 발생하는 다양한 불량을 실시간으로 검출하고 자동 분류합니다.
+본 프로젝트는 **YOLO v11l 객체 탐지**와 **이상 탐지(Anomaly Detection)** 기술을 결합한 하이브리드 딥러닝 시스템으로, PCB(인쇄회로기판) 제조 공정에서 발생하는 다양한 불량을 실시간으로 검출하고 자동 분류합니다.
 
 ### 불량 검출 대상
 
@@ -33,7 +33,7 @@
 ## ✨ 주요 기능
 
 - ✅ **양면 동시 검사**: 2대의 웹캠으로 PCB 좌우면 동시 촬영
-- 🤖 **AI 하이브리드 모델**: YOLO v8 + 이상 탐지 결과 융합
+- 🤖 **AI 하이브리드 모델**: YOLO v11l + 이상 탐지 결과 융합
 - ⚡ **실시간 처리**: 100-200ms 추론 속도 (원격 연결)
 - 🌐 **원격 GPU 추론**: Tailscale VPN을 통한 원격 서버 연결
 - 🎛️ **자동 분류**: GPIO 제어를 통한 불량 유형별 자동 분류
@@ -58,7 +58,7 @@
     │   GPU PC (원격지 - 같은 도시)    │
     │  ┌───────────────────────────┐  │
     │  │   Flask 추론 서버         │  │
-    │  │   • YOLO v8 추론          │  │
+    │  │   • YOLO v11l 추론          │  │
     │  │   • 이상 탐지             │  │
     │  │   • 결과 융합 및 분류     │  │
     │  └───────────────────────────┘  │
@@ -84,7 +84,7 @@
 
 ### AI & Deep Learning
 - **PyTorch** - 딥러닝 프레임워크
-- **YOLO v8** (Ultralytics) - 객체 탐지
+- **YOLO v11l** (Ultralytics) - 객체 탐지
 - **Anomalib** - 이상 탐지 (PaDiM)
 - **OpenCV** - 컴퓨터 비전
 
@@ -205,7 +205,7 @@ PCB_Detect_Project/
 
 ### 하드웨어 사양
 - **GPU**: NVIDIA RTX 4080 Super (16GB VRAM)
-- **AI 모델**: YOLOv8l (Large) + PaDiM
+- **AI 모델**: YOLOv11l (Large) + PaDiM
 
 ### 추론 성능
 - **추론 시간**: 100-200ms (원격 VPN 포함)
