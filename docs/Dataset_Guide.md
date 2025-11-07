@@ -29,7 +29,7 @@ PCB 전자 부품 검출을 위한 전문 데이터셋. 25종의 전자 부품�
 - **클래스 수**: 25개
 - **라벨 객체 수**: 29,639개
 - **평균 객체/이미지**: ~4.7개
-- **형식**: YOLO v8 어노테이션 (바로 사용 가능)
+- **형식**: YOLO v11m 어노테이션 (바로 사용 가능)
 
 **25개 부품 클래스**:
 ```
@@ -118,7 +118,7 @@ fpic_component/
 **데이터셋 통계**:
 - **이미지 수**: 1,150장 (원본), 429장 (Roboflow 버전)
 - **클래스 수**: 5-6개
-- **형식**: YOLO v8 어노테이션 (바로 사용 가능)
+- **형식**: YOLO v11m 어노테이션 (바로 사용 가능)
 - **표준**: ECSS-Q-ST-70-38C (유럽우주국 납땜 표준)
 
 **5-6개 납땜 불량 클래스**:
@@ -151,7 +151,7 @@ rf = Roboflow(api_key="YOUR_ROBOFLOW_API_KEY")
 
 # SolDef_AI 프로젝트 접근
 project = rf.workspace("soldef-ai").project("soldering-defects")
-dataset = project.version(1).download("yolov8")
+dataset = project.version(1).download("yolo11")
 
 print("✅ SolDef_AI 데이터셋 다운로드 완료!")
 print(f"경로: {dataset.location}")
@@ -161,7 +161,7 @@ EOF
 **또는 웹 UI 다운로드**:
 1. https://universe.roboflow.com/soldef-ai/soldering-defects 접속
 2. "Download Dataset" 클릭
-3. Format: "YOLO v8" 선택
+3. Format: "YOLO v11m" 선택
 4. 다운로드 후 `data/raw/soldef_ai/`에 압축 해제
 
 **데이터 구조**:
@@ -263,7 +263,7 @@ cp -r soldef_ai/* ../processed/solder_model/
 
 **Component Model** (`data/processed/component_model/data.yaml`):
 ```yaml
-# FPIC-Component Dataset for YOLOv8
+# FPIC-Component Dataset for YOLOv11m
 
 path: /home/<사용자명>/work_project/data/processed/component_model
 train: images/train
@@ -302,7 +302,7 @@ names:
 
 **Solder Model** (`data/processed/solder_model/data.yaml`):
 ```yaml
-# SolDef_AI Dataset for YOLOv8
+# SolDef_AI Dataset for YOLOv11m
 
 path: /home/<사용자명>/work_project/data/processed/solder_model
 train: train/images
@@ -366,7 +366,7 @@ names:
 ### 데이터 증강 (Augmentation)
 
 #### YOLO 기본 증강 (자동 적용)
-YOLO v8은 학습 시 다음 증강을 자동으로 적용:
+YOLO v11m은 학습 시 다음 증강을 자동으로 적용:
 - Random crop
 - Random flip (horizontal/vertical)
 - Mosaic augmentation
@@ -473,7 +473,7 @@ visualize_yolo_annotation(
 # Component Model (FPIC-Component) 학습
 yolo detect train \
   data=data/processed/component_model/data.yaml \
-  model=yolov8l.pt \
+  model=yolo11m.pt \
   epochs=150 \
   imgsz=640 \
   batch=32 \
@@ -484,7 +484,7 @@ yolo detect train \
 # Solder Model (SolDef_AI) 학습
 yolo detect train \
   data=data/processed/solder_model/data.yaml \
-  model=yolov8l.pt \
+  model=yolo11m.pt \
   epochs=150 \
   imgsz=640 \
   batch=32 \
@@ -521,7 +521,7 @@ yolo detect train \
 
 ### 도구
 - [Roboflow](https://roboflow.com/) - SolDef_AI 다운로드
-- [Ultralytics YOLOv8](https://docs.ultralytics.com/) - 모델 학습 프레임워크
+- [Ultralytics YOLO](https://docs.ultralytics.com/) - 모델 학습 프레임워크 (YOLOv11m)
 
 ---
 
