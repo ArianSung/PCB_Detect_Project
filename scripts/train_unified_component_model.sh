@@ -4,7 +4,7 @@
 #
 # 목적: SMD 부품 + Through-hole 부품을 모두 검출
 # 데이터: FPIC-Component (25 SMD) + ElectroCom61 (10 Through-hole)
-# 모델: YOLOv8 Large (43M params)
+# 모델: YOLOv11l Large (25.3M params)
 # 예상 시간: 3-4시간 (RTX 4080 Super)
 # 예상 성능: mAP@0.5 = 0.87-0.90
 ################################################################################
@@ -28,7 +28,7 @@ nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv,noheader
 echo ""
 echo "📋 학습 설정:"
 echo "  - 데이터셋: FPIC (25 SMD) + ElectroCom61 (10 TH) = 35 클래스"
-echo "  - 모델: YOLOv8 Large (43M params)"
+echo "  - 모델: YOLOv11l Large (25.3M params)"
 echo "  - 이미지 크기: 800px"
 echo "  - 배치 크기: 16"
 echo "  - 에포크: 200"
@@ -38,10 +38,10 @@ echo ""
 echo "🚀 학습 시작..."
 echo ""
 
-# YOLOv8 최적화 학습 실행
+# YOLOv11l 최적화 학습 실행
 /home/sys1041/miniconda3/envs/pcb_defect/bin/yolo detect train \
     data="$DATA_YAML" \
-    model=yolov8l.pt \
+    model=yolo11l.pt \
     epochs=200 \
     batch=16 \
     imgsz=800 \

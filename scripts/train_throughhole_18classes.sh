@@ -1,22 +1,22 @@
 #!/bin/bash
-# 18개 Through-hole 클래스 YOLOv8 Large 학습 스크립트
+# 18개 Through-hole 클래스 YOLOv11l Large 학습 스크립트
 
 echo "======================================================================================================"
-echo "18개 Through-hole 클래스 YOLOv8 Large 학습"
+echo "18개 Through-hole 클래스 YOLOv11l Large 학습"
 echo "======================================================================================================"
 
 # 환경 변수 설정
 export CUDA_VISIBLE_DEVICES=0
 
 # 학습 파라미터
-MODEL="yolov8l.pt"
+MODEL="yolo11l.pt"
 DATA="/home/sys1041/work_project/data/processed/throughhole_18classes_augmented/data.yaml"
 EPOCHS=100
 BATCH=16
 IMGSZ=640
 DEVICE=0
 PROJECT="runs/detect"
-NAME="throughhole_18classes_yolov8l"
+NAME="throughhole_18classes_yolo11m"
 
 # 학습 시작 시간 기록
 START_TIME=$(date +%s)
@@ -34,7 +34,7 @@ echo ""
 echo "======================================================================================================"
 echo ""
 
-# YOLOv8 학습 실행
+# YOLOv11l 학습 실행
 /home/sys1041/miniconda3/envs/pcb_defect/bin/yolo detect train \
     model=$MODEL \
     data=$DATA \
