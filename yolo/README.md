@@ -1,6 +1,6 @@
 # YOLO 작업 디렉토리
 
-**AI 모델 팀** 전용 YOLO v8 관련 모든 자료를 모아둔 폴더입니다.
+**AI 모델 팀** 전용 YOLO v11m 관련 모든 자료를 모아둔 폴더입니다.
 
 ---
 
@@ -68,7 +68,6 @@ yolo/
 
 ```bash
 # 기본 추론 테스트
-cd yolo/tests
 python test_yolo_inference.py
 
 # 상세 성능 분석
@@ -114,7 +113,7 @@ git commit -m "feat: Add trained YOLO model (Phase 3)"
 - FPS: 41.31
 - 신뢰도: 0.837
 
-**권장 모델**: YOLOv8l (Large) - 안정성 및 커뮤니티 지원 우수
+**권장 모델**: YOLOv11m (Medium) - 정확도와 효율성의 최적 균형
 
 자세한 내용: [tests/PHASE1_TEST_RESULTS.md](tests/PHASE1_TEST_RESULTS.md)
 

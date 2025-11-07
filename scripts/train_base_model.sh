@@ -10,7 +10,7 @@ mkdir -p logs
 # 학습 시작
 /home/sys1041/miniconda3/envs/pcb_defect/bin/yolo detect train \
   data=/home/sys1041/work_project/data/processed/complete_pcb_model/data.yaml \
-  model=yolov8l.pt \
+  model=yolo11m.pt \
   epochs=250 \
   batch=16 \
   imgsz=640 \
