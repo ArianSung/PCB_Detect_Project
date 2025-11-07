@@ -6,7 +6,7 @@
 
 ## 🎯 AI 모델 팀의 역할
 
-- **YOLOv11m 모델 학습**: PCB 불량 객체 탐지 모델 학습 및 최적화
+- **YOLOv11l 모델 학습**: PCB 불량 객체 탐지 모델 학습 및 최적화
 - **이상 탐지 모델 구현**: PaDiM 기반 이상 탐지 시스템 구축
 - **모델 성능 평가**: mAP, FPS, 정확도 측정 및 개선
 - **모델 전달**: 학습된 모델 파일을 Flask 팀에 전달
@@ -167,9 +167,9 @@ yolo/
 
 4. 팀 채팅방에 Phase 1 완료 보고
 
-### 작업 2: YOLOv11m 모델 성능 검증
+### 작업 2: YOLOv11l 모델 성능 검증
 
-**목표**: YOLOv11m 모델의 실제 성능 확인
+**목표**: YOLOv11l 모델의 실제 성능 확인
 
 2. COCO128 데이터셋으로 baseline 학습
 3. 추론 속도(FPS) 및 정확도(mAP) 측정
@@ -194,7 +194,7 @@ yolo/
 안녕! 나는 PCB 불량 검사 시스템의 AI 모델 팀원이야.
 
 **내 역할:**
-- YOLOv11m 모델 학습 및 최적화
+- YOLOv11l 모델 학습 및 최적화
 - 이상 탐지 모델 구현 (PaDiM)
 - 모델 성능 평가 (mAP, FPS, 정확도)
 - 학습된 모델 Flask 팀에 전달
@@ -208,7 +208,7 @@ yolo/
 - OS: Ubuntu 22.04 (GPU PC)
 - GPU: NVIDIA RTX 4080 Super (16GB VRAM)
 - Python: 3.10 (Conda 가상환경 `pcb_defect`)
-- YOLO 버전: YOLOv11m (Medium 모델)
+- YOLO 버전: YOLOv11l (Large 모델)
 
 **작업 디렉토리:**
 ```
@@ -266,7 +266,7 @@ yolo/
 # RTX 4080 Super (16GB VRAM) 최적 설정
 # configs/yolo_config.yaml
 
-model: yolo11m.pt        # Medium 모델
+model: yolo11l.pt        # Large 모델
 batch_size: 32           # 16GB VRAM 활용
 image_size: 640
 device: 0                # GPU ID
@@ -280,7 +280,7 @@ lr0: 0.001
 # 학습 시 FP16 사용으로 VRAM 50% 절약
 from ultralytics import YOLO
 
-model = YOLO("yolo11m.pt")
+model = YOLO("yolo11l.pt")
 model.train(
     data="data/pcb_defects.yaml",
     epochs=150,

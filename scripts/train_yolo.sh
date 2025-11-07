@@ -60,7 +60,7 @@ fi
 echo ""
 echo "[3/4] 학습 파라미터 설정..."
 
-MODEL="yolo11m.pt"       # YOLOv11m Medium 모델
+MODEL="yolo11l.pt"       # YOLOv11l Large 모델
 EPOCHS=200               # 에포크 수 (전략 3: 150 → 200)
 BATCH=24                 # 배치 사이즈 (전략 3: 32 → 24, VRAM 안정화)
 IMGSZ=640                # 이미지 크기

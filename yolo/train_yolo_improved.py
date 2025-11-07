@@ -14,7 +14,7 @@ from ultralytics import YOLO
 
 def train_yolo(
     data,
-    model='yolo11m.pt',
+    model='yolo11l.pt',
     epochs=150,
     batch=16,
     imgsz=640,
@@ -121,7 +121,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='YOLO 개선 학습 스크립트')
     parser.add_argument('--data', type=str, required=True,
                        help='데이터셋 YAML 파일 경로')
-    parser.add_argument('--model', type=str, default='yolo11m.pt',
+    parser.add_argument('--model', type=str, default='yolo11l.pt',
                        help='사전학습 모델 경로')
     parser.add_argument('--epochs', type=int, default=150,
                        help='학습 에포크 수')

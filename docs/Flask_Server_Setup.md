@@ -11,7 +11,7 @@
 ### 하드웨어 구성 ⭐ 업데이트
 - **추론 서버 (GPU PC)**:
   - GPU: NVIDIA RTX 4080 Super (16GB VRAM)
-  - **AI 모델**: 이중 YOLOv11m (Large) 모델 ⭐ 변경
+  - **AI 모델**: 이중 YOLOv11l (Large) 모델 ⭐ 변경
     - **모델 1**: FPIC-Component (부품 검출, 25개 클래스)
     - **모델 2**: SolDef_AI (납땜 불량 검출, 5-6개 클래스)
   - 위치: 원격지 (같은 도시 내)
@@ -32,7 +32,7 @@
 - 데이터베이스 설계: `MySQL_Database_Design.md`
 
 ### 소프트웨어 구성
-- **추론 서버**: Flask + PyTorch + YOLO v11m
+- **추론 서버**: Flask + PyTorch + YOLO v11l
 - **카메라 클라이언트**: OpenCV + Requests
 
 ---
@@ -1584,8 +1584,8 @@ print(f"VRAM 사용: {torch.cuda.memory_allocated() / 1024**3:.2f}GB / 16GB")
 ```
 
 **예상 VRAM 사용량 (RTX 4080 Super)**:
-- Component Model (YOLOv11m): ~5-6GB
-- Solder Model (YOLOv11m): ~4-5GB
+- Component Model (YOLOv11l): ~5-6GB
+- Solder Model (YOLOv11l): ~4-5GB
 - **총 VRAM 사용**: ~8GB (양면 동시 추론)
 - 여유 메모리: 8GB
 - 결론: 메모리 부족 가능성 매우 낮음 ✅
@@ -2938,7 +2938,7 @@ def get_gpu_usage():
 - **네트워크 지연**: < 50ms (같은 도시 VPN)
 - **정확도**: mAP > 0.90
 
-### 실제 달성 예상 (원격 연결 + RTX 4080 Super + YOLOv11m)
+### 실제 달성 예상 (원격 연결 + RTX 4080 Super + YOLOv11l)
 - **총 처리 시간**: 100-200ms ✅
   - 이미지 인코딩: 10-20ms
   - 네트워크 왕복: 40-100ms (같은 도시 Tailscale VPN)

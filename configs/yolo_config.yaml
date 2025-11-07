@@ -1,8 +1,8 @@
 # YOLO 학습 설정
-# YOLOv11m (Medium) 모델 - RTX 4080 Super 최적화
+# YOLOv11l (Large) 모델 - RTX 4080 Super 최적화
 
 # 모델 설정
-model: yolo11m.pt  # 사전 학습 모델 (nano: n, small: s, medium: m, large: l)
+model: yolo11l.pt  # 사전 학습 모델 (nano: n, small: s, medium: m, large: l)
 device: 0  # GPU ID (0: 첫 번째 GPU, cpu: CPU 사용)
 
 # 데이터셋 경로

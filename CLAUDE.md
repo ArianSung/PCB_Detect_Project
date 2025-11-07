@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### 핵심 기능
 - 웹캠 2대(좌측/우측)를 통한 PCB 양면 촬영 (컨베이어 벨트 좌우 배치)
 - Flask 웹서버를 통한 실시간 프레임 전송 및 AI 추론
-- **이중 전문 YOLO v11m 모델**:
+- **이중 전문 YOLO v11l 모델**:
   - **모델 1**: FPIC-Component (부품 검출, 25개 클래스)
   - **모델 2**: SolDef_AI (납땜 불량, 5-6개 클래스)
 - 불량 유형에 따른 자동 분류 (부품불량/납땜불량/폐기/정상)
@@ -22,7 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **추론 서버 (GPU PC)**:
   - 위치: 원격지 (같은 도시 내)
   - 연결: Tailscale VPN (100.x.x.x)
-  - Flask 서버 + 이중 YOLO v11m 모델 + MySQL 데이터베이스 + REST API
+  - Flask 서버 + 이중 YOLO v11l 모델 + MySQL 데이터베이스 + REST API
   - 모델 1: FPIC-Component (부품 검출)
   - 모델 2: SolDef_AI (납땜 불량 검출)
 - **라즈베리파이 4 (3대)**: 좌/우 웹캠 + OHT 제어 (RPi.GPIO, 모터 제어)
@@ -146,7 +146,7 @@ pytest tests/test_dual_model.py
 ```
 
 ### 주요 프레임워크 및 라이브러리
-- **딥러닝**: PyTorch, YOLO v11m (Ultralytics)
+- **딥러닝**: PyTorch, YOLO v11l (Ultralytics)
 - **웹 서버**: Flask, Flask-CORS
 - **컴퓨터 비전**: OpenCV, Pillow
 - **통신**: Requests (HTTP), Base64 인코딩
@@ -274,7 +274,7 @@ jpeg_quality: 85
 
 **`configs/component_training.yaml`** (부품 검출 모델 학습)
 ```yaml
-model: yolo11m.pt
+model: yolo11l.pt
 data: data/fpic_component/data.yaml
 epochs: 100
 batch_size: 16
@@ -288,7 +288,7 @@ patience: 30
 
 **`configs/solder_training.yaml`** (납땜 불량 모델 학습)
 ```yaml
-model: yolo11m.pt
+model: yolo11l.pt
 data: data/soldef_ai/data.yaml
 epochs: 100
 batch_size: 16
@@ -325,7 +325,7 @@ patience: 30
 ### 중요 사항
 1. **하드웨어 사양**:
    - GPU: NVIDIA RTX 4080 Super (16GB VRAM)
-   - AI 모델: 이중 YOLOv11m (Medium) 모델
+   - AI 모델: 이중 YOLOv11l (Large) 모델
      - 모델 1: FPIC-Component (부품 검출, 25개 클래스)
      - 모델 2: SolDef_AI (납땜 불량, 5-6개 클래스)
    - 학습 시 VRAM: 6-8GB (모델당 3-4GB)
@@ -352,7 +352,7 @@ patience: 30
 5. **GPU 최적화**: FP16 (Half Precision) 사용 강력 권장 (VRAM 50% 절약 + 속도 1.5배 향상)
 6. **실시간 성능**:
    - 목표: < 300ms (디팔렛타이저 분류 시간 고려, 2.5초 허용)
-   - 예상 성능 (YOLOv11m 기준): 60-100ms
+   - 예상 성능 (YOLOv11l 기준): 60-100ms
      - 부품 모델: 30-50ms (예상)
      - 납땜 모델: 30-50ms (예상, 병렬 처리)
      - 결과 융합: <5ms
@@ -391,9 +391,9 @@ patience: 30
 
 ### 개발 우선순위
 1. ✅ Phase 1-3: 데이터셋 변경 및 이중 모델 설계 (완료)
-2. 🔄 Phase 4: 이중 YOLOv11m 모델 학습 (진행 중)
-   - FPIC-Component 모델 학습 (YOLOv11m)
-   - SolDef_AI 모델 학습 (YOLOv11m)
+2. 🔄 Phase 4: 이중 YOLOv11l 모델 학습 (진행 중)
+   - FPIC-Component 모델 학습 (YOLOv11l)
+   - SolDef_AI 모델 학습 (YOLOv11l)
 3. Phase 5: Flask 서버 구축 및 결과 융합 로직 구현 ⭐
 4. Phase 6: 라즈베리파이 양면 촬영 및 통합 테스트
 5. Phase 7: 문서화 및 발표 준비

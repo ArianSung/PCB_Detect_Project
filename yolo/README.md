@@ -1,6 +1,6 @@
 # YOLO 작업 디렉토리
 
-**AI 모델 팀** 전용 YOLO v11m 관련 모든 자료를 모아둔 폴더입니다.
+**AI 모델 팀** 전용 YOLO v11l 관련 모든 자료를 모아둔 폴더입니다.
 
 ---
 
@@ -113,7 +113,7 @@ git commit -m "feat: Add trained YOLO model (Phase 3)"
 - FPS: 41.31
 - 신뢰도: 0.837
 
-**권장 모델**: YOLOv11m (Medium) - 정확도와 효율성의 최적 균형
+**권장 모델**: YOLOv11l (Large) - 정확도와 효율성의 최적 균형
 
 자세한 내용: [tests/PHASE1_TEST_RESULTS.md](tests/PHASE1_TEST_RESULTS.md)
 

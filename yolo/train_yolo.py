@@ -15,7 +15,7 @@ import yaml
 import os
 
 
-def train_yolo(data_yaml, model='yolo11m.pt', epochs=150, batch=32, imgsz=640, device='0'):
+def train_yolo(data_yaml, model='yolo11l.pt', epochs=150, batch=32, imgsz=640, device='0'):
     """
     YOLO v8 모델 학습
 
@@ -118,8 +118,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='YOLO v8 학습 스크립트')
     parser.add_argument('--data', type=str, required=True,
                         help='데이터셋 YAML 파일 경로 (예: data/pcb_defects.yaml)')
-    parser.add_argument('--model', type=str, default='yolo11m.pt',
-                        help='YOLO 모델 (yolo11n/s/m/l/x.pt) 기본값: yolo11m.pt')
+    parser.add_argument('--model', type=str, default='yolo11l.pt',
+                        help='YOLO 모델 (yolo11n/s/m/l/x.pt) 기본값: yolo11l.pt')
     parser.add_argument('--epochs', type=int, default=150,
                         help='학습 에포크 수 (기본값: 150)')
     parser.add_argument('--batch', type=int, default=32,
