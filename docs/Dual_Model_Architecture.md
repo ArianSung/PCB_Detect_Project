@@ -244,8 +244,8 @@ def capture_and_send():
 
 ### GPU 메모리
 
-- 부품 모델 (YOLOv11m): ~4GB
-- 납땜 모델 (YOLOv11m): ~4GB
+- 부품 모델 (YOLOv11l): ~4GB
+- 납땜 모델 (YOLOv11l): ~4GB
 - **총 VRAM**: ~8GB
 - **RTX 4080 Super (16GB)**: 충분함 ✅
 
