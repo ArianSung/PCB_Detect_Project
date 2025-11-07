@@ -41,7 +41,7 @@
 4. `docs/Team_Collaboration_Guide.md` - 팀 협업 가이드 (팀 구성, 역할, 워크플로우)
 
 **시스템 구성:**
-- 추론 서버: GPU PC (원격지) - Flask + YOLO v8 + MySQL
+- 추론 서버: GPU PC (원격지) - Flask + YOLO v11m + MySQL
 - 웹캠 클라이언트: 라즈베리파이 4 (2대) - 좌/우 카메라
 - **디팔렛타이저**: Arduino Mega 2560 + 5-6축 로봇팔 - PCB 픽업 및 박스 분류 (2.5초/PCB)
 - OHT 제어: 라즈베리파이 4 (1대) - 가득 찬 박스 운반 (GPIO 제어)
@@ -165,7 +165,7 @@ GPU_DEVICE=cuda:0
 안녕! 나는 PCB 불량 검사 시스템의 AI 모델 팀원이야.
 
 **내 역할:**
-- YOLOv8 모델 학습 및 최적화
+- YOLOv11m 모델 학습 및 최적화
 - 이상 탐지 모델 구현 (PaDiM)
 - 모델 성능 평가 (mAP, FPS, 정확도)
 - 학습된 모델 Flask 팀에 전달
@@ -174,14 +174,12 @@ GPU_DEVICE=cuda:0
 1. `docs/Phase1_YOLO_Setup.md` - YOLO 환경 구축 및 Phase 1 가이드
 2. `docs/Dataset_Guide.md` - 데이터셋 준비 및 전처리
 3. `yolo/README.md` - YOLO 작업 디렉토리 가이드
-4. `yolo/tests/README.md` - Phase 1 테스트 가이드
-5. `yolo/tests/YOLO11_vs_YOLOv8.md` - YOLO 버전 비교
 
 **개발 환경:**
 - OS: Ubuntu 22.04 (GPU PC)
 - GPU: NVIDIA RTX 4080 Super (16GB VRAM)
 - Python: 3.10 (Conda 가상환경 `pcb_defect`)
-- YOLO 버전: YOLOv8l (Large 모델 권장)
+- YOLO 버전: YOLOv11m (Large 모델 권장)
 
 **작업 디렉토리:**
 ```
@@ -197,11 +195,9 @@ yolo/
 2. GPU 확인: `python -c "import torch; print(torch.cuda.is_available())"`
 3. Phase 1 기본 테스트 실행:
    ```bash
-   cd yolo/tests
    python test_yolo_basic.py
    python test_yolo_coco128.py
    ```
-4. 결과 확인: `yolo/tests/PHASE1_TEST_RESULTS.md` 참고
 
 위 정보를 바탕으로, YOLO 모델을 처음 테스트하고 학습을 시작하는 과정을 안내해줘.
 특히 GPU가 제대로 인식되는지, 그리고 Phase 1 테스트가 성공하는지 확인하는 방법을 알려줘.

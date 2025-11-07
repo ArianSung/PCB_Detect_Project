@@ -180,7 +180,7 @@ lr0=0.0005  # 기존 0.001에서 50% 감소
 
 #### 4-A. YOLOv8x (Extra Large) 사용
 ```bash
-model=yolov8x.pt  # 기존 yolov8l.pt
+model=yolov8x.pt  # 기존 yolo11m.pt
 ```
 
 **장점**: 68M 파라미터 (Large 대비 1.56배)
