@@ -89,15 +89,15 @@ C:\work_project\                         # Windows 경로
 ├── models/                              # 🤖 학습된 모델
 │   ├── yolo/
 │   │   ├── experiments/                # 실험별 모델
-│   │   │   ├── exp1_yolov8n/
+│   │   │   ├── exp1_yolo11m/
 │   │   │   │   ├── weights/
 │   │   │   │   │   ├── best.pt
 │   │   │   │   │   └── last.pt
 │   │   │   │   ├── results.png
 │   │   │   │   ├── confusion_matrix.png
 │   │   │   │   └── args.yaml
-│   │   │   ├── exp2_yolov8s/
-│   │   │   └── exp3_yolov8m/
+│   │   │   ├── exp2_yolo11m/
+│   │   │   └── exp3_yolo11m/
 │   │   │
 │   │   └── final/                      # 최종 선정 모델
 │   │       ├── yolo_best.pt
@@ -376,7 +376,7 @@ C:\work_project\                         # Windows 경로
   #!/bin/bash
   python yolo/train_yolo.py \
       --data data/pcb_defects.yaml \
-      --model yolov8l.pt \
+      --model yolo11m.pt \
       --epochs 150 \
       --batch 32 \
       --imgsz 640 \
@@ -389,7 +389,7 @@ C:\work_project\                         # Windows 경로
 
 **예시** (`configs/yolo_config.yaml`):
 ```yaml
-model: yolov8s.pt
+model: yolo11m.pt
 data: data/pcb_defects.yaml
 epochs: 100
 batch_size: 16
@@ -629,13 +629,13 @@ temp/
 ## `README.md` 템플릿
 
 ```markdown
-# PCB Defect Detection using YOLO v8 and Anomaly Detection
+# PCB Defect Detection using YOLO v11m and Anomaly Detection
 
 ## 프로젝트 개요
 PCB(인쇄회로기판) 이미지에서 부품 및 납땜 불량을 자동으로 검출하는 하이브리드 딥러닝 시스템
 
 ## 주요 기능
-- YOLO v8 기반 객체 탐지 (Object Detection)
+- YOLO v11m 기반 객체 탐지 (Object Detection)
 - 이상 탐지 모델 (Anomaly Detection)
 - 병렬 처리를 통한 결과 융합
 
@@ -688,7 +688,7 @@ python server/app.py
 - 하이브리드 mAP@0.5: 0.XX
 
 ## 참고 자료
-- [YOLO v8 Documentation](https://docs.ultralytics.com/)
+- [YOLO v11m Documentation](https://docs.ultralytics.com/)
 - [DeepPCB Paper](링크)
 
 ## 라이선스
@@ -798,7 +798,7 @@ flake8>=6.1.0
 
 ### 학습 관련 문서
 
-9. **Phase1_YOLO_Setup.md** - YOLO v8 환경 구축 및 학습 가이드
+9. **Phase1_YOLO_Setup.md** - YOLO v11m 환경 구축 및 학습 가이드
 10. **Dataset_Guide.md** - 데이터셋 수집, 라벨링, 전처리 가이드
 
 ---
@@ -830,22 +830,22 @@ git commit -m "Add experiment: YOLOv8s 100 epochs"
 ```bash
 # 실험 폴더 구조
 models/yolo/experiments/
-├── exp1_yolov8n_baseline/
+├── exp1_yolo11m_baseline/
 │   ├── weights/best.pt
 │   ├── results.png
 │   └── notes.txt              # 실험 노트
-├── exp2_yolov8s_augmented/
-└── exp3_yolov8m_tuned/
+├── exp2_yolo11m_augmented/
+└── exp3_yolo11m_tuned/
 ```
 
 **실험 노트 예시** (`notes.txt`):
 ```
-실험명: YOLOv8s Baseline
+실험명: YOLOv11m Baseline
 날짜: 2025-10-25
-목적: 기본 YOLOv8s 성능 측정
+목적: 기본 YOLOv11m 성능 측정
 
 설정:
-- Model: YOLOv8s
+- Model: YOLOv11m
 - Epochs: 100
 - Batch size: 16
 - Image size: 640

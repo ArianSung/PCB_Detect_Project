@@ -455,7 +455,7 @@ Brightness:
 ```
 1. "Generate" 클릭
 2. "Export Dataset"
-3. Format: "YOLO v8 PyTorch"
+3. Format: "YOLO v11m PyTorch"
 4. "Download ZIP"
 ```
 
@@ -474,7 +474,7 @@ python
 from roboflow import Roboflow
 rf = Roboflow(api_key="YOUR_KEY")
 project = rf.workspace().project("pcb-throughhole")
-dataset = project.version(1).download("yolov8")
+dataset = project.version(1).download("yolo11")
 ```
 
 ---
