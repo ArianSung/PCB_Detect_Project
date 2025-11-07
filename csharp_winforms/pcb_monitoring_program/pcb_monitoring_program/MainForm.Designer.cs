@@ -107,7 +107,6 @@
             panelContent.Name = "panelContent";
             panelContent.Size = new Size(1600, 900);
             panelContent.TabIndex = 5;
-            panelContent.Paint += panelContent_Paint;
             // 
             // labelTitle
             // 
@@ -160,7 +159,6 @@
             labeluserauthority.Size = new Size(97, 25);
             labeluserauthority.TabIndex = 10;
             labeluserauthority.Text = "[ 관리자 ]";
-            labeluserauthority.Click += labeluserauthority_Click;
             // 
             // pictureBox2
             // 

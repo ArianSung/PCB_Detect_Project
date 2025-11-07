@@ -242,15 +242,5 @@ namespace pcb_monitoring_program
         {
             labelTime.Text = DateTime.Now.ToString("yyyy '/' MM '/' dd\n HH : mm");
         }
-
-        private void labeluserauthority_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void panelContent_Paint(object sender, PaintEventArgs e)
-        {
-
-        }
     }
 }
