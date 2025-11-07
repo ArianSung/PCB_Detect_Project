@@ -16,6 +16,12 @@
     <Compile Update="Views\Settings\SettingView.cs">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Update="Views\Statistics\InspectionHistoryView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Views\Statistics\MainStatisticsView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Update="Views\Statistics\StatisticsView.cs">
       <SubType>UserControl</SubType>
     </Compile>
