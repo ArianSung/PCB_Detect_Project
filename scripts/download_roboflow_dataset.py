@@ -9,7 +9,7 @@ Roboflow에서 PCB 부품 데이터셋 다운로드
 import argparse
 from roboflow import Roboflow
 
-def download_dataset(api_key, workspace, project, version=1, format="yolov8"):
+def download_dataset(api_key, workspace, project, version=1, format="yolov11"):
     """
     Roboflow에서 데이터셋 다운로드
 
@@ -18,7 +18,7 @@ def download_dataset(api_key, workspace, project, version=1, format="yolov8"):
         workspace: 워크스페이스 이름
         project: 프로젝트 이름
         version: 버전 번호
-        format: 데이터셋 포맷 (yolov8, yolov5, coco, etc.)
+        format: 데이터셋 포맷 (yolov11, yolov8, coco, etc.)
     """
     # Roboflow 초기화
     rf = Roboflow(api_key=api_key)
@@ -44,7 +44,7 @@ if __name__ == "__main__":
     parser.add_argument("--project", default="pcb-component-detection-dre7a",
                        help="Project name (default: pcb-component-detection-dre7a)")
     parser.add_argument("--version", type=int, default=1, help="Dataset version")
-    parser.add_argument("--format", default="yolov8", help="Dataset format")
+    parser.add_argument("--format", default="yolov11", help="Dataset format")
 
     args = parser.parse_args()
 

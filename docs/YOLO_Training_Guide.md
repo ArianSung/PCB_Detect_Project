@@ -1,6 +1,6 @@
 # 이중 YOLO 모델 학습 완전 가이드 ⭐
 
-**이중 전문 YOLO v11ml 모델 독립 학습 가이드**
+**이중 전문 YOLO v11ll 모델 독립 학습 가이드**
 
 이 가이드는 다음 두 모델을 독립적으로 학습하는 방법을 안내합니다:
 - **모델 1 (Component Model)**: FPIC-Component 데이터셋 (25 클래스, 6,260 이미지)
@@ -179,7 +179,7 @@ EOF
 
 1. https://universe.roboflow.com/soldef-ai/soldering-defects 접속
 2. "Download Dataset" 클릭
-3. Format: "YOLO v11m" 선택
+3. Format: "YOLO v11l" 선택
 4. 다운로드 후 압축 해제
 
 ```bash
@@ -293,7 +293,7 @@ echo "Start time: $(date)"
 
 yolo detect train \
   data=data/processed/component_model/data.yaml \
-  model=yolo11m.pt \
+  model=yolo11l.pt \
   epochs=150 \
   batch=32 \
   imgsz=640 \
@@ -331,7 +331,7 @@ echo $! > component_training.pid
 # 또는 직접 YOLO 명령 실행
 yolo detect train \
   data=data/processed/component_model/data.yaml \
-  model=yolo11m.pt \
+  model=yolo11l.pt \
   epochs=150 \
   batch=32 \
   imgsz=640 \
@@ -357,8 +357,8 @@ Ultralytics YOLOv11.3.221 🚀 Python-3.10.19 torch-2.7.1+cu118
 CUDA available: True
 Device: NVIDIA GeForce RTX 4080 SUPER (16GB)
 
-Loading YOLOv11m pretrained weights...
-Transferring 365/365 layers from yolo11m.pt...
+Loading YOLOv11l pretrained weights...
+Transferring 365/365 layers from yolo11l.pt...
 
 === Training Configuration ===
 Dataset: FPIC-Component
@@ -419,7 +419,7 @@ echo "Start time: $(date)"
 
 yolo detect train \
   data=data/processed/solder_model/data.yaml \
-  model=yolo11m.pt \
+  model=yolo11l.pt \
   epochs=150 \
   batch=32 \
   imgsz=640 \
@@ -805,7 +805,7 @@ RuntimeError: CUDA out of memory. Tried to allocate 2.00 GiB
 # Component Model
 yolo detect train \
   data=data/processed/component_model/data.yaml \
-  model=yolo11m.pt \
+  model=yolo11l.pt \
   batch=16 \  # 32 → 16
   # 나머지 동일
 ```

@@ -66,7 +66,7 @@ print("데이터셋: PCB Defects (공개 데이터셋)")
 try:
     # PCB Defects 공개 데이터셋 다운로드
     project = rf.workspace("roboflow-100").project("pcb-defects")
-    dataset = project.version(1).download("yolov8", location="data/raw/pcb_defects")
+    dataset = project.version(1).download("yolov11", location="data/raw/pcb_defects")
 
     print("\n✓ 데이터셋 다운로드 완료!")
     print(f"저장 위치: data/raw/pcb_defects")
