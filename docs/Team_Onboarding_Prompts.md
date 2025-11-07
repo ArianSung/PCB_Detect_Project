@@ -41,7 +41,7 @@
 4. `docs/Team_Collaboration_Guide.md` - 팀 협업 가이드 (팀 구성, 역할, 워크플로우)
 
 **시스템 구성:**
-- 추론 서버: GPU PC (원격지) - Flask + YOLO v11m + MySQL
+- 추론 서버: GPU PC (원격지) - Flask + YOLO v11l + MySQL
 - 웹캠 클라이언트: 라즈베리파이 4 (2대) - 좌/우 카메라
 - **디팔렛타이저**: Arduino Mega 2560 + 5-6축 로봇팔 - PCB 픽업 및 박스 분류 (2.5초/PCB)
 - OHT 제어: 라즈베리파이 4 (1대) - 가득 찬 박스 운반 (GPIO 제어)
@@ -165,7 +165,7 @@ GPU_DEVICE=cuda:0
 안녕! 나는 PCB 불량 검사 시스템의 AI 모델 팀원이야.
 
 **내 역할:**
-- YOLOv11m 모델 학습 및 최적화
+- YOLOv11l 모델 학습 및 최적화
 - 이상 탐지 모델 구현 (PaDiM)
 - 모델 성능 평가 (mAP, FPS, 정확도)
 - 학습된 모델 Flask 팀에 전달
@@ -179,7 +179,7 @@ GPU_DEVICE=cuda:0
 - OS: Ubuntu 22.04 (GPU PC)
 - GPU: NVIDIA RTX 4080 Super (16GB VRAM)
 - Python: 3.10 (Conda 가상환경 `pcb_defect`)
-- YOLO 버전: YOLOv11m (Large 모델 권장)
+- YOLO 버전: YOLOv11l (Large 모델 권장)
 
 **작업 디렉토리:**
 ```

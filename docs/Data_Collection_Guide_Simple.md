@@ -455,7 +455,7 @@ Brightness:
 ```
 1. "Generate" 클릭
 2. "Export Dataset"
-3. Format: "YOLO v11m PyTorch"
+3. Format: "YOLO v11l PyTorch"
 4. "Download ZIP"
 ```
 

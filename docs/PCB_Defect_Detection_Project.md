@@ -5,7 +5,7 @@
 **목표**: 컨베이어 벨트를 통해 들어오는 PCB의 양면을 실시간으로 검사하여 불량을 자동으로 검출하고 분류하는 이중 YOLO 딥러닝 시스템 개발
 
 **핵심 기술**:
-- 이중 YOLO v11m 모델 아키텍처 (Dual Model Architecture)
+- 이중 YOLO v11l 모델 아키텍처 (Dual Model Architecture)
   - **모델 1**: FPIC-Component (부품 검출, 25개 클래스)
   - **모델 2**: SolDef_AI (납땜 불량 검출, 5-6개 클래스)
 - 병렬 추론 및 결과 융합 로직 (Flask 서버)
@@ -49,7 +49,7 @@
   - GPU: NVIDIA RTX 4080 Super (16GB VRAM)
   - Windows 11 + WSL2 (Ubuntu) 또는 Linux
   - Python 3.10 (Miniconda)
-  - PyTorch + YOLO v11ml (Large 모델)
+  - PyTorch + YOLO v11ll (Large 모델)
   - Flask 웹 서버
   - MySQL 8.0 데이터베이스
 - **라즈베리파이** (카메라 + GPIO)
@@ -104,16 +104,16 @@ Flask 서버에서 두 모델의 결과를 통합하여 최종 판정:
 
 ## 프로젝트 전체 로드맵
 
-### Phase 1: 환경 구축 및 YOLO v11m 테스트 (1-2주) ⭐ 현재 단계
+### Phase 1: 환경 구축 및 YOLO v11l 테스트 (1-2주) ⭐ 현재 단계
 
 #### 체크리스트
 - [x] WSL2 설치
 - [x] Miniconda 설치 및 가상환경 구축
-- [x] YOLO v11m 설치
+- [x] YOLO v11l 설치
   - [x] PyTorch 설치
   - [x] Ultralytics 패키지 설치
   - [x] 설치 확인 테스트
-- [x] YOLO v11m 기본 튜토리얼 실습
+- [x] YOLO v11l 기본 튜토리얼 실습
   - [x] 이미지 추론 테스트
   - [x] 비디오 추론 테스트
   - [x] 사전 학습 모델 테스트
@@ -167,7 +167,7 @@ Flask 서버에서 두 모델의 결과를 통합하여 최종 판정:
 
 #### 모델 1: 부품 검출 모델 (FPIC-Component)
 - [x] 데이터셋: FPIC-Component (6,260 이미지, 25 클래스)
-- [ ] YOLOv11m 선택 (정확도 우선, RTX 4080 Super 최적화)
+- [ ] YOLOv11l 선택 (정확도 우선, RTX 4080 Super 최적화)
 - [ ] 학습 설정
   - [ ] Epochs: 100-150
   - [ ] Batch size: 16-32 (VRAM 16GB 활용)
@@ -182,7 +182,7 @@ Flask 서버에서 두 모델의 결과를 통합하여 최종 판정:
 
 #### 모델 2: 납땜 불량 모델 (SolDef_AI)
 - [x] 데이터셋: SolDef_AI (1,150 이미지, 5-6 클래스)
-- [ ] YOLOv11m 선택 (정확도 우선)
+- [ ] YOLOv11l 선택 (정확도 우선)
 - [ ] 학습 설정
   - [ ] Epochs: 100-150
   - [ ] Batch size: 16-32
@@ -870,7 +870,7 @@ Flask 서버에서 두 모델의 결과를 통합하여 최종 판정:
 
 **하드웨어 사양** (GPU PC) ⭐ 업데이트:
 - **GPU**: NVIDIA RTX 4080 Super (16GB VRAM) ✅
-- **AI 모델**: 이중 YOLOv11m (Large) 모델
+- **AI 모델**: 이중 YOLOv11l (Large) 모델
   - 모델 1: FPIC-Component (부품 검출, 25 클래스)
   - 모델 2: SolDef_AI (납땜 불량, 5-6 클래스)
 - **GPU 메모리 사용량**:
@@ -879,8 +879,8 @@ Flask 서버에서 두 모델의 결과를 통합하여 최종 판정:
     - 모델 2 학습: 8-10GB VRAM (배치 32 기준)
     - 학습은 순차적으로 진행 (동시 학습 불필요)
   - **추론 시** (양면 동시):
-    - 부품 모델 (YOLOv11m): ~4-5GB VRAM (FP16 최적화)
-    - 납땜 모델 (YOLOv11m): ~3-4GB VRAM (FP16 최적화)
+    - 부품 모델 (YOLOv11l): ~4-5GB VRAM (FP16 최적화)
+    - 납땜 모델 (YOLOv11l): ~3-4GB VRAM (FP16 최적화)
     - 양면 배치 처리: ~1GB VRAM
     - **총 예상**: ~8GB VRAM (16GB 중 50%, 여유 충분) ✅
 - **시스템 RAM**: 8GB+ (16GB 권장)
@@ -888,8 +888,8 @@ Flask 서버에서 두 모델의 결과를 통합하여 최종 판정:
 
 **디스크 공간** (프로젝트 단위) ⭐ 업데이트:
 - **모델 저장**:
-  - 부품 모델 (YOLOv11m): ~180 MB
-  - 납땜 모델 (YOLOv11m): ~180 MB
+  - 부품 모델 (YOLOv11l): ~180 MB
+  - 납땜 모델 (YOLOv11l): ~180 MB
   - 총: ~360 MB
 - **학습 데이터셋**:
   - FPIC-Component: ~2-3 GB (6,260 이미지)
@@ -902,7 +902,7 @@ Flask 서버에서 두 모델의 결과를 통합하여 최종 판정:
 
 **추론 성능 목표 및 달성 예상**:
 - **목표**: < 300ms (디팔렛타이저 분류 시간 고려, 2.5초 허용)
-- **실제 달성 예상** (원격 연결 + RTX 4080 Super + YOLOv11m):
+- **실제 달성 예상** (원격 연결 + RTX 4080 Super + YOLOv11l):
   - 원격 네트워크 (VPN): 100-200ms ✅
     - 이미지 인코딩: 10-20ms
     - 네트워크 왕복: 40-100ms (같은 도시)
@@ -915,7 +915,7 @@ Flask 서버에서 두 모델의 결과를 통합하여 최종 판정:
 **최적화 권장사항** (RTX 4080 Super):
 - **FP16 (Half Precision)**: VRAM 50% 절약 + 속도 1.5배 향상 ⭐ 강력 권장
 - **배치 처리**: 좌우 2개 이미지를 batch=2로 동시 처리 (순차 대비 30% 빠름)
-- **모델 선택**: YOLOv11m (정확도 52.9%, 90+ FPS) 권장
+- **모델 선택**: YOLOv11l (정확도 52.9%, 90+ FPS) 권장
 - **Batch Processing**: 여러 프레임 동시 추론 (효율 증가)
 - **Model Quantization** (선택): INT8 양자화 (속도 2배, 정확도 소폭 감소)
 
@@ -1028,7 +1028,7 @@ Flask 서버에서 두 모델의 결과를 통합하여 최종 판정:
 
 ### 딥러닝 프레임워크 ⭐ 업데이트
 - **PyTorch**: 1.13+
-- **Ultralytics**: YOLO v11m 공식 라이브러리 (이중 모델)
+- **Ultralytics**: YOLO v11l 공식 라이브러리 (이중 모델)
 - ~~**Anomalib**: Intel의 이상 탐지 라이브러리~~ (사용하지 않음)
 
 ### 데이터 처리
@@ -1076,10 +1076,10 @@ Flask 서버에서 두 모델의 결과를 통합하여 최종 판정:
 
 ## 참고 자료
 
-### YOLO v11m 관련
+### YOLO v11l 관련
 - [Ultralytics YOLO 공식 문서](https://docs.ultralytics.com/)
-- [YOLO v11m GitHub](https://github.com/ultralytics/ultralytics)
-- [YOLO v11m 논문](https://arxiv.org/abs/2305.09972)
+- [YOLO v11l GitHub](https://github.com/ultralytics/ultralytics)
+- [YOLO v11l 논문](https://arxiv.org/abs/2305.09972)
 
 ### ~~이상 탐지 관련~~ (아카이브)
 - ~~[Anomalib 공식 문서](https://anomalib.readthedocs.io/)~~
@@ -1116,7 +1116,7 @@ Flask 서버에서 두 모델의 결과를 통합하여 최종 판정:
 
 | 주차 | Phase | 주요 활동 |
 |------|-------|-----------|
-| 1-2주 | Phase 1 | YOLO v11m 환경 구축 및 기본 테스트 |
+| 1-2주 | Phase 1 | YOLO v11l 환경 구축 및 기본 테스트 |
 | 3-5주 | Phase 2 | PCB 데이터 수집 및 전처리 |
 | 6-9주 | Phase 3 | YOLO 모델 학습 및 최적화 |
 | 10-13주 | Phase 4-5 | 이상 탐지 모델 구현 및 하이브리드 시스템 통합 |
@@ -1127,7 +1127,7 @@ Flask 서버에서 두 모델의 결과를 통합하여 최종 판정:
 ## 성공 기준 ⭐ 업데이트
 
 ### 최소 목표
-- [x] 이중 YOLO v11m 모델 선정 및 데이터셋 확보
+- [x] 이중 YOLO v11l 모델 선정 및 데이터셋 확보
 - [ ] 부품 모델: mAP@0.5 > 0.80
 - [ ] 납땜 모델: mAP@0.5 > 0.85
 - [ ] 4가지 판정 가능 (정상/부품불량/납땜불량/폐기)
