@@ -129,7 +129,7 @@ Kaggle 데이터셋 다운로드 후:
 3. **YOLO 학습 시작**
    ```bash
    yolo detect train data=data/processed/combined_pcb_dataset/data.yaml \\
-     model=yolo11m.pt epochs=150 batch=32 imgsz=640
+     model=yolo11l.pt epochs=150 batch=32 imgsz=640
    ```
 
 ## 참고 자료
