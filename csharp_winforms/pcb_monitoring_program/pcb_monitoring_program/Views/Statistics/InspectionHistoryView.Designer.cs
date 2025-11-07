@@ -1,6 +1,6 @@
 ﻿namespace pcb_monitoring_program.Views.Statistics
 {
-    partial class StatisticsView
+    partial class InspectionHistoryView
     {
         /// <summary> 
         /// 필수 디자이너 변수입니다.
@@ -36,19 +36,19 @@
             label1.AutoSize = true;
             label1.Font = new Font("맑은 고딕", 26.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
             label1.ForeColor = Color.White;
-            label1.Location = new Point(3, 0);
+            label1.Location = new Point(0, 0);
             label1.Name = "label1";
-            label1.Size = new Size(289, 47);
-            label1.TabIndex = 0;
-            label1.Text = "여기는 통계화면 ";
+            label1.Size = new Size(429, 47);
+            label1.TabIndex = 1;
+            label1.Text = "여기는 검사이력조회화면 ";
             // 
-            // StatisticsView
+            // InspectionHistoryView
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(64, 64, 64);
             Controls.Add(label1);
-            Name = "StatisticsView";
+            Name = "InspectionHistoryView";
             Size = new Size(1600, 800);
             ResumeLayout(false);
             PerformLayout();
