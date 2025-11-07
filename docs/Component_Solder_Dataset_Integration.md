@@ -209,7 +209,7 @@ python yolo/train_complete_pcb.py
 ```
 
 학습 설정:
-- **모델**: YOLOv8l (현재 사용 중)
+- **모델**: YOLOv11m (현재 사용 중)
 - **Epochs**: 300 (Early stopping patience=100)
 - **Batch size**: 16 (RTX 4080 Super)
 - **데이터**: 6,000+ 이미지 (통합 후)

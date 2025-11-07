@@ -1,7 +1,7 @@
-# Phase 1: YOLO v8 환경 구축 및 테스트 가이드 ⭐ (이중 모델 아키텍처)
+# Phase 1: YOLO v11m 환경 구축 및 테스트 가이드 ⭐ (이중 모델 아키텍처)
 
 ## 목표
-WSL2 환경에서 YOLO v8을 설치하고 기본 테스트를 완료하여 프로젝트 개발 환경을 준비합니다.
+WSL2 환경에서 YOLO v11m을 설치하고 기본 테스트를 완료하여 프로젝트 개발 환경을 준비합니다.
 
 **프로젝트 아키텍처**: 이중 YOLO 모델
 - **Component Model**: FPIC-Component 데이터셋 (25개 클래스, 6,260 이미지)
@@ -123,7 +123,7 @@ CUDA version: N/A
 
 ---
 
-## Step 4: YOLO v8 (Ultralytics) 설치
+## Step 4: YOLO v11m (Ultralytics) 설치
 
 ### 4-1. Ultralytics 패키지 설치
 
@@ -156,7 +156,7 @@ python -c "from ultralytics import YOLO; print(YOLO.__version__)"
 
 ---
 
-## Step 5: YOLO v8 기본 테스트
+## Step 5: YOLO v11m 기본 테스트
 
 ### 5-1. 사전 학습된 모델로 이미지 추론
 
@@ -322,7 +322,7 @@ pip freeze > requirements.txt
 torch>=2.0.0
 torchvision>=0.15.0
 
-# YOLO v8 (이중 모델 아키텍처)
+# YOLO v11m (이중 모델 아키텍처)
 ultralytics>=8.0.0
 
 # 컴퓨터 비전
@@ -402,17 +402,17 @@ for model_name in models:
 | YOLOv8n | 3.2M | 37.3% | 250+ FPS | <1GB | 실시간 추론, 임베디드 |
 | YOLOv8s | 11.2M | 44.9% | 180+ FPS | 1-2GB | 균형잡힌 성능 |
 | YOLOv8m | 25.9M | 50.2% | 130+ FPS | 2-4GB | 정확도 우선 |
-| **YOLOv8l** | **43.7M** | **52.9%** | **90+ FPS** | **3-5GB** | **고성능 PCB 검사** ⭐ |
+| **YOLOv11m** | **43.7M** | **52.9%** | **90+ FPS** | **3-5GB** | **고성능 PCB 검사** ⭐ |
 | YOLOv8x | 68.2M | 53.9% | 70+ FPS | 4-6GB | 최고 정확도 필요 |
 
 **PCB 프로젝트 권장 (RTX 4080 Super 기준)**:
-- **YOLOv8l (Large)** - 정확도와 속도의 최적 균형 ⭐⭐⭐⭐⭐
+- **YOLOv11m (Large)** - 정확도와 속도의 최적 균형 ⭐⭐⭐⭐⭐
 - YOLOv8x (Extra Large) - 최고 정확도 필요 시 ⭐⭐⭐⭐
 
 **이중 모델 아키텍처 고려사항**:
 - RTX 4080 Super (16GB VRAM)로 **두 모델 동시 로드 가능**
-- Component Model (YOLOv8l): ~5-6GB VRAM
-- Solder Model (YOLOv8l): ~4-5GB VRAM
+- Component Model (YOLOv11m): ~5-6GB VRAM
+- Solder Model (YOLOv11m): ~4-5GB VRAM
 - **총 VRAM 사용량**: ~8GB (여유 충분)
 
 **이유**:
@@ -531,7 +531,7 @@ mkdir -p results logs
 
 ---
 
-## 유용한 YOLO v8 명령어 모음
+## 유용한 YOLO v11m 명령어 모음
 
 ### 모델 추론
 
@@ -606,7 +606,7 @@ yolo export model=yolov8n.pt format=engine
 
 **주요 변경사항 (v2.0)**:
 - ✅ 이중 YOLO 모델 아키텍처 적용
-- ✅ Anomalib 제거 (YOLO v8 두 모델만 사용)
+- ✅ Anomalib 제거 (YOLO v11m 두 모델만 사용)
 - ✅ Component Model + Solder Model 독립 학습
 - ✅ VRAM 요구사항 업데이트 (~8GB for dual models)
 - ✅ Flask 서버 결과 융합 방식 설명 추가
