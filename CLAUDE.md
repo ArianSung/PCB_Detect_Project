@@ -328,7 +328,10 @@ patience: 30
    - AI 모델: 이중 YOLOv11l (Large) 모델
      - 모델 1: FPIC-Component (부품 검출, 25개 클래스)
      - 모델 2: SolDef_AI (납땜 불량, 5-6개 클래스)
-   - 학습 시 VRAM: 6-8GB (모델당 3-4GB)
+   - **학습 시 VRAM (실제 측정)**:
+     - batch=16, imgsz=640: **12-14GB** (권장 ✅)
+     - batch=32, imgsz=640: **18GB** (스와핑 발생 → 매우 느림 ❌)
+     - ⚠️ 주의: 이론상 예상치보다 실제 사용량이 1.5배 높음 (optimizer state, gradient, 활성화 맵)
    - 추론 시 VRAM: 6-8GB (두 모델 동시 로드)
 2. **네트워크 설정**:
    - **로컬 네트워크** (선택): 모든 장비 동일 네트워크 (Tailscale 100.64.1.x(로컬 예비: 192.168.0.x))
@@ -349,7 +352,13 @@ patience: 30
 4. **방화벽**:
    - 로컬: Flask 포트 5000, MySQL 포트 3306 오픈
    - 원격 (Tailscale): 자동 처리 (설정 불필요)
-5. **GPU 최적화**: FP16 (Half Precision) 사용 강력 권장 (VRAM 50% 절약 + 속도 1.5배 향상)
+5. **GPU 최적화**:
+   - **FP16 (Mixed Precision)**: `amp=True` 사용 권장
+     - VRAM 절약: 이론상 50%이나 실제 20-30% (optimizer state는 FP32 유지)
+     - 속도 향상: 1.3-1.5배
+   - **Gradient Accumulation**: 큰 배치 효과 얻으면서 VRAM 절약
+     - 예: batch=16 + accumulate=2 = 효과적 배치 32
+     - VRAM: 12GB 유지, 성능: 배치 32와 유사
 6. **실시간 성능**:
    - 목표: < 300ms (디팔렛타이저 분류 시간 고려, 2.5초 허용)
    - 예상 성능 (YOLOv11l 기준): 60-100ms

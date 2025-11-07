@@ -10,7 +10,10 @@ data: data/pcb_defects.yaml  # 데이터셋 설정 파일 경로
 
 # 학습 하이퍼파라미터
 epochs: 150  # 학습 epoch 수
-batch_size: 32  # RTX 4080 Super (16GB VRAM) - 기본 16에서 증가 가능
+batch_size: 16  # RTX 4080 Super (16GB VRAM) 최적 배치
+# ⚠️ 중요: batch=32는 이론상 가능하나 실제 VRAM 18GB 사용 → 스와핑 발생 → 매우 느림
+# batch=16 권장: ~12GB 사용, VRAM 여유 4GB, 학습 속도 안정적
+# batch=32 대신 Gradient Accumulation 사용 권장 (accumulate=2)
 image_size: 640  # 입력 이미지 크기 (640x640)
 workers: 8  # 데이터 로딩 워커 수
 
