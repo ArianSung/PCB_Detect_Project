@@ -5,24 +5,24 @@
 Flask 서버로 웹캠 프레임을 전송하여 웹 브라우저에서 실시간으로 확인
 
 사용법:
-    # 단일 웹캠 (좌측 또는 우측)
-    python3 test_webcam_stream.py left 0 http://100.64.1.1:5000
+    # 단일 웹캠 (좌측)
+    python3 test_webcam_stream.py --mode left --camera 0 --server http://100.123.23.111:5000
 
-    # 양면 웹캠 동시 전송
-    python3 test_webcam_stream.py dual 0 1 http://100.64.1.1:5000
+    # 양면 웹캠 동시 전송 (1 FPS)
+    python3 test_webcam_stream.py --mode dual --left 0 --right 1 --server http://100.123.23.111:5000
 
-    # 30 FPS로 전송
-    python3 test_webcam_stream.py dual 0 1 http://100.64.1.1:5000 --fps 30
+    # 양면 웹캠 (30 FPS)
+    python3 test_webcam_stream.py --mode dual --left 0 --right 1 --server http://100.123.23.111:5000 --fps 30
 
-    # 환경 변수 사용
-    SERVER_URL=http://192.168.0.100:5000 python3 test_webcam_stream.py left 0
+    # 환경 변수 사용 (SERVER_URL)
+    export SERVER_URL=http://100.123.23.111:5000
+    python3 test_webcam_stream.py --mode dual --left 0 --right 1 --fps 30
 """
 
 import cv2
 import requests
 import base64
 import time
-import sys
 import os
 import argparse
 from datetime import datetime
@@ -225,28 +225,39 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 사용 예시:
-  # 단일 웹캠 (1 FPS, 기본값)
-  python3 test_webcam_stream.py left 0 http://100.123.23.111:5000
+  # 단일 웹캠 (좌측, 1 FPS)
+  python3 test_webcam_stream.py --mode left --camera 0 --server http://100.123.23.111:5000
 
   # 양면 웹캠 (1 FPS)
-  python3 test_webcam_stream.py dual 0 1 http://100.123.23.111:5000
+  python3 test_webcam_stream.py --mode dual --left 0 --right 1 --server http://100.123.23.111:5000
 
   # 양면 웹캠 (30 FPS)
-  python3 test_webcam_stream.py dual 0 1 http://100.123.23.111:5000 --fps 30
+  python3 test_webcam_stream.py --mode dual --left 0 --right 1 --server http://100.123.23.111:5000 --fps 30
+
+  # 서버 URL 기본값 사용 (환경변수 SERVER_URL 또는 100.64.1.1)
+  python3 test_webcam_stream.py --mode dual --left 0 --right 1 --fps 30
 
 웹 브라우저 확인:
   http://서버주소:5000/viewer
         '''
     )
 
-    # 위치 인자
-    parser.add_argument('mode', choices=['left', 'right', 'dual'],
+    # 필수 인자
+    parser.add_argument('--mode', required=True, choices=['left', 'right', 'dual'],
                        help='카메라 모드 (left: 좌측 단일, right: 우측 단일, dual: 양면)')
-    parser.add_argument('camera_index', type=int, nargs='+',
-                       help='웹캠 장치 인덱스 (단일: 1개, dual: 2개)')
-    parser.add_argument('server_url', nargs='?',
+    parser.add_argument('--server', dest='server_url',
                        default=os.getenv('SERVER_URL', 'http://100.64.1.1:5000'),
-                       help='Flask 서버 URL (기본값: http://100.64.1.1:5000)')
+                       help='Flask 서버 URL (기본값: 환경변수 SERVER_URL 또는 http://100.64.1.1:5000)')
+
+    # 단일 웹캠용 인자
+    parser.add_argument('--camera', type=int,
+                       help='단일 웹캠 장치 인덱스 (--mode left 또는 right일 때 사용)')
+
+    # 양면 웹캠용 인자
+    parser.add_argument('--left', type=int,
+                       help='좌측 웹캠 장치 인덱스 (--mode dual일 때 사용)')
+    parser.add_argument('--right', type=int,
+                       help='우측 웹캠 장치 인덱스 (--mode dual일 때 사용)')
 
     # 옵션 인자
     parser.add_argument('--fps', type=int, default=1,
@@ -254,29 +265,25 @@ def main():
 
     args = parser.parse_args()
 
-    # 인자 검증
     mode = args.mode
-    camera_indices = args.camera_index
     server_url = args.server_url
     fps = args.fps
 
     if mode in ['left', 'right']:
         # 단일 웹캠 모드
-        if len(camera_indices) != 1:
-            parser.error(f"단일 웹캠 모드는 카메라 인덱스 1개가 필요합니다 (입력: {len(camera_indices)}개)")
+        if args.camera is None:
+            parser.error(f"--mode {mode}일 때는 --camera 옵션이 필요합니다")
 
-        camera_index = camera_indices[0]
         streamer = WebcamStreamer(server_url)
-        streamer.stream_single_camera(mode, camera_index, fps=fps)
+        streamer.stream_single_camera(mode, args.camera, fps=fps)
 
     elif mode == 'dual':
         # 양면 웹캠 모드
-        if len(camera_indices) != 2:
-            parser.error(f"양면 웹캠 모드는 카메라 인덱스 2개가 필요합니다 (입력: {len(camera_indices)}개)")
+        if args.left is None or args.right is None:
+            parser.error("--mode dual일 때는 --left와 --right 옵션이 모두 필요합니다")
 
-        left_index, right_index = camera_indices
         streamer = WebcamStreamer(server_url)
-        streamer.stream_dual_camera(left_index, right_index, fps=fps)
+        streamer.stream_dual_camera(args.left, args.right, fps=fps)
 
 
 if __name__ == '__main__':
