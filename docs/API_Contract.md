@@ -223,8 +223,8 @@ Content-Type: application/json
 **설명**: 좌우 카메라 프레임을 이중 YOLO 모델로 동시에 검사하고 결과 융합
 
 **아키텍처**:
-- **좌측 카메라 (left_frame)** → Component Model (FPIC-Component, 25 클래스)
-- **우측 카메라 (right_frame)** → Solder Model (SolDef_AI, 5-6 클래스)
+- **좌측 카메라 (left_image)** → Component Model (FPIC-Component, 25 클래스)
+- **우측 카메라 (right_image)** → Solder Model (SolDef_AI, 5-6 클래스)
 - **Flask 서버**: 결과 융합 로직 (severity-based fusion)
 
 #### 요청 (Request)
@@ -234,234 +234,226 @@ Host: 100.64.1.1:5000
 Content-Type: application/json
 
 {
-  "left_frame": {
-    "image": "base64_encoded_jpeg_string",
-    "timestamp": "2025-10-31T14:30:00"
-  },
-  "right_frame": {
-    "image": "base64_encoded_jpeg_string",
-    "timestamp": "2025-10-31T14:30:00"
-  },
-  "request_id": "uuid-v4-string"
+  "left_image": "base64_encoded_jpeg_string",
+  "right_image": "base64_encoded_jpeg_string"
 }
 ```
 
 **필드 설명:**
-- `left_frame` (object, 필수): 좌측 카메라 (부품 검출)
-  - `image` (string, 필수): Base64 인코딩된 JPEG 이미지
-  - `timestamp` (string, 필수): ISO 8601 타임스탬프
-- `right_frame` (object, 필수): 우측 카메라 (납땜 검출)
-  - `image` (string, 필수): Base64 인코딩된 JPEG 이미지
-  - `timestamp` (string, 필수): ISO 8601 타임스탬프
-- `request_id` (string, 선택): 요청 추적용 UUID
+- `left_image` (string, 필수): 좌측 카메라 Base64 인코딩된 JPEG 이미지 (부품 검출)
+- `right_image` (string, 필수): 우측 카메라 Base64 인코딩된 JPEG 이미지 (납땜 검출)
 
 #### 응답 (Response)
 
-**예시 1: 부품 불량 검출**
+**성공 (200 OK):**
 ```json
 {
-  "success": true,
-  "request_id": "uuid-v4-string",
-  "timestamp": "2025-10-31T14:30:00",
-  "inference_time_ms": 95.3,
-  "component_result": {
-    "model": "FPIC-Component",
-    "inference_time_ms": 55.2,
-    "defects": [
-      {
-        "type": "missing_component",
-        "class_name": "resistor",
-        "bbox": [120, 80, 200, 150],
-        "confidence": 0.89
-      },
-      {
-        "type": "misalignment",
-        "class_name": "IC",
-        "bbox": [300, 200, 450, 350],
-        "confidence": 0.76
-      }
-    ],
-    "total_defects": 2,
-    "severity": 2
+  "status": "ok",
+  "final_defect_type": "정상|부품불량|납땜불량|폐기",
+  "final_confidence": 0.95,
+  "left_result": {
+    "defect_type": "정상",
+    "confidence": 0.95,
+    "boxes": []
   },
-  "solder_result": {
-    "model": "SolDef_AI",
-    "inference_time_ms": 40.1,
-    "defects": [],
-    "total_defects": 0,
-    "severity": 0
+  "right_result": {
+    "defect_type": "정상",
+    "confidence": 0.95,
+    "boxes": []
   },
-  "fusion_result": {
-    "decision": "component_defect",
-    "component_severity": 2,
-    "solder_severity": 0,
-    "final_severity": 2
-  },
-  "gpio_action": {
-    "enabled": true,
-    "pin": 17,
-    "action": "activate"
-  }
-}
-```
-
-**예시 2: 납땜 불량 검출 (치명적)**
-```json
-{
-  "success": true,
-  "request_id": "uuid-v4-string",
-  "timestamp": "2025-10-31T14:30:15",
-  "inference_time_ms": 88.7,
-  "component_result": {
-    "model": "FPIC-Component",
-    "inference_time_ms": 52.3,
-    "defects": [],
-    "total_defects": 0,
-    "severity": 0
-  },
-  "solder_result": {
-    "model": "SolDef_AI",
-    "inference_time_ms": 36.4,
-    "defects": [
-      {
-        "type": "solder_bridge",
-        "bbox": [150, 100, 230, 180],
-        "confidence": 0.92
-      }
-    ],
-    "total_defects": 1,
-    "severity": 3
-  },
-  "fusion_result": {
-    "decision": "discard",
-    "component_severity": 0,
-    "solder_severity": 3,
-    "final_severity": 3,
-    "reason": "Critical defect detected: solder_bridge"
-  },
-  "gpio_action": {
-    "enabled": true,
-    "pin": 22,
-    "action": "activate"
-  }
-}
-```
-
-**예시 3: 정상 PCB**
-```json
-{
-  "success": true,
-  "request_id": "uuid-v4-string",
-  "timestamp": "2025-10-31T14:30:30",
-  "inference_time_ms": 82.1,
-  "component_result": {
-    "model": "FPIC-Component",
-    "inference_time_ms": 48.7,
-    "defects": [],
-    "total_defects": 0,
-    "severity": 0
-  },
-  "solder_result": {
-    "model": "SolDef_AI",
-    "inference_time_ms": 33.4,
-    "defects": [],
-    "total_defects": 0,
-    "severity": 0
-  },
-  "fusion_result": {
-    "decision": "normal",
-    "component_severity": 0,
-    "solder_severity": 0,
-    "final_severity": 0
-  },
-  "gpio_action": {
-    "enabled": true,
+  "gpio_signal": {
     "pin": 23,
-    "action": "activate"
-  }
+    "duration_ms": 300
+  },
+  "robot_command": {
+    "category": "NORMAL",
+    "slot": 0
+  },
+  "inference_time_ms": 85.2,
+  "timestamp": "2025-10-31T14:30:00.123456"
 }
 ```
 
-**예시 4: 양면 불량 (폐기)**
+**예시 1: 정상 PCB**
 ```json
 {
-  "success": true,
-  "request_id": "uuid-v4-string",
-  "timestamp": "2025-10-31T14:30:45",
-  "inference_time_ms": 98.5,
-  "component_result": {
-    "model": "FPIC-Component",
-    "inference_time_ms": 58.2,
-    "defects": [
-      {
-        "type": "wrong_component",
-        "class_name": "capacitor",
-        "bbox": [100, 50, 180, 120],
-        "confidence": 0.85
-      }
-    ],
-    "total_defects": 1,
-    "severity": 2
+  "status": "ok",
+  "final_defect_type": "정상",
+  "final_confidence": 0.95,
+  "left_result": {
+    "defect_type": "정상",
+    "confidence": 0.95,
+    "boxes": []
   },
-  "solder_result": {
-    "model": "SolDef_AI",
-    "inference_time_ms": 40.3,
-    "defects": [
-      {
-        "type": "poor_solder",
-        "bbox": [200, 150, 280, 220],
-        "confidence": 0.78
-      },
-      {
-        "type": "exc_solder",
-        "bbox": [350, 300, 420, 370],
-        "confidence": 0.71
-      }
-    ],
-    "total_defects": 2,
-    "severity": 2
+  "right_result": {
+    "defect_type": "정상",
+    "confidence": 0.95,
+    "boxes": []
   },
-  "fusion_result": {
-    "decision": "discard",
-    "component_severity": 2,
-    "solder_severity": 2,
-    "final_severity": 3,
-    "reason": "Both sides have moderate defects (severity >= 2)"
+  "gpio_signal": {
+    "pin": 23,
+    "duration_ms": 300
   },
-  "gpio_action": {
-    "enabled": true,
-    "pin": 22,
-    "action": "activate"
-  }
+  "robot_command": {
+    "category": "NORMAL",
+    "slot": 3
+  },
+  "inference_time_ms": 82.1,
+  "timestamp": "2025-10-31T14:30:30"
 }
 ```
 
-**결과 융합 로직** ⭐:
-
+**예시 2: 부품 불량 검출** (YOLO 모델 구현 후)
+```json
+{
+  "status": "ok",
+  "final_defect_type": "부품불량",
+  "final_confidence": 0.89,
+  "left_result": {
+    "defect_type": "부품불량",
+    "confidence": 0.89,
+    "boxes": [
+      [120, 80, 200, 150, "missing_component", 0.89],
+      [300, 200, 450, 350, "misalignment", 0.76]
+    ]
+  },
+  "right_result": {
+    "defect_type": "정상",
+    "confidence": 0.95,
+    "boxes": []
+  },
+  "gpio_signal": {
+    "pin": 17,
+    "duration_ms": 300
+  },
+  "robot_command": {
+    "category": "COMPONENT_DEFECT",
+    "slot": 1
+  },
+  "inference_time_ms": 95.3,
+  "timestamp": "2025-10-31T14:30:00"
+}
 ```
-severity 계산:
-- Level 0: 불량 없음
-- Level 1: 경미한 불량 (1-2개)
-- Level 2: 중간 불량 (3-5개)
-- Level 3: 심각한 불량 (6개 이상 or 치명적 불량)
 
-최종 판정:
-1. component_severity == 0 && solder_severity == 0 → normal
-2. component_severity >= 3 || solder_severity >= 3 → discard
-3. component_severity >= 2 && solder_severity >= 2 → discard (양면 모두 중간 이상)
-4. component_severity > solder_severity → component_defect
-5. solder_severity >= component_severity → solder_defect
+**예시 3: 납땜 불량 검출** (YOLO 모델 구현 후)
+```json
+{
+  "status": "ok",
+  "final_defect_type": "납땜불량",
+  "final_confidence": 0.92,
+  "left_result": {
+    "defect_type": "정상",
+    "confidence": 0.95,
+    "boxes": []
+  },
+  "right_result": {
+    "defect_type": "납땜불량",
+    "confidence": 0.92,
+    "boxes": [
+      [150, 100, 230, 180, "solder_bridge", 0.92]
+    ]
+  },
+  "gpio_signal": {
+    "pin": 27,
+    "duration_ms": 300
+  },
+  "robot_command": {
+    "category": "SOLDER_DEFECT",
+    "slot": 2
+  },
+  "inference_time_ms": 88.7,
+  "timestamp": "2025-10-31T14:30:15"
+}
 ```
 
-**치명적 불량 (즉시 Level 3)**:
-- Component Model: `missing_component`, `wrong_component`
-- Solder Model: `solder_bridge`
+**예시 4: 폐기 (양면 불량 또는 치명적 불량)**
+```json
+{
+  "status": "ok",
+  "final_defect_type": "폐기",
+  "final_confidence": 0.85,
+  "left_result": {
+    "defect_type": "부품불량",
+    "confidence": 0.85,
+    "boxes": [
+      [100, 50, 180, 120, "wrong_component", 0.85]
+    ]
+  },
+  "right_result": {
+    "defect_type": "납땜불량",
+    "confidence": 0.78,
+    "boxes": [
+      [200, 150, 280, 220, "poor_solder", 0.78],
+      [350, 300, 420, 370, "exc_solder", 0.71]
+    ]
+  },
+  "gpio_signal": {
+    "pin": 22,
+    "duration_ms": 300
+  },
+  "robot_command": {
+    "category": "DISCARD",
+    "slot": 0
+  },
+  "inference_time_ms": 98.5,
+  "timestamp": "2025-10-31T14:30:45"
+}
+```
 
-**최종 분류 (decision):**
-- `"normal"`: 정상 (GPIO 23)
-- `"component_defect"`: 부품 불량 (GPIO 17)
-- `"solder_defect"`: 납땜 불량 (GPIO 27)
-- `"discard"`: 폐기 (GPIO 22)
+**실패 (400 Bad Request):**
+```json
+{
+  "status": "error",
+  "error": "Missing required fields: left_image, right_image"
+}
+```
+
+**실패 (500 Internal Server Error):**
+```json
+{
+  "status": "error",
+  "error": "Inference failed: CUDA out of memory"
+}
+```
+
+**응답 필드 설명:**
+- `status` (string): 요청 상태 ("ok" 또는 "error")
+- `final_defect_type` (string): 최종 판정 결과
+  - `"정상"`: 양면 모두 정상 (GPIO 23)
+  - `"부품불량"`: 부품 불량 검출 (GPIO 17)
+  - `"납땜불량"`: 납땜 불량 검출 (GPIO 27)
+  - `"폐기"`: 양면 불량 또는 치명적 불량 (GPIO 22)
+- `final_confidence` (float): 최종 신뢰도 (0.0 ~ 1.0)
+- `left_result` (object): 좌측 카메라(부품 검출) 결과
+  - `defect_type` (string): 불량 유형
+  - `confidence` (float): 신뢰도
+  - `boxes` (array): 바운딩 박스 리스트 `[x, y, w, h, class, confidence]`
+- `right_result` (object): 우측 카메라(납땜 검출) 결과
+  - `defect_type` (string): 불량 유형
+  - `confidence` (float): 신뢰도
+  - `boxes` (array): 바운딩 박스 리스트 `[x, y, w, h, class, confidence]`
+- `gpio_signal` (object): GPIO 제어 신호
+  - `pin` (int): GPIO 핀 번호
+  - `duration_ms` (int): 신호 지속 시간 (밀리초)
+- `robot_command` (object): 로봇팔 제어 명령
+  - `category` (string): 박스 카테고리 ("NORMAL", "COMPONENT_DEFECT", "SOLDER_DEFECT", "DISCARD")
+  - `slot` (int): 슬롯 번호
+- `inference_time_ms` (float): 추론 시간 (밀리초)
+- `timestamp` (string): ISO 8601 타임스탬프
+
+**결과 융합 로직** ⭐ (YOLO 모델 구현 후):
+
+현재는 임시 로직으로 "정상" 반환. YOLO 모델 학습 완료 후 다음 로직 적용:
+1. 양면 모두 정상 → `"정상"`
+2. 좌측(부품) 불량만 검출 → `"부품불량"`
+3. 우측(납땜) 불량만 검출 → `"납땜불량"`
+4. 양면 모두 불량 또는 치명적 불량 → `"폐기"`
+
+**GPIO 핀 매핑:**
+- GPIO 23: 정상
+- GPIO 17: 부품 불량
+- GPIO 27: 납땜 불량
+- GPIO 22: 폐기
 
 ---
 
@@ -729,6 +721,7 @@ curl -X GET "http://100.64.1.1:5000/statistics?start_date=2025-10-01&end_date=20
 
 ### Python 예시 (라즈베리파이 클라이언트)
 
+**1. 단일 프레임 검사 (`/predict`)**
 ```python
 import requests
 import base64
@@ -750,8 +743,49 @@ response = requests.post(
 )
 
 result = response.json()
-print(f"분류: {result['result']['classification']}")
-print(f"신뢰도: {result['result']['confidence']}")
+print(f"분류: {result['defect_type']}")
+print(f"신뢰도: {result['confidence']}")
+print(f"GPIO 핀: {result['gpio_pin']}")
+```
+
+**2. 양면 동시 검사 (`/predict_dual`)** ⭐ 권장
+```python
+import cv2
+import requests
+import base64
+
+# 웹캠에서 양면 프레임 캡처
+cap_left = cv2.VideoCapture(0)  # 좌측 카메라 (부품)
+cap_right = cv2.VideoCapture(1)  # 우측 카메라 (납땜)
+
+ret_left, left_frame = cap_left.read()
+ret_right, right_frame = cap_right.read()
+
+# JPEG 인코딩 및 Base64 변환
+_, left_buffer = cv2.imencode('.jpg', left_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+_, right_buffer = cv2.imencode('.jpg', right_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+
+left_base64 = base64.b64encode(left_buffer).decode('utf-8')
+right_base64 = base64.b64encode(right_buffer).decode('utf-8')
+
+# API 요청
+response = requests.post(
+    "http://100.64.1.1:5000/predict_dual",
+    json={
+        "left_image": left_base64,
+        "right_image": right_base64
+    },
+    timeout=5
+)
+
+result = response.json()
+print(f"최종 판정: {result['final_defect_type']}")
+print(f"신뢰도: {result['final_confidence']}")
+print(f"GPIO 핀: {result['gpio_signal']['pin']}")
+print(f"박스 슬롯: {result['robot_command']['category']} - {result['robot_command']['slot']}")
+
+cap_left.release()
+cap_right.release()
 ```
 
 ### C# 예시 (WinForms 앱)
