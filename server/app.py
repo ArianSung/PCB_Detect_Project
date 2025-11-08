@@ -61,6 +61,12 @@ db = DatabaseManager(**DB_CONFIG)
 # yolo_model = YOLO('models/yolo/final/yolo_best.pt')
 yolo_model = None  # 임시
 
+# 테스트용: 최신 프레임 저장 (웹캠 스트리밍)
+latest_frames = {
+    'left': None,
+    'right': None
+}
+
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -461,6 +467,340 @@ def defect_type_to_category(defect_type):
         '폐기': 'DISCARD'
     }
     return category_map.get(defect_type, 'NORMAL')
+
+
+# ============================================================================
+# 테스트용 엔드포인트: 웹캠 스트리밍 뷰어
+# ============================================================================
+
+@app.route('/upload_frame', methods=['POST'])
+def upload_frame():
+    """
+    테스트용: 라즈베리파이에서 프레임 업로드
+
+    Request JSON:
+        {
+            "camera_id": "left" or "right",
+            "image": "base64_encoded_jpeg_image"
+        }
+
+    Response JSON:
+        {
+            "status": "ok",
+            "camera_id": "left",
+            "timestamp": "2025-11-08T..."
+        }
+    """
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'error': 'Request body is empty'
+            }), 400
+
+        camera_id = data.get('camera_id')
+        image_base64 = data.get('image')
+
+        if not camera_id or not image_base64:
+            return jsonify({
+                'status': 'error',
+                'error': 'Missing required fields: camera_id, image'
+            }), 400
+
+        if camera_id not in ['left', 'right']:
+            return jsonify({
+                'status': 'error',
+                'error': 'Invalid camera_id. Must be "left" or "right"'
+            }), 400
+
+        # Base64 디코딩 및 검증
+        try:
+            image_bytes = base64.b64decode(image_base64)
+            nparr = np.frombuffer(image_bytes, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+            if frame is None or frame.size == 0:
+                return jsonify({
+                    'status': 'error',
+                    'error': 'Invalid image data'
+                }), 400
+
+        except Exception as decode_error:
+            return jsonify({
+                'status': 'error',
+                'error': f'Failed to decode image: {str(decode_error)}'
+            }), 400
+
+        # 최신 프레임 저장
+        latest_frames[camera_id] = image_bytes
+
+        logger.info(f"프레임 업로드 성공: {camera_id} (shape: {frame.shape})")
+
+        return jsonify({
+            'status': 'ok',
+            'camera_id': camera_id,
+            'timestamp': datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        logger.error(f"프레임 업로드 실패: {str(e)}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/latest_frame/<camera_id>', methods=['GET'])
+def get_latest_frame(camera_id):
+    """
+    테스트용: 최신 프레임 JPEG 반환
+
+    Args:
+        camera_id: "left" or "right"
+
+    Response:
+        JPEG 이미지 (Content-Type: image/jpeg)
+    """
+    if camera_id not in ['left', 'right']:
+        return jsonify({
+            'status': 'error',
+            'error': 'Invalid camera_id. Must be "left" or "right"'
+        }), 400
+
+    frame_data = latest_frames.get(camera_id)
+
+    if frame_data is None:
+        # 프레임이 없으면 빈 이미지 반환
+        empty_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(empty_frame, f'No frame from {camera_id} camera',
+                    (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        _, buffer = cv2.imencode('.jpg', empty_frame)
+        frame_data = buffer.tobytes()
+
+    from flask import Response
+    return Response(frame_data, mimetype='image/jpeg')
+
+
+@app.route('/viewer', methods=['GET'])
+def viewer():
+    """
+    테스트용: 웹캠 스트리밍 뷰어 HTML 페이지
+    """
+    html_content = '''
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCB 웹캠 뷰어 (테스트용)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .camera-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .camera-box {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            transition: transform 0.3s ease;
+        }
+
+        .camera-box:hover {
+            transform: translateY(-5px);
+        }
+
+        .camera-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #4ade80;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .camera-frame {
+            width: 100%;
+            height: auto;
+            border-radius: 10px;
+            background: #f0f0f0;
+            min-height: 360px;
+            object-fit: contain;
+        }
+
+        .info-panel {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .info-item {
+            text-align: center;
+        }
+
+        .info-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .refresh-rate {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.8);
+            margin-top: 20px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎥 PCB 웹캠 뷰어</h1>
+        <p class="subtitle">라즈베리파이 양면 웹캠 실시간 스트리밍 (테스트용)</p>
+
+        <div class="camera-grid">
+            <div class="camera-box">
+                <div class="camera-title">
+                    <span class="status-indicator"></span>
+                    좌측 카메라 (부품 검출)
+                </div>
+                <img id="left-frame" class="camera-frame" alt="Left Camera">
+            </div>
+
+            <div class="camera-box">
+                <div class="camera-title">
+                    <span class="status-indicator"></span>
+                    우측 카메라 (납땜 검출)
+                </div>
+                <img id="right-frame" class="camera-frame" alt="Right Camera">
+            </div>
+        </div>
+
+        <div class="info-panel">
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">갱신 주기</div>
+                    <div class="info-value">1초</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">해상도</div>
+                    <div class="info-value">640x480</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">서버 상태</div>
+                    <div class="info-value" id="server-status">연결됨</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">마지막 업데이트</div>
+                    <div class="info-value" id="last-update" style="font-size: 1.2em;">-</div>
+                </div>
+            </div>
+        </div>
+
+        <p class="refresh-rate">
+            💡 팁: 라즈베리파이에서 <code>python3 raspberry_pi/test_webcam_stream.py</code> 실행 후 이 페이지를 새로고침하세요.
+        </p>
+    </div>
+
+    <script>
+        // 이미지 갱신 함수
+        function refreshImages() {
+            const timestamp = new Date().getTime();
+            const leftImg = document.getElementById('left-frame');
+            const rightImg = document.getElementById('right-frame');
+            const lastUpdate = document.getElementById('last-update');
+
+            leftImg.src = '/latest_frame/left?' + timestamp;
+            rightImg.src = '/latest_frame/right?' + timestamp;
+
+            const now = new Date();
+            lastUpdate.textContent = now.toLocaleTimeString('ko-KR');
+        }
+
+        // 1초마다 이미지 갱신
+        setInterval(refreshImages, 1000);
+
+        // 페이지 로드 시 즉시 갱신
+        refreshImages();
+
+        // 이미지 로드 오류 처리
+        document.getElementById('left-frame').onerror = function() {
+            document.getElementById('server-status').textContent = '오류';
+            document.getElementById('server-status').style.color = '#ef4444';
+        };
+    </script>
+</body>
+</html>
+    '''
+    return html_content
 
 
 if __name__ == '__main__':
