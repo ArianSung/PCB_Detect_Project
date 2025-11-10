@@ -9,11 +9,17 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
+using pcb_monitoring_program;
 
 namespace pcb_monitoring_program.Views.Dashboard
 {
+
     public partial class DashboardView : UserControl
     {
+        private int[] _hourlyNormal;
+        private int[] _hourlyPartDefect;
+        private int[] _hourlySolderDefect;
+        private int[] _hourlyScrap;
         public DashboardView()
         {
             InitializeComponent();
@@ -21,27 +27,29 @@ namespace pcb_monitoring_program.Views.Dashboard
 
         private void DashboardView_Load(object sender, EventArgs e)
         {
-            MakeRoundedPanel(cardRate, radius: 16, back: Color.FromArgb(44, 44, 44));
-            MakeRoundedPanel(cardCategory, radius: 16, back: Color.FromArgb(44, 44, 44));
-            MakeRoundedPanel(cardTarget, radius: 16, back: Color.FromArgb(44, 44, 44));
-            MakeRoundedPanel(cardBoxRate, radius: 16, back: Color.FromArgb(44, 44, 44));
-            MakeRoundedPanel(cardTrend, radius: 16, back: Color.FromArgb(44, 44, 44));
-            MakeRoundedPanel(cardFrontPCB, radius: 16, back: Color.FromArgb(44, 44, 44));
-            MakeRoundedPanel(cardBackPCB, radius: 16, back: Color.FromArgb(44, 44, 44));
-            MakeRoundedPanel(cardHourly, radius: 16, back: Color.FromArgb(44, 44, 44));
-            MakeRoundedPanel(cardLog, radius: 16, back: Color.FromArgb(44, 44, 44));
-            MakeRoundedPanel(cardTop, radius: 16, back: Color.FromArgb(44, 44, 44));
+            InitDummyData();
 
-            AddShadowRoundedPanel(cardRate, 16);
-            AddShadowRoundedPanel(cardCategory, 16);
-            AddShadowRoundedPanel(cardTarget, 16);
-            AddShadowRoundedPanel(cardBoxRate, 16);
-            AddShadowRoundedPanel(cardTrend, 16);
-            AddShadowRoundedPanel(cardFrontPCB, 16);
-            AddShadowRoundedPanel(cardBackPCB, 16);
-            AddShadowRoundedPanel(cardHourly, 16);
-            AddShadowRoundedPanel(cardLog, 16);
-            AddShadowRoundedPanel(cardTop, 16);
+            UiStyleHelper.MakeRoundedPanel(cardRate, radius: 16, back: Color.FromArgb(44, 44, 44));
+            UiStyleHelper.MakeRoundedPanel(cardCategory, radius: 16, back: Color.FromArgb(44, 44, 44));
+            UiStyleHelper.MakeRoundedPanel(cardTarget, radius: 16, back: Color.FromArgb(44, 44, 44));
+            UiStyleHelper.MakeRoundedPanel(cardBoxRate, radius: 16, back: Color.FromArgb(44, 44, 44));
+            UiStyleHelper.MakeRoundedPanel(cardTrend, radius: 16, back: Color.FromArgb(44, 44, 44));
+            UiStyleHelper.MakeRoundedPanel(cardFrontPCB, radius: 16, back: Color.FromArgb(44, 44, 44));
+            UiStyleHelper.MakeRoundedPanel(cardBackPCB, radius: 16, back: Color.FromArgb(44, 44, 44));
+            UiStyleHelper.MakeRoundedPanel(cardHourly, radius: 16, back: Color.FromArgb(44, 44, 44));
+            UiStyleHelper.MakeRoundedPanel(cardLog, radius: 16, back: Color.FromArgb(44, 44, 44));
+            UiStyleHelper.MakeRoundedPanel(cardTop, radius: 16, back: Color.FromArgb(44, 44, 44));
+
+            UiStyleHelper.AddShadowRoundedPanel(cardRate, 16);
+            UiStyleHelper.AddShadowRoundedPanel(cardCategory, 16);
+            UiStyleHelper.AddShadowRoundedPanel(cardTarget, 16);
+            UiStyleHelper.AddShadowRoundedPanel(cardBoxRate, 16);
+            UiStyleHelper.AddShadowRoundedPanel(cardTrend, 16);
+            UiStyleHelper.AddShadowRoundedPanel(cardFrontPCB, 16);
+            UiStyleHelper.AddShadowRoundedPanel(cardBackPCB, 16);
+            UiStyleHelper.AddShadowRoundedPanel(cardHourly, 16);
+            UiStyleHelper.AddShadowRoundedPanel(cardLog, 16);
+            UiStyleHelper.AddShadowRoundedPanel(cardTop, 16);
 
             SetupDefectRateChart();
             SetupDefectCategoryCharts();
@@ -51,71 +59,45 @@ namespace pcb_monitoring_program.Views.Dashboard
             SetupHourlyInspectionChart();
         }
 
-        private GraphicsPath BuildRoundPath(Rectangle rect, int radius)
+        private void InitDummyData()
         {
-            int d = radius * 2;
-            var path = new GraphicsPath();
-            path.StartFigure();
-            path.AddArc(rect.X, rect.Y, d, d, 180, 90);
-            path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
-            path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
-            path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
-            path.CloseFigure();
-            return path;
-        }
-
-        private void MakeRoundedPanel(Panel p, int radius, Color back)
-        {
-            p.BackColor = back;                // 카드 배경색
-            p.Padding = new Padding(12);       // 카드 안쪽 여백(차트와 테두리 간격)
-            p.Resize += (s, e) =>
+            // 0~23시 (길이 24)
+            _hourlyNormal = new int[]
             {
-                using (var path = BuildRoundPath(new Rectangle(0, 0, p.Width, p.Height), radius))
-                    p.Region = new Region(path);
-                p.Invalidate();
-            };
-            // 한 번 적용
-            using (var path = BuildRoundPath(new Rectangle(0, 0, p.Width, p.Height), radius))
-                p.Region = new Region(path);
-        }
-
-        private Panel AddShadowRoundedPanel(Panel target, int radius, int offset = 4, int alpha = 60)
-        {
-            var shadow = new Panel
-            {
-                Size = target.Size,
-                Location = new Point(target.Left + offset, target.Top + offset),
-                BackColor = Color.FromArgb(alpha, 0, 0, 0),
-                Enabled = false,
-                Parent = target.Parent
-            };
-            using (var path = BuildRoundPath(new Rectangle(0, 0, shadow.Width, shadow.Height), radius))
-                shadow.Region = new Region(path);
-
-            shadow.SendToBack();
-            target.BringToFront();
-
-            // 동기화
-            target.LocationChanged += (s, e) =>
-                shadow.Location = new Point(target.Left + offset, target.Top + offset);
-
-            target.Resize += (s, e) =>
-            {
-                shadow.Size = target.Size;
-                using (var path = BuildRoundPath(new Rectangle(0, 0, shadow.Width, shadow.Height), radius))
-                    shadow.Region = new Region(path);
-                shadow.Invalidate();
+                30, 32, 28, 25, 23, 24, 26, 28, 32, 35, 40, 38,
+                36, 34, 32, 30, 29, 31, 33, 37, 39, 41, 42, 40
             };
 
-            return shadow;
+            _hourlyPartDefect = new int[]
+            {
+                5, 4, 3, 4, 3, 3, 4, 5, 14, 7, 6, 5,
+                4, 4, 3, 3, 3, 4, 4, 5, 13, 5, 4, 4
+            };
+
+            _hourlySolderDefect = new int[]
+            {
+                2, 2, 1, 2, 1, 1, 1, 2, 10, 3, 3, 2,
+                2, 1, 1, 1, 1, 2, 2, 2, 8, 2, 2, 2
+            };
+
+            _hourlyScrap = new int[]
+            {
+                1, 1, 2, 1, 5, 1, 2, 1, 5, 1, 1, 2,
+                1, 3, 1, 4, 1, 1, 3, 1, 3, 1, 1, 4
+            };
         }
 
         private void SetupDefectRateChart()
         {
-            // 1) 임의 데이터 (정상 vs 불량)
-            int normalCount = 550;   // 정상
-            int defectCount = 50;    // 불량
-            int totalCount = normalCount + defectCount;  // 전체 = 600
+
+            int totalNormal = _hourlyNormal.Sum();
+            int totalPartDefect = _hourlyPartDefect.Sum();
+            int totalSolderDefect = _hourlySolderDefect.Sum();
+            int totalScrap = _hourlyScrap.Sum();
+
+            int normalCount = totalNormal;
+            int defectCount = totalPartDefect + totalSolderDefect + totalScrap;
+            int totalCount = normalCount + defectCount;
 
             var rateData = new (string name, int value, Color color)[]
             {
@@ -306,16 +288,20 @@ namespace pcb_monitoring_program.Views.Dashboard
 
         private void SetupDefectCategoryCharts()
         {
-            // 1) 임의 데이터 (이름, 개수, 색)
+            var chart = DefectCategoryChart;
+
+            int totalPartDefect = _hourlyPartDefect.Sum();
+            int totalSolderDefect = _hourlySolderDefect.Sum();
+            int totalScrap = _hourlyScrap.Sum();
+
             var categories = new (string name, int value, Color color)[]
             {
-                ("부품불량", 14, Color.FromArgb(238, 99, 99)),
-                ("납땜불량", 28, Color.FromArgb(255, 170, 0)),
-                ("폐기",     8, Color.FromArgb(120, 160, 255)), 
+                ("부품불량", totalPartDefect,   Color.FromArgb(238, 99, 99)),
+                ("납땜불량", totalSolderDefect, Color.FromArgb(255, 170, 0)),
+                ("폐기",     totalScrap,        Color.FromArgb(120, 160, 255)),
             };
 
             // 2) 차트 초기화
-            var chart = DefectCategoryChart;
             chart.Series.Clear();
             chart.Legends.Clear();              // ✅ 기본 레전드 제거
             chart.ChartAreas.Clear();
@@ -410,8 +396,12 @@ namespace pcb_monitoring_program.Views.Dashboard
         {
             // 1) 목표 및 실제 생산량 데이터
             int targetProduction = 1000;  // 목표 생산량
-            int actualProduction = 750;   // 실제 생산량
+            int actualProduction = _hourlyNormal.Sum();  // 실제 생산량
             int remaining = targetProduction - actualProduction;  // 미달성 = 250
+
+            if (actualProduction > targetProduction)
+                actualProduction = targetProduction;
+
 
             // 2) 차트용 데이터 (달성 vs 미달성)
             var categories = new (string name, int value, Color color)[]
@@ -584,9 +574,9 @@ namespace pcb_monitoring_program.Views.Dashboard
             // 1) 데이터: 위에서 아래로 "정상 → 부품불량 → 납땜불량"
             var boxData = new (string name, int current, int max, Color color)[]
             {
-        ("정상",     2, 3, Color.FromArgb(100, 181, 246)),
-        ("부품불량",  3, 3, Color.FromArgb(238,  99,  99)),
-        ("납땜불량",  1, 3, Color.FromArgb(255, 170,   0)),
+                ("정상",     2, 3, Color.FromArgb(100, 181, 246)),
+                ("부품불량",  3, 3, Color.FromArgb(238,  99,  99)),
+                ("납땜불량",  1, 3, Color.FromArgb(255, 170,   0)),
             };
 
             var chart = BoxRateChart;
@@ -676,17 +666,18 @@ namespace pcb_monitoring_program.Views.Dashboard
             area.BackColor = Color.Transparent;
 
             // X축: 일자 (1~10 예시)
-            area.AxisX.Minimum = 1;
-            area.AxisX.Maximum = 10;
+            area.AxisX.Minimum = 0;
+            area.AxisX.Maximum = 23;
             area.AxisX.Interval = 1;
             area.AxisX.MajorGrid.Enabled = false;
             area.AxisX.LabelStyle.ForeColor = Color.Gainsboro;
             area.AxisX.LabelStyle.Font = new Font("맑은 고딕", 9);
+            area.AxisX.LabelStyle.Format = "0시";
 
             // Y축: 불량률(%) 0~100
             area.AxisY.Minimum = 0;
-            area.AxisY.Maximum = 100;
-            area.AxisY.Interval = 20;
+            area.AxisY.Maximum = 60;
+            area.AxisY.Interval = 10;
             area.AxisY.MajorGrid.Enabled = true;
             area.AxisY.MajorGrid.LineColor = Color.FromArgb(70, 70, 70);
             area.AxisY.LabelStyle.ForeColor = Color.Gainsboro;
@@ -757,26 +748,36 @@ namespace pcb_monitoring_program.Views.Dashboard
             chart.Series.Add(sOutlier);
 
             // 4) 임시 데이터 (나중에 DB 값으로 바꾸면 됨)
-            double[] defectRates = { 30, 40, 35, 50, 65, 55, 45, 70, 80, 50 }; // 1~10일 불량률
-            double avg = defectRates.Average();   // using System.Linq 필요
-            double ucl = 70;                      // 예시 상한선
-            double lcl = 30;                      // 예시 하한선
+            double[] defectRates = new double[24];
 
-            for (int day = 1; day <= defectRates.Length; day++)
+            for (int hour = 0; hour < 24; hour++)
             {
-                double y = defectRates[day - 1];
+                int normal = _hourlyNormal[hour];
+                int part = _hourlyPartDefect[hour];
+                int solder = _hourlySolderDefect[hour];
+                int scrap = _hourlyScrap[hour];
 
-                // 실제 값 라인
-                sActual.Points.AddXY(day, y);
+                int total = normal + part + solder + scrap;
+                int defects = part + solder + scrap;
 
-                // 평균 / 상한선 / 하한선은 매일 같은 값으로 수평선 그림
-                sAvg.Points.AddXY(day, avg);
-                sUcl.Points.AddXY(day, ucl);
-                sLcl.Points.AddXY(day, lcl);
+                defectRates[hour] = total == 0 ? 0 : defects * 100.0 / total;
+            }
+            double avg = defectRates.Average();
+            double ucl = 30.0;                      // 예시 상한선
+            double lcl = 10.0;                      // 예시 하한선
 
-                // 상한선보다 크면 이탈 포인트 추가
+            for (int hour = 0; hour < defectRates.Length; hour++)
+            {
+                double y = defectRates[hour];
+                int x = hour;
+
+                sActual.Points.AddXY(x, y);
+                sAvg.Points.AddXY(x, avg);
+                sUcl.Points.AddXY(x, ucl);
+                sLcl.Points.AddXY(x, lcl);
+
                 if (y > ucl)
-                    sOutlier.Points.AddXY(day, y);
+                    sOutlier.Points.AddXY(x, y);
             }
 
             // 5) 레전드 기본 사용 (필요 없으면 지우거나 커스텀)
@@ -814,10 +815,11 @@ namespace pcb_monitoring_program.Views.Dashboard
             area.AxisX.MajorGrid.Enabled = false;
             area.AxisX.LabelStyle.ForeColor = Color.Gainsboro;
             area.AxisX.LabelStyle.Font = new Font("맑은 고딕", 8);
+            area.AxisX.LabelStyle.Format = "0시";
 
             // Y축: 검사 개수 (예시로 0~60)
             area.AxisY.Minimum = 0;
-            area.AxisY.Maximum = 60;
+            area.AxisY.Maximum = 80;
             area.AxisY.Interval = 10;
             area.AxisY.MajorGrid.Enabled = true;
             area.AxisY.MajorGrid.LineColor = Color.FromArgb(70, 70, 70);
@@ -863,10 +865,10 @@ namespace pcb_monitoring_program.Views.Dashboard
 
             // 4) 임시 데이터 (0~23시, 길이 24짜리 배열)
             //    나중에 DB 값으로 교체할 부분
-            int[] normal = { 30, 32, 28, 25, 23, 24, 26, 28, 32, 35, 40, 38, 36, 34, 32, 30, 29, 31, 33, 37, 39, 41, 42, 40 };
-            int[] partDefect = { 5, 4, 3, 4, 3, 3, 4, 5, 6, 7, 6, 5, 4, 4, 3, 3, 3, 4, 4, 5, 6, 5, 4, 4 };
-            int[] solderDefect = { 2, 2, 1, 2, 1, 1, 1, 2, 2, 3, 3, 2, 2, 1, 1, 1, 1, 2, 2, 2, 3, 2, 2, 2 };
-            int[] scrap = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+            int[] normal = _hourlyNormal;
+            int[] partDefect = _hourlyPartDefect;
+            int[] solderDefect = _hourlySolderDefect;
+            int[] scrap = _hourlyScrap;
 
             for (int hour = 0; hour < 24; hour++)
             {

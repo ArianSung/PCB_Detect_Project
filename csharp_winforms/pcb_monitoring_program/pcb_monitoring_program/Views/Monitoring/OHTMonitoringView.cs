@@ -10,9 +10,9 @@ using System.Windows.Forms;
 
 namespace pcb_monitoring_program.Views.Monitoring
 {
-    public partial class MonitoringView : UserControl
+    public partial class OHTMonitoringView : UserControl
     {
-        public MonitoringView()
+        public OHTMonitoringView()
         {
             InitializeComponent();
         }
