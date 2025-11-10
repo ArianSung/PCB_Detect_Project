@@ -141,6 +141,61 @@ namespace pcb_monitoring_program
                 }
             }
         }
+        public static void MakeRoundedPanel(Panel p, int radius, Color back, int padding = 12)
+        {
+            p.BackColor = back;                 // 카드 배경색
+            p.Padding = new Padding(padding); // 안쪽 여백
+
+            // 리사이즈 될 때마다 모양 다시 적용
+            p.Resize += (s, e) =>
+            {
+                using (var path = GetRoundPath(new Rectangle(0, 0, p.Width, p.Height), radius))
+                    p.Region = new Region(path);
+                p.Invalidate();
+            };
+
+            // 최초 1회 적용
+            using (var path = GetRoundPath(new Rectangle(0, 0, p.Width, p.Height), radius))
+                p.Region = new Region(path);
+        }
+
+        // ▽ 둥근 카드 뒤에 그림자 패널 하나 생성
+        public static Panel AddShadowRoundedPanel(Panel target, int radius, int offset = 4, int alpha = 60)
+        {
+            if (target.Parent == null)
+                throw new InvalidOperationException("target 패널이 아직 Parent에 추가되지 않았습니다.");
+
+            var shadow = new Panel
+            {
+                Size = target.Size,
+                Location = new Point(target.Left + offset, target.Top + offset),
+                BackColor = Color.FromArgb(alpha, 0, 0, 0),
+                Enabled = false,
+                Parent = target.Parent
+            };
+
+            using (var path = GetRoundPath(new Rectangle(0, 0, shadow.Width, shadow.Height), radius))
+                shadow.Region = new Region(path);
+
+            shadow.SendToBack();
+            target.BringToFront();
+
+            // 위치/크기 동기화
+            target.LocationChanged += (s, e) =>
+            {
+                shadow.Location = new Point(target.Left + offset, target.Top + offset);
+            };
+
+            target.Resize += (s, e) =>
+            {
+                shadow.Size = target.Size;
+                using (var path = GetRoundPath(new Rectangle(0, 0, shadow.Width, shadow.Height), radius))
+                    shadow.Region = new Region(path);
+                shadow.Invalidate();
+            };
+
+            return shadow;
+        }
     }
 }
 

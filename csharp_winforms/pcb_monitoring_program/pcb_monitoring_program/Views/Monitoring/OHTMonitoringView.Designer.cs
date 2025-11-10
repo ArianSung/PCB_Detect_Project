@@ -1,6 +1,6 @@
 ﻿namespace pcb_monitoring_program.Views.Monitoring
 {
-    partial class MonitoringView
+    partial class OHTMonitoringView
     {
         /// <summary> 
         /// 필수 디자이너 변수입니다.
@@ -28,18 +28,34 @@
         /// </summary>
         private void InitializeComponent()
         {
+            label1 = new Label();
             SuspendLayout();
             // 
-            // MonitoringView
+            // label1
+            // 
+            label1.AutoSize = true;
+            label1.Font = new Font("맑은 고딕", 26.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            label1.ForeColor = Color.White;
+            label1.Location = new Point(451, 290);
+            label1.Name = "label1";
+            label1.Size = new Size(430, 47);
+            label1.TabIndex = 2;
+            label1.Text = "여기는 OHT모니터링 화면";
+            // 
+            // OHTMonitoringView
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(64, 64, 64);
-            Name = "MonitoringView";
-            Size = new Size(1600, 900);
+            Controls.Add(label1);
+            Name = "OHTMonitoringView";
+            Size = new Size(1600, 800);
             ResumeLayout(false);
+            PerformLayout();
         }
 
         #endregion
+
+        private Label label1;
     }
 }
