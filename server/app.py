@@ -58,11 +58,19 @@ db = DatabaseManager(**DB_CONFIG)
 
 # TODO: YOLO 모델 로드 (학습 완료 후)
 # from ultralytics import YOLO
-# yolo_model = YOLO('models/yolo/final/yolo_best.pt')
-yolo_model = None  # 임시
+# yolo_component_model = YOLO('models/fpic_component_best.pt')  # 부품 검출
+# yolo_solder_model = YOLO('models/soldef_ai_best.pt')  # 납땜 불량 검출
+yolo_component_model = None  # 임시 (부품 검출 모델)
+yolo_solder_model = None  # 임시 (납땜 불량 모델)
 
 # 테스트용: 최신 프레임 저장 (웹캠 스트리밍)
 latest_frames = {
+    'left': None,
+    'right': None
+}
+
+# YOLO 어노테이션된 최신 프레임 저장 (C# WinForms 모니터링용 MJPEG 스트리밍)
+latest_annotated_frames = {
     'left': None,
     'right': None
 }
@@ -286,27 +294,61 @@ def predict_dual():
                 'error': f'Failed to process right image: {str(e)}'
             }), 400
 
-        # 4. AI 추론 (YOLO 모델 학습 완료 후 구현)
-        # TODO: 양면 추론 및 결과 융합
-        # left_result = yolo_model(left_frame)
-        # right_result = yolo_model(right_frame)
-        # final_defect_type, final_confidence = merge_dual_results(left_result, right_result)
+        # 4. AI 추론 (YOLO 이중 모델)
+        left_annotated_base64 = None
+        right_annotated_base64 = None
 
-        # 임시 응답 (모델 미구현)
-        left_result = {
-            'defect_type': '정상',
-            'confidence': 0.95,
-            'boxes': []
-        }
-        right_result = {
-            'defect_type': '정상',
-            'confidence': 0.95,
-            'boxes': []
-        }
+        # 좌측 프레임: 부품 검출 모델
+        if yolo_component_model is not None:
+            left_results = yolo_component_model(left_frame)
 
-        # 결과 융합 (임시 로직: 둘 중 하나라도 불량이면 불량)
-        final_defect_type = "정상"
-        final_confidence = min(left_result['confidence'], right_result['confidence'])
+            # YOLO 어노테이션 이미지 생성
+            left_annotated = left_results[0].plot()  # 바운딩 박스 그리기
+
+            # JPEG 인코딩 → Base64 (C# WinForms 응답용)
+            _, buffer = cv2.imencode('.jpg', left_annotated, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            left_annotated_base64 = base64.b64encode(buffer).decode('utf-8')
+
+            # MJPEG 스트리밍용 최신 프레임 업데이트
+            latest_annotated_frames['left'] = buffer.tobytes()
+
+            # 추론 결과 파싱
+            left_result = parse_yolo_results(left_results, 'component')
+            logger.info(f"좌측(부품) 추론 완료: {left_result['defect_type']}, confidence: {left_result['confidence']:.2f}")
+        else:
+            # 모델 미구현 시 임시 응답
+            left_result = {'defect_type': '정상', 'confidence': 0.95, 'boxes': []}
+            # 원본 프레임을 어노테이션 이미지로 사용
+            _, buffer = cv2.imencode('.jpg', left_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            left_annotated_base64 = base64.b64encode(buffer).decode('utf-8')
+            latest_annotated_frames['left'] = buffer.tobytes()
+
+        # 우측 프레임: 납땜 불량 모델
+        if yolo_solder_model is not None:
+            right_results = yolo_solder_model(right_frame)
+
+            # YOLO 어노테이션 이미지 생성
+            right_annotated = right_results[0].plot()
+
+            # JPEG 인코딩 → Base64
+            _, buffer = cv2.imencode('.jpg', right_annotated, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            right_annotated_base64 = base64.b64encode(buffer).decode('utf-8')
+
+            # MJPEG 스트리밍용 최신 프레임 업데이트
+            latest_annotated_frames['right'] = buffer.tobytes()
+
+            # 추론 결과 파싱
+            right_result = parse_yolo_results(right_results, 'solder')
+            logger.info(f"우측(납땜) 추론 완료: {right_result['defect_type']}, confidence: {right_result['confidence']:.2f}")
+        else:
+            # 모델 미구현 시 임시 응답
+            right_result = {'defect_type': '정상', 'confidence': 0.95, 'boxes': []}
+            _, buffer = cv2.imencode('.jpg', right_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            right_annotated_base64 = base64.b64encode(buffer).decode('utf-8')
+            latest_annotated_frames['right'] = buffer.tobytes()
+
+        # 결과 융합 (부품 + 납땜 결과 통합)
+        final_defect_type, final_confidence = merge_dual_results(left_result, right_result)
 
         # 5. GPIO 핀 결정
         gpio_pin = get_gpio_pin(final_defect_type)
@@ -363,6 +405,11 @@ def predict_dual():
             'final_confidence': final_confidence,
             'left_result': left_result,
             'right_result': right_result,
+
+            # YOLO 어노테이션 이미지 (바운딩 박스 그려진 이미지)
+            'left_annotated_image': left_annotated_base64,
+            'right_annotated_image': right_annotated_base64,
+
             'gpio_signal': {
                 'pin': gpio_pin,
                 'duration_ms': 300
@@ -467,6 +514,104 @@ def defect_type_to_category(defect_type):
         '폐기': 'DISCARD'
     }
     return category_map.get(defect_type, 'NORMAL')
+
+
+def parse_yolo_results(results, model_type):
+    """
+    YOLO 추론 결과를 파싱하여 불량 유형과 신뢰도 추출
+
+    Args:
+        results: YOLO 추론 결과 객체
+        model_type: 'component' (부품 검출) 또는 'solder' (납땜 불량)
+
+    Returns:
+        dict: {'defect_type': str, 'confidence': float, 'boxes': list}
+    """
+    boxes_list = []
+    max_confidence = 0.0
+    defect_classes = []
+
+    # 검출된 객체 순회
+    for box in results[0].boxes:
+        cls_id = int(box.cls[0])
+        confidence = float(box.conf[0])
+        xyxy = box.xyxy[0].tolist()  # [x1, y1, x2, y2]
+
+        # 클래스 이름 가져오기
+        class_name = results[0].names[cls_id]
+
+        boxes_list.append({
+            'class': class_name,
+            'confidence': confidence,
+            'bbox': xyxy
+        })
+
+        defect_classes.append(class_name)
+        max_confidence = max(max_confidence, confidence)
+
+    # 불량 유형 판정
+    if len(boxes_list) == 0:
+        defect_type = '정상'
+        confidence = 0.95
+    else:
+        # 부품 검출 모델
+        if model_type == 'component':
+            # Missing Component, Wrong Component 등이 검출되면 부품불량
+            critical_defects = ['missing_component', 'wrong_component', 'misalignment']
+            if any(cls in critical_defects for cls in defect_classes):
+                defect_type = '부품불량'
+            else:
+                defect_type = '정상'
+
+        # 납땜 불량 모델
+        elif model_type == 'solder':
+            # Cold Joint, Solder Bridge 등이 검출되면 납땜불량
+            if len(defect_classes) > 0:
+                defect_type = '납땜불량'
+            else:
+                defect_type = '정상'
+        else:
+            defect_type = '정상'
+
+        confidence = max_confidence
+
+    return {
+        'defect_type': defect_type,
+        'confidence': confidence,
+        'boxes': boxes_list
+    }
+
+
+def merge_dual_results(left_result, right_result):
+    """
+    좌측(부품) + 우측(납땜) 추론 결과를 융합하여 최종 판정
+
+    Args:
+        left_result: 좌측 추론 결과 {'defect_type': str, 'confidence': float, ...}
+        right_result: 우측 추론 결과 {'defect_type': str, 'confidence': float, ...}
+
+    Returns:
+        tuple: (final_defect_type: str, final_confidence: float)
+    """
+    left_defect = left_result['defect_type']
+    right_defect = right_result['defect_type']
+
+    # 우선순위: 폐기 > 부품불량 > 납땜불량 > 정상
+
+    # 1. 양쪽 모두 불량이면 폐기
+    if left_defect != '정상' and right_defect != '정상':
+        return ('폐기', min(left_result['confidence'], right_result['confidence']))
+
+    # 2. 부품불량 우선
+    if left_defect == '부품불량':
+        return (left_defect, left_result['confidence'])
+
+    # 3. 납땜불량
+    if right_defect == '납땜불량':
+        return (right_defect, right_result['confidence'])
+
+    # 4. 둘 다 정상
+    return ('정상', max(left_result['confidence'], right_result['confidence']))
 
 
 # ============================================================================
@@ -801,6 +946,63 @@ def viewer():
 </html>
     '''
     return html_content
+
+
+@app.route('/video_feed_annotated/<camera_id>', methods=['GET'])
+def video_feed_annotated(camera_id):
+    """
+    YOLO 바운딩 박스가 그려진 MJPEG 스트림
+
+    C# WinForms 모니터링 앱에서 실시간 30fps로 어노테이션된 영상 표시
+
+    Args:
+        camera_id: "left" (부품 검출) 또는 "right" (납땜 불량)
+
+    사용 예시 (C# AForge 라이브러리):
+        MJPEGStream stream = new MJPEGStream("http://100.64.1.1:5000/video_feed_annotated/left");
+        stream.Start();
+
+    Response:
+        MJPEG 스트림 (multipart/x-mixed-replace; boundary=frame)
+    """
+    if camera_id not in ['left', 'right']:
+        return jsonify({
+            'status': 'error',
+            'error': 'Invalid camera_id. Must be "left" or "right"'
+        }), 400
+
+    def generate_mjpeg_stream():
+        """MJPEG 스트림 생성기 (무한 루프)"""
+        while True:
+            frame_data = latest_annotated_frames.get(camera_id)
+
+            if frame_data is not None:
+                # multipart/x-mixed-replace 형식으로 JPEG 전송
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
+            else:
+                # 프레임이 없으면 빈 이미지 생성
+                empty_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                cv2.putText(
+                    empty_frame,
+                    f'No annotated frame from {camera_id} camera',
+                    (50, 240),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (255, 255, 255),
+                    2
+                )
+                _, buffer = cv2.imencode('.jpg', empty_frame)
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+
+            time.sleep(0.033)  # 30fps = 33ms
+
+    from flask import Response
+    return Response(
+        generate_mjpeg_stream(),
+        mimetype='multipart/x-mixed-replace; boundary=frame'
+    )
 
 
 if __name__ == '__main__':

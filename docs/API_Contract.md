@@ -1019,6 +1019,186 @@ Content-Type: application/json
 
 ---
 
+### 10. 실시간 YOLO 어노테이션 영상 스트리밍 ⭐ 신규
+
+**엔드포인트**: `/video_feed_annotated/<camera_id>`
+**메서드**: `GET`
+**설명**: YOLO 바운딩 박스가 그려진 실시간 MJPEG 스트림 (C# WinForms 모니터링용)
+
+#### URL 파라미터
+- `camera_id` (required): 카메라 ID
+  - `left`: 좌측 카메라 (부품 검출 결과)
+  - `right`: 우측 카메라 (납땜 불량 결과)
+
+#### 요청 예시
+
+**좌측 카메라 (부품 검출):**
+```http
+GET /video_feed_annotated/left HTTP/1.1
+Host: 100.64.1.1:5000
+```
+
+**우측 카메라 (납땜 불량):**
+```http
+GET /video_feed_annotated/right HTTP/1.1
+Host: 100.64.1.1:5000
+```
+
+#### 응답 (200 OK)
+
+**Content-Type**: `multipart/x-mixed-replace; boundary=frame`
+
+**응답 형식** (무한 스트림):
+```
+--frame
+Content-Type: image/jpeg
+
+[JPEG 이미지 데이터 - 바운딩 박스 포함]
+--frame
+Content-Type: image/jpeg
+
+[JPEG 이미지 데이터]
+--frame
+...
+(30fps 무한 반복)
+```
+
+#### 응답 특징
+
+- **30fps 실시간 스트림**: 33ms 간격으로 JPEG 이미지 전송
+- **YOLO 어노테이션 포함**:
+  - 바운딩 박스: 검출된 불량 영역 표시
+  - 클래스 이름: "cold_joint", "missing_component" 등
+  - 신뢰도: 0.87 → "87%" 표시
+- **색상 코딩**: 클래스별로 다른 색상 (YOLO 기본 팔레트)
+- **프레임 크기**: 640×480 JPEG (품질 85)
+
+#### 에러 응답
+
+**잘못된 camera_id (400 Bad Request)**:
+```json
+{
+  "status": "error",
+  "error": "Invalid camera_id. Must be \"left\" or \"right\""
+}
+```
+
+#### C# 클라이언트 예제 (AForge.Video)
+
+**NuGet 패키지 설치:**
+```bash
+Install-Package AForge.Video
+```
+
+**C# 코드:**
+```csharp
+using AForge.Video;
+
+// 좌측 카메라 스트림 (부품 검출)
+var leftStream = new MJPEGStream("http://100.64.1.1:5000/video_feed_annotated/left");
+leftStream.NewFrame += (s, e) => {
+    pictureBoxLeft.Image = (Bitmap)e.Frame.Clone();
+};
+leftStream.Start();
+
+// 우측 카메라 스트림 (납땜 불량)
+var rightStream = new MJPEGStream("http://100.64.1.1:5000/video_feed_annotated/right");
+rightStream.NewFrame += (s, e) => {
+    pictureBoxRight.Image = (Bitmap)e.Frame.Clone();
+};
+rightStream.Start();
+```
+
+#### 웹 브라우저 테스트
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>YOLO 실시간 모니터링</title>
+</head>
+<body>
+    <h1>PCB 검사 실시간 모니터링</h1>
+    <div style="display: flex; gap: 20px;">
+        <div>
+            <h2>좌측 (부품 검출)</h2>
+            <img src="http://100.64.1.1:5000/video_feed_annotated/left" width="640" height="480" />
+        </div>
+        <div>
+            <h2>우측 (납땜 불량)</h2>
+            <img src="http://100.64.1.1:5000/video_feed_annotated/right" width="640" height="480" />
+        </div>
+    </div>
+</body>
+</html>
+```
+
+#### 데이터 흐름
+
+```
+[라즈베리파이]
+   │
+   POST /upload_frame (30fps)
+   ↓
+[Flask 서버]
+   │
+   POST /predict_dual (PCB 감지 시)
+   ↓
+   ├─ YOLO 이중 모델 추론
+   ├─ 어노테이션 이미지 생성 (plot())
+   ├─ latest_annotated_frames 업데이트
+   ↓
+[C# WinForms / 웹 브라우저]
+   │
+   GET /video_feed_annotated/left (MJPEG)
+   GET /video_feed_annotated/right
+   ↓
+   ✅ 실시간 30fps 바운딩 박스 영상 표시
+```
+
+#### 네트워크 요구사항
+
+**대역폭**:
+- 640×480 JPEG (품질 85): ~30-50KB/프레임
+- 30fps × 2개 카메라 = **1.8-3.0 MB/초**
+
+**권장 환경**:
+- ✅ 로컬 LAN (100Mbps): 충분
+- ⚠️ Tailscale VPN (10-50Mbps): 주의 (2개 스트림 동시 사용 시)
+
+#### 사용 시나리오
+
+**시나리오 1: C# WinForms 모니터링 앱**
+- 관리자/운영자가 실시간으로 검사 과정 모니터링
+- 불량 발생 시 바운딩 박스로 즉시 확인
+- 30fps 부드러운 영상으로 육안 검증
+
+**시나리오 2: 웹 대시보드**
+- 원격에서 웹 브라우저로 모니터링
+- 간단한 `<img>` 태그로 구현 가능
+- 추가 플러그인 불필요
+
+**시나리오 3: 디버깅/개발**
+- YOLO 모델 성능 실시간 확인
+- 바운딩 박스 정확도 육안 검증
+- 신뢰도 임계값 튜닝
+
+#### 주의사항
+
+⚠️ **스트림은 무한 루프로 계속 전송됩니다.**
+- 클라이언트가 연결을 끊지 않는 한 계속 전송
+- 리소스 관리: 사용 후 반드시 `Stop()` 호출 (C#)
+
+⚠️ **latest_annotated_frames 의존성**
+- `/predict_dual` 또는 `/upload_frame`이 호출되어야 프레임이 업데이트됨
+- 프레임이 없으면 빈 이미지 (검은 화면 + 메시지) 전송
+
+⚠️ **멀티클라이언트 지원**
+- Flask `threaded=True` 설정으로 여러 클라이언트 동시 접속 가능
+- 하지만 네트워크 대역폭 고려 필요
+
+---
+
 ## 📝 변경 이력
 
 | 버전 | 날짜 | 변경 내용 | 변경자 |

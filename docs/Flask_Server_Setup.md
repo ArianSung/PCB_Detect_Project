@@ -2954,6 +2954,340 @@ def get_gpu_usage():
 
 ---
 
+## YOLO 어노테이션 이미지 실시간 스트리밍 ⭐ 신규
+
+C# WinForms 모니터링 앱에서 **YOLO 바운딩 박스가 그려진 영상**을 실시간 30fps로 표시하기 위한 API 및 구현 가이드입니다.
+
+### 아키텍처 개요
+
+```
+[라즈베리파이]
+   │
+   ├─► 스레드 1: 모니터링용 프레임 전송 (30fps)
+   │      POST /upload_frame
+   │      ↓
+   ├─► 스레드 2: AI 추론 요청 (PCB 감지 시만)
+   │      POST /predict_dual
+   │      ↓
+   │   [Flask 서버]
+   │      ├─ YOLO 이중 모델 추론
+   │      ├─ 어노테이션 이미지 생성 (바운딩 박스 그리기)
+   │      ├─ latest_annotated_frames 업데이트
+   │      └─ 응답에 Base64 어노테이션 이미지 포함
+   │
+   └───► [C# WinForms]
+         │
+         GET /video_feed_annotated/left (MJPEG)
+         GET /video_feed_annotated/right
+         ↓
+         ✅ 실시간 30fps 어노테이션 영상 표시
+```
+
+---
+
+### 1. `/predict_dual` API 응답 확장
+
+**기존 응답에 어노테이션 이미지 추가**:
+
+```json
+{
+  "status": "ok",
+  "final_defect_type": "납땜불량",
+  "final_confidence": 0.87,
+
+  "left_annotated_image": "base64_encoded_jpeg...",   // ✅ 신규
+  "right_annotated_image": "base64_encoded_jpeg...",  // ✅ 신규
+
+  "left_result": {
+    "defect_type": "정상",
+    "confidence": 0.95,
+    "boxes": []
+  },
+  "right_result": {
+    "defect_type": "납땜불량",
+    "confidence": 0.87,
+    "boxes": [
+      {
+        "class": "cold_joint",
+        "confidence": 0.87,
+        "bbox": [120, 80, 200, 150]
+      }
+    ]
+  },
+
+  "gpio_signal": {"pin": 27, "duration_ms": 300},
+  "inference_time_ms": 95.2
+}
+```
+
+**server/app.py 구현 (일부)**:
+
+```python
+# 좌측 프레임: 부품 검출 모델
+if yolo_component_model is not None:
+    left_results = yolo_component_model(left_frame)
+
+    # ✅ YOLO 어노테이션 이미지 생성
+    left_annotated = left_results[0].plot()  # 바운딩 박스 그리기
+
+    # ✅ JPEG → Base64 인코딩
+    _, buffer = cv2.imencode('.jpg', left_annotated, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    left_annotated_base64 = base64.b64encode(buffer).decode('utf-8')
+
+    # ✅ MJPEG 스트리밍용 최신 프레임 저장
+    latest_annotated_frames['left'] = buffer.tobytes()
+
+# 우측 프레임: 납땜 불량 모델
+if yolo_solder_model is not None:
+    right_results = yolo_solder_model(right_frame)
+    right_annotated = right_results[0].plot()
+
+    _, buffer = cv2.imencode('.jpg', right_annotated)
+    right_annotated_base64 = base64.b64encode(buffer).decode('utf-8')
+    latest_annotated_frames['right'] = buffer.tobytes()
+```
+
+---
+
+### 2. MJPEG 스트리밍 엔드포인트 (신규)
+
+**엔드포인트**: `/video_feed_annotated/<camera_id>`
+**메서드**: `GET`
+**설명**: YOLO 바운딩 박스가 그려진 실시간 MJPEG 스트림
+
+#### 요청 예시
+
+```http
+GET /video_feed_annotated/left HTTP/1.1
+Host: 100.64.1.1:5000
+```
+
+#### 응답
+
+```
+Content-Type: multipart/x-mixed-replace; boundary=frame
+
+--frame
+Content-Type: image/jpeg
+
+[JPEG 이미지 데이터 (바운딩 박스 포함)]
+--frame
+Content-Type: image/jpeg
+
+[JPEG 이미지 데이터]
+--frame
+...
+(무한 반복, 30fps)
+```
+
+#### server/app.py 구현
+
+```python
+@app.route('/video_feed_annotated/<camera_id>', methods=['GET'])
+def video_feed_annotated(camera_id):
+    """
+    YOLO 바운딩 박스가 그려진 MJPEG 스트림
+
+    Args:
+        camera_id: "left" (부품 검출) 또는 "right" (납땜 불량)
+    """
+    if camera_id not in ['left', 'right']:
+        return jsonify({'error': 'Invalid camera_id'}), 400
+
+    def generate_mjpeg_stream():
+        while True:
+            frame_data = latest_annotated_frames.get(camera_id)
+
+            if frame_data is not None:
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
+            else:
+                # 프레임 없으면 빈 이미지
+                empty_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                cv2.putText(empty_frame, f'No frame from {camera_id}',
+                           (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2)
+                _, buffer = cv2.imencode('.jpg', empty_frame)
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+
+            time.sleep(0.033)  # 30fps
+
+    return Response(generate_mjpeg_stream(),
+                   mimetype='multipart/x-mixed-replace; boundary=frame')
+```
+
+---
+
+### 3. C# WinForms에서 MJPEG 스트림 표시
+
+**필요한 NuGet 패키지**: `AForge.Video`
+
+```bash
+Install-Package AForge.Video
+```
+
+**C# 코드 예시**:
+
+```csharp
+using AForge.Video;
+using System.Drawing;
+using System.Windows.Forms;
+
+public partial class MonitoringForm : Form
+{
+    private MJPEGStream leftStreamAnnotated;
+    private MJPEGStream rightStreamAnnotated;
+
+    private void StartAnnotatedStreaming()
+    {
+        // ✅ 좌측 YOLO 어노테이션 영상
+        leftStreamAnnotated = new MJPEGStream("http://100.64.1.1:5000/video_feed_annotated/left");
+        leftStreamAnnotated.NewFrame += (sender, eventArgs) => {
+            pictureBoxLeft.Image?.Dispose();
+            pictureBoxLeft.Image = (Bitmap)eventArgs.Frame.Clone();
+        };
+        leftStreamAnnotated.Start();
+
+        // ✅ 우측 YOLO 어노테이션 영상
+        rightStreamAnnotated = new MJPEGStream("http://100.64.1.1:5000/video_feed_annotated/right");
+        rightStreamAnnotated.NewFrame += (sender, eventArgs) => {
+            pictureBoxRight.Image?.Dispose();
+            pictureBoxRight.Image = (Bitmap)eventArgs.Frame.Clone();
+        };
+        rightStreamAnnotated.Start();
+    }
+
+    private void StopStreaming()
+    {
+        leftStreamAnnotated?.Stop();
+        rightStreamAnnotated?.Stop();
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        StopStreaming();
+        base.OnFormClosing(e);
+    }
+}
+```
+
+---
+
+### 4. 라즈베리파이 멀티스레드 구조
+
+라즈베리파이에서 2개의 스레드를 동시 실행:
+
+1. **스레드 1**: 모니터링용 프레임 전송 (30fps)
+2. **스레드 2**: AI 추론 요청 (PCB 감지 시만)
+
+**예제 코드**:
+
+```python
+import threading
+import cv2
+import requests
+import base64
+import time
+
+class DualPurposeClient:
+    def __init__(self, server_url):
+        self.server_url = server_url
+
+    def monitoring_thread(self, camera_id, camera_index):
+        """모니터링용 30fps 스트리밍"""
+        cap = cv2.VideoCapture(camera_index)
+
+        while True:
+            ret, frame = cap.read()
+            if ret:
+                # /upload_frame에 전송
+                _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                image_base64 = base64.b64encode(buffer).decode('utf-8')
+
+                requests.post(
+                    f"{self.server_url}/upload_frame",
+                    json={"camera_id": camera_id, "image": image_base64},
+                    timeout=5
+                )
+
+            time.sleep(0.033)  # 30fps
+
+    def inference_thread(self, left_index, right_index):
+        """AI 추론용 (PCB 감지 시만)"""
+        cap_left = cv2.VideoCapture(left_index)
+        cap_right = cv2.VideoCapture(right_index)
+
+        while True:
+            # PCB 감지 (GPIO 센서 또는 움직임 감지)
+            if pcb_detected():
+                ret_left, left_frame = cap_left.read()
+                ret_right, right_frame = cap_right.read()
+
+                if ret_left and ret_right:
+                    # Base64 인코딩
+                    _, left_buffer = cv2.imencode('.jpg', left_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                    _, right_buffer = cv2.imencode('.jpg', right_frame)
+
+                    left_base64 = base64.b64encode(left_buffer).decode('utf-8')
+                    right_base64 = base64.b64encode(right_buffer).decode('utf-8')
+
+                    # AI 추론 요청
+                    response = requests.post(
+                        f"{self.server_url}/predict_dual",
+                        json={
+                            "left_image": left_base64,
+                            "right_image": right_base64
+                        },
+                        timeout=10
+                    )
+
+                    result = response.json()
+
+                    # GPIO 제어
+                    control_gpio(result['gpio_signal']['pin'])
+
+            time.sleep(0.1)  # 10Hz 체크
+
+# 실행
+client = DualPurposeClient("http://100.64.1.1:5000")
+
+t1 = threading.Thread(target=client.monitoring_thread, args=('left', 0), daemon=True)
+t2 = threading.Thread(target=client.monitoring_thread, args=('right', 1), daemon=True)
+t3 = threading.Thread(target=client.inference_thread, args=(0, 1), daemon=True)
+
+t1.start()
+t2.start()
+t3.start()
+
+# 메인 스레드는 대기
+while True:
+    time.sleep(1)
+```
+
+---
+
+### 5. 성능 고려사항
+
+**네트워크 대역폭**:
+- 640x480 JPEG (품질 85): ~30-50KB/프레임
+- 30fps × 2개 카메라 = **1.8-3.0 MB/초**
+- 로컬 LAN (100Mbps): 여유 충분 ✅
+- Tailscale VPN (10-50Mbps): 주의 필요 ⚠️
+
+**Flask 서버 부하**:
+- MJPEG 스트림: 별도 스레드 (threaded=True)
+- AI 추론: 독립 처리 (병렬 가능)
+- 동시 접속: C# 1대 + 웹 브라우저 테스트 = 문제없음 ✅
+
+**YOLO 추론 시간**:
+- 부품 검출 모델: 30-50ms
+- 납땜 불량 모델: 30-50ms
+- 총합 (병렬): ~60ms
+- 어노테이션 이미지 생성: +10ms
+- **합계**: 70-80ms (목표 < 300ms) ✅
+
+---
+
 ## 참고 자료
 
 - [Flask 공식 문서](https://flask.palletsprojects.com/)
@@ -2978,11 +3312,18 @@ def get_gpu_usage():
 ---
 
 **작성일**: 2025-10-28
-**최종 수정일**: 2025-10-23
-**버전**: 1.1
+**최종 수정일**: 2025-11-10
+**버전**: 1.2 ⭐
 **주요 변경사항**:
-- IP 주소 명시 (100.64.1.1, 100.64.1.2, 100.64.1.3)
-- 양면 통합 로직 명확화 (라즈베리파이 1만 GPIO 제어)
-- YOLO 클래스 이름 통일 (data/pcb_defects.yaml 참조)
-- 폴더 구조 단순화 (routes/ 제거)
-- 관련 문서 참조 추가
+- **v1.2 (2025-11-10)**:
+  - YOLO 어노테이션 이미지 실시간 스트리밍 API 추가
+  - `/predict_dual` 응답에 어노테이션 이미지 Base64 포함
+  - `/video_feed_annotated/<camera_id>` MJPEG 스트리밍 엔드포인트 추가
+  - C# WinForms에서 AForge.Video 사용 방법 추가
+  - 라즈베리파이 멀티스레드 구조 (모니터링 + 추론 분리) 추가
+- **v1.1 (2025-10-23)**:
+  - IP 주소 명시 (100.64.1.1, 100.64.1.2, 100.64.1.3)
+  - 양면 통합 로직 명확화 (라즈베리파이 1만 GPIO 제어)
+  - YOLO 클래스 이름 통일 (data/pcb_defects.yaml 참조)
+  - 폴더 구조 단순화 (routes/ 제거)
+  - 관련 문서 참조 추가

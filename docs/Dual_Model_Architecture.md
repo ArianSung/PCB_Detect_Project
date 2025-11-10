@@ -317,7 +317,187 @@ def capture_and_send():
 
 ---
 
-## 10. 결론
+## 10. YOLO 어노테이션 이미지 생성 및 스트리밍 ⭐ 신규
+
+### 10.1. 어노테이션 이미지 생성
+
+**YOLO 추론 결과를 시각화하여 바운딩 박스가 그려진 이미지 생성**:
+
+```python
+# Flask 서버 (server/app.py)
+
+# 좌측: 부품 검출 모델
+left_results = yolo_component_model(left_frame)
+
+# ✅ YOLO 자체 제공 plot() 함수로 바운딩 박스 그리기
+left_annotated = left_results[0].plot()
+#   - 자동으로 클래스 이름, 신뢰도, 바운딩 박스 표시
+#   - 색상: 클래스별로 자동 할당
+#   - 반환값: NumPy 배열 (BGR, OpenCV 형식)
+
+# JPEG 인코딩
+_, buffer = cv2.imencode('.jpg', left_annotated, [cv2.IMWRITE_JPEG_QUALITY, 85])
+left_annotated_base64 = base64.b64encode(buffer).decode('utf-8')
+
+# MJPEG 스트리밍용 저장
+latest_annotated_frames['left'] = buffer.tobytes()
+```
+
+**plot() 함수 특징**:
+- ✅ 클래스 이름 + 신뢰도 자동 표시 (예: "cold_joint 87%")
+- ✅ 바운딩 박스 자동 그리기 (클래스별 색상 구분)
+- ✅ 별도 코드 불필요 (Ultralytics YOLO 기본 제공)
+
+---
+
+### 10.2. 이중 사용 목적 (Dual Purpose)
+
+어노테이션 이미지는 **2가지 방식**으로 활용됩니다:
+
+#### 1. REST API 응답 (즉시 사용)
+
+**`/predict_dual` 응답에 Base64 인코딩된 어노테이션 이미지 포함**:
+
+```json
+{
+  "status": "ok",
+  "final_defect_type": "납땜불량",
+
+  "left_annotated_image": "base64_jpeg_data...",   // ✅ 부품 검출 결과 이미지
+  "right_annotated_image": "base64_jpeg_data...",  // ✅ 납땜 불량 결과 이미지
+
+  "gpio_signal": {"pin": 27}
+}
+```
+
+**용도**: AI 추론 직후 결과를 즉시 확인 (C# 또는 웹 대시보드)
+
+---
+
+#### 2. MJPEG 스트리밍 (실시간 모니터링)
+
+**`/video_feed_annotated/<camera_id>` 엔드포인트**:
+
+```python
+@app.route('/video_feed_annotated/<camera_id>')
+def video_feed_annotated(camera_id):
+    """30fps MJPEG 스트림"""
+    def generate():
+        while True:
+            frame_data = latest_annotated_frames.get(camera_id)
+            if frame_data:
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
+            time.sleep(0.033)  # 30fps
+
+    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
+```
+
+**용도**: C# WinForms 모니터링 앱에서 실시간 30fps 영상 표시
+
+---
+
+### 10.3. 데이터 흐름 (업데이트)
+
+```
+[라즈베리파이 1, 2]
+   │
+   ├─► 스레드 1: 모니터링용 (30fps)
+   │      POST /upload_frame
+   │      ↓
+   │   [latest_frames 업데이트]
+   │
+   └─► 스레드 2: AI 추론 (PCB 감지 시)
+          POST /predict_dual
+          ↓
+       [Flask 서버]
+          ├─ left_frame → component_model(좌측)
+          ├─ right_frame → solder_model(우측)
+          │
+          ├─ ✅ left_annotated = left_results[0].plot()
+          ├─ ✅ right_annotated = right_results[0].plot()
+          │
+          ├─ ✅ latest_annotated_frames['left'] = left_annotated
+          ├─ ✅ latest_annotated_frames['right'] = right_annotated
+          │
+          ├─ 결과 융합 로직
+          ├─ GPIO 핀 결정
+          │
+          └─ 응답:
+             {
+               "final_defect_type": "...",
+               "left_annotated_image": "base64...",  ✅
+               "right_annotated_image": "base64..." ✅
+             }
+
+[C# WinForms]
+   │
+   GET /video_feed_annotated/left (MJPEG)
+   GET /video_feed_annotated/right
+   ↓
+   ✅ 실시간 30fps 바운딩 박스 영상 표시
+```
+
+---
+
+### 10.4. C# WinForms 통합
+
+**AForge.Video 라이브러리 사용**:
+
+```csharp
+using AForge.Video;
+
+public partial class MonitoringForm : Form
+{
+    private MJPEGStream leftStream;
+    private MJPEGStream rightStream;
+
+    private void StartStreaming()
+    {
+        // ✅ YOLO 어노테이션 영상 (바운딩 박스 포함)
+        leftStream = new MJPEGStream("http://100.64.1.1:5000/video_feed_annotated/left");
+        leftStream.NewFrame += (s, e) => {
+            pictureBoxLeft.Image = (Bitmap)e.Frame.Clone();
+        };
+        leftStream.Start();
+
+        rightStream = new MJPEGStream("http://100.64.1.1:5000/video_feed_annotated/right");
+        rightStream.NewFrame += (s, e) => {
+            pictureBoxRight.Image = (Bitmap)e.Frame.Clone();
+        };
+        rightStream.Start();
+    }
+}
+```
+
+**결과**:
+- ✅ 부품 불량: 빨간색 박스 + "missing_component 95%"
+- ✅ 납땜 불량: 파란색 박스 + "cold_joint 87%"
+- ✅ 실시간 30fps 영상
+
+---
+
+### 10.5. 성능 영향
+
+**어노테이션 이미지 생성 오버헤드**:
+- YOLO plot() 함수: **5-10ms** (매우 빠름)
+- JPEG 인코딩: **2-5ms**
+- Base64 인코딩: **1-2ms**
+- **총합**: **8-17ms**
+
+**전체 추론 시간**:
+- 부품 모델: 30-50ms
+- 납땜 모델: 30-50ms
+- 어노테이션: +10ms
+- **합계**: **70-110ms** (목표 < 300ms) ✅
+
+**메모리 사용**:
+- 어노테이션 프레임 저장: 640×480×3 = ~0.9MB (2개 = 1.8MB)
+- 영향 미미 (VRAM은 GPU에만 사용) ✅
+
+---
+
+## 11. 결론
 
 **이중 모델 + 결과 융합 방식은 충분히 실용적입니다!**
 

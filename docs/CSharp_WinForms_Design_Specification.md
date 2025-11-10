@@ -156,6 +156,212 @@ private void InitializeMenuByRole()
 }
 ```
 
+#### 실시간 카메라 영상 표시 (YOLO 어노테이션) ⭐ 신규
+
+**주요 기능:**
+- Flask 서버의 MJPEG 스트림을 통해 **YOLO 바운딩 박스가 그려진 실시간 영상** 표시
+- 좌측 카메라: 부품 검출 결과 (FPIC-Component)
+- 우측 카메라: 납땜 불량 결과 (SolDef_AI)
+- 30fps 실시간 스트리밍
+- 불량 발생 시 바운딩 박스 + 클래스 이름 + 신뢰도 표시
+
+**필요한 NuGet 패키지:**
+```bash
+Install-Package AForge.Video
+```
+
+**UI 구성:**
+```
+┌────────────────────────────────────────────────────┐
+│  MainForm (메인 대시보드)                           │
+├────────────────────────────────────────────────────┤
+│  ┌──────────────────┐   ┌──────────────────┐       │
+│  │ 좌측 카메라       │   │ 우측 카메라       │       │
+│  │ (부품 검출)       │   │ (납땜 불량)       │       │
+│  │                  │   │                  │       │
+│  │  PictureBox      │   │  PictureBox      │       │
+│  │  640x480         │   │  640x480         │       │
+│  │                  │   │                  │       │
+│  │  ✅ 바운딩 박스    │   │  ✅ 바운딩 박스    │       │
+│  │  ✅ 클래스 이름    │   │  ✅ 클래스 이름    │       │
+│  └──────────────────┘   └──────────────────┘       │
+│                                                    │
+│  [시작] [중지]                                      │
+└────────────────────────────────────────────────────┘
+```
+
+**구현 코드:**
+
+```csharp
+using AForge.Video;
+using System;
+using System.Drawing;
+using System.Windows.Forms;
+
+public partial class MainForm : Form
+{
+    private MJPEGStream leftCameraStream;
+    private MJPEGStream rightCameraStream;
+
+    private const string SERVER_URL = "http://100.64.1.1:5000";
+
+    public MainForm()
+    {
+        InitializeComponent();
+        InitializeCameraStreams();
+    }
+
+    private void InitializeCameraStreams()
+    {
+        // 좌측 카메라 (부품 검출 어노테이션)
+        leftCameraStream = new MJPEGStream($"{SERVER_URL}/video_feed_annotated/left");
+        leftCameraStream.NewFrame += LeftCamera_NewFrame;
+        leftCameraStream.VideoSourceError += CameraStream_Error;
+
+        // 우측 카메라 (납땜 불량 어노테이션)
+        rightCameraStream = new MJPEGStream($"{SERVER_URL}/video_feed_annotated/right");
+        rightCameraStream.NewFrame += RightCamera_NewFrame;
+        rightCameraStream.VideoSourceError += CameraStream_Error;
+    }
+
+    private void LeftCamera_NewFrame(object sender, NewFrameEventArgs eventArgs)
+    {
+        try
+        {
+            // UI 스레드에서 실행
+            if (pictureBoxLeft.InvokeRequired)
+            {
+                pictureBoxLeft.Invoke(new Action(() =>
+                {
+                    pictureBoxLeft.Image?.Dispose();
+                    pictureBoxLeft.Image = (Bitmap)eventArgs.Frame.Clone();
+                }));
+            }
+            else
+            {
+                pictureBoxLeft.Image?.Dispose();
+                pictureBoxLeft.Image = (Bitmap)eventArgs.Frame.Clone();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError("Left camera frame error", ex);
+        }
+    }
+
+    private void RightCamera_NewFrame(object sender, NewFrameEventArgs eventArgs)
+    {
+        try
+        {
+            if (pictureBoxRight.InvokeRequired)
+            {
+                pictureBoxRight.Invoke(new Action(() =>
+                {
+                    pictureBoxRight.Image?.Dispose();
+                    pictureBoxRight.Image = (Bitmap)eventArgs.Frame.Clone();
+                }));
+            }
+            else
+            {
+                pictureBoxRight.Image?.Dispose();
+                pictureBoxRight.Image = (Bitmap)eventArgs.Frame.Clone();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError("Right camera frame error", ex);
+        }
+    }
+
+    private void CameraStream_Error(object sender, VideoSourceErrorEventArgs eventArgs)
+    {
+        Logger.LogError($"Camera stream error: {eventArgs.Description}");
+        MessageBox.Show($"카메라 스트림 오류: {eventArgs.Description}",
+                       "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+    }
+
+    private void btnStartStreaming_Click(object sender, EventArgs e)
+    {
+        try
+        {
+            leftCameraStream?.Start();
+            rightCameraStream?.Start();
+
+            btnStartStreaming.Enabled = false;
+            btnStopStreaming.Enabled = true;
+
+            Logger.LogInfo("Camera streaming started");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError("Failed to start streaming", ex);
+            MessageBox.Show("스트리밍 시작 실패", "오류",
+                           MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void btnStopStreaming_Click(object sender, EventArgs e)
+    {
+        try
+        {
+            leftCameraStream?.Stop();
+            rightCameraStream?.Stop();
+
+            btnStartStreaming.Enabled = true;
+            btnStopStreaming.Enabled = false;
+
+            Logger.LogInfo("Camera streaming stopped");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError("Failed to stop streaming", ex);
+        }
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        // 리소스 정리
+        leftCameraStream?.Stop();
+        rightCameraStream?.Stop();
+
+        leftCameraStream = null;
+        rightCameraStream = null;
+
+        pictureBoxLeft.Image?.Dispose();
+        pictureBoxRight.Image?.Dispose();
+
+        base.OnFormClosing(e);
+    }
+}
+```
+
+**PictureBox 설정 (Designer):**
+```csharp
+// pictureBoxLeft
+this.pictureBoxLeft.Size = new System.Drawing.Size(640, 480);
+this.pictureBoxLeft.SizeMode = PictureBoxSizeMode.StretchImage;
+this.pictureBoxLeft.BorderStyle = BorderStyle.FixedSingle;
+
+// pictureBoxRight
+this.pictureBoxRight.Size = new System.Drawing.Size(640, 480);
+this.pictureBoxRight.SizeMode = PictureBoxSizeMode.StretchImage;
+this.pictureBoxRight.BorderStyle = BorderStyle.FixedSingle;
+```
+
+**주요 특징:**
+- ✅ **자동 바운딩 박스 표시**: YOLO가 검출한 부품/납땜 불량이 박스로 표시됨
+- ✅ **클래스 이름 + 신뢰도**: "cold_joint 87%" 형태로 자동 표시
+- ✅ **30fps 실시간**: 부드러운 영상 스트리밍
+- ✅ **메모리 관리**: 이전 프레임 Dispose() 처리
+- ✅ **에러 처리**: 스트림 오류 시 로깅 및 사용자 알림
+
+**성능 고려사항:**
+- MJPEG 스트림: 네트워크 대역폭 ~1.8-3.0 MB/초 (2개 카메라)
+- 로컬 LAN: 문제없음 ✅
+- Tailscale VPN (원격): 10-50Mbps 필요 ⚠️
+
+---
+
 #### 박스 상태 API 모델
 
 ```csharp
