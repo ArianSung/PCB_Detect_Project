@@ -42,7 +42,8 @@
             // 
             // btn_StatisticsView
             // 
-            btn_StatisticsView.Location = new Point(3, 51);
+            btn_StatisticsView.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            btn_StatisticsView.Location = new Point(25, 51);
             btn_StatisticsView.Name = "btn_StatisticsView";
             btn_StatisticsView.Size = new Size(75, 40);
             btn_StatisticsView.TabIndex = 1;
@@ -52,11 +53,12 @@
             // 
             // btn_InspectionHistoryView
             // 
-            btn_InspectionHistoryView.Location = new Point(96, 51);
+            btn_InspectionHistoryView.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            btn_InspectionHistoryView.Location = new Point(115, 51);
             btn_InspectionHistoryView.Name = "btn_InspectionHistoryView";
             btn_InspectionHistoryView.Size = new Size(127, 40);
             btn_InspectionHistoryView.TabIndex = 2;
-            btn_InspectionHistoryView.Text = "검사이력조회";
+            btn_InspectionHistoryView.Text = "검사 이력 조회";
             btn_InspectionHistoryView.UseVisualStyleBackColor = true;
             btn_InspectionHistoryView.Click += btn_InspectionHistoryView_Click;
             // 
