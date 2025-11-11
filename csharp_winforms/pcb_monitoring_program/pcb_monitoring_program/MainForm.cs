@@ -23,7 +23,7 @@ namespace pcb_monitoring_program
     {
         private DashboardView _UcDashboard = new DashboardView();
         private MainStatisticsView _UcStatistics = new MainStatisticsView();
-        private MonitoringView _UcMonitoring = new MonitoringView();
+        private MonitoringMainView _UcMonitoring = new MonitoringMainView();
         private UserManagementView _UcUserManagement = new UserManagementView();
         private SettingView _UcSetting = new SettingView();
         public MainForm()
