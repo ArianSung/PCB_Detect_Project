@@ -14,7 +14,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="ADGV" Version="0.1.0.10" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+    <PackageReference Include="ComponentFactory.Krypton.Toolkit" Version="1.0.0" />
+    <PackageReference Include="iGrid.NET" Version="11.2.10" />
     <PackageReference Include="MySql.Data" Version="9.5.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="WinForms.DataVisualization" Version="1.10.0" />
