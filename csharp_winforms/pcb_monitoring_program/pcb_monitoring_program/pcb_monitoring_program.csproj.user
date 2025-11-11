@@ -13,6 +13,9 @@
     <Compile Update="Views\Monitoring\BoxMonitoringView.cs">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Update="Views\Monitoring\LineMonitoringView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Update="Views\Monitoring\MonitoringMainView.cs">
       <SubType>UserControl</SubType>
     </Compile>

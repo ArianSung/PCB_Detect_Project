@@ -1,6 +1,6 @@
 ﻿namespace pcb_monitoring_program.Views.Monitoring
 {
-    partial class OHTMonitoringView
+    partial class LineMonitoringView
     {
         /// <summary> 
         /// 필수 디자이너 변수입니다.
@@ -28,18 +28,21 @@
         /// </summary>
         private void InitializeComponent()
         {
-            cardOHTMonitoring = new Panel();
+            cardLineMonitoring = new Panel();
             label2 = new Label();
-            cardOHTMonitoring.SuspendLayout();
+            pictureBox1 = new PictureBox();
+            cardLineMonitoring.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             SuspendLayout();
             // 
-            // cardOHTMonitoring
+            // cardLineMonitoring
             // 
-            cardOHTMonitoring.Controls.Add(label2);
-            cardOHTMonitoring.Location = new Point(0, 38);
-            cardOHTMonitoring.Name = "cardOHTMonitoring";
-            cardOHTMonitoring.Size = new Size(1597, 715);
-            cardOHTMonitoring.TabIndex = 5;
+            cardLineMonitoring.Controls.Add(label2);
+            cardLineMonitoring.Controls.Add(pictureBox1);
+            cardLineMonitoring.Location = new Point(0, 38);
+            cardLineMonitoring.Name = "cardLineMonitoring";
+            cardLineMonitoring.Size = new Size(1597, 715);
+            cardLineMonitoring.TabIndex = 4;
             // 
             // label2
             // 
@@ -48,27 +51,38 @@
             label2.ForeColor = SystemColors.Window;
             label2.Location = new Point(52, 40);
             label2.Name = "label2";
-            label2.Size = new Size(134, 21);
+            label2.Size = new Size(136, 21);
             label2.TabIndex = 4;
-            label2.Text = "OHT Monitoring";
+            label2.Text = "LINE Monitoring";
             // 
-            // OHTMonitoringView
+            // pictureBox1
+            // 
+            pictureBox1.BackColor = Color.FromArgb(128, 128, 255);
+            pictureBox1.Location = new Point(52, 73);
+            pictureBox1.Name = "pictureBox1";
+            pictureBox1.Size = new Size(640, 616);
+            pictureBox1.TabIndex = 0;
+            pictureBox1.TabStop = false;
+            // 
+            // LineMonitoringView
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(64, 64, 64);
-            Controls.Add(cardOHTMonitoring);
-            Name = "OHTMonitoringView";
+            Controls.Add(cardLineMonitoring);
+            Name = "LineMonitoringView";
             Size = new Size(1600, 800);
-            Load += OHTMonitoringView_Load;
-            cardOHTMonitoring.ResumeLayout(false);
-            cardOHTMonitoring.PerformLayout();
+            Load += LineMonitoringView_Load;
+            cardLineMonitoring.ResumeLayout(false);
+            cardLineMonitoring.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
             ResumeLayout(false);
         }
 
         #endregion
 
-        private Panel cardOHTMonitoring;
+        private Panel cardLineMonitoring;
         private Label label2;
+        private PictureBox pictureBox1;
     }
 }
