@@ -16,5 +16,12 @@ namespace pcb_monitoring_program.Views.Monitoring
         {
             InitializeComponent();
         }
+
+        private void OHTMonitoringView_Load(object sender, EventArgs e)
+        {
+            UiStyleHelper.MakeRoundedPanel(cardOHTMonitoring, radius: 16, back: Color.FromArgb(44, 44, 44));
+
+            UiStyleHelper.AddShadowRoundedPanel(cardOHTMonitoring, 16);
+        }
     }
 }
