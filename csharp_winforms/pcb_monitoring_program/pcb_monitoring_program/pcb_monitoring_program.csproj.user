@@ -10,7 +10,16 @@
     <Compile Update="Views\Dashboard\DashboardView.cs">
       <SubType>UserControl</SubType>
     </Compile>
-    <Compile Update="Views\Monitoring\MonitoringView.cs">
+    <Compile Update="Views\Monitoring\BoxMonitoringView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Views\Monitoring\MonitoringMainView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Views\Monitoring\OHTMonitoringView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Views\Monitoring\PCBMonitoringView.cs">
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Update="Views\Settings\SettingView.cs">
