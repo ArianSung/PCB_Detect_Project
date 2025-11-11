@@ -25,6 +25,9 @@
     <Compile Update="Views\Settings\SettingView.cs">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Update="Views\Statistics\InspectionHistoryDetailForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Update="Views\Statistics\InspectionHistoryView.cs">
       <SubType>UserControl</SubType>
     </Compile>
