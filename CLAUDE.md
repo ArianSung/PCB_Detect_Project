@@ -14,8 +14,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 웹캠 2대(좌측/우측)를 통한 PCB 양면 촬영 (컨베이어 벨트 좌우 배치)
 - Flask 웹서버를 통한 실시간 프레임 전송 및 AI 추론
 - **이중 전문 YOLO v11l 모델**:
-  - **모델 1**: FPIC-Component (부품 검출, 25개 클래스)
-  - **모델 2**: SolDef_AI (납땜 불량, 5-6개 클래스)
+  - **모델 1**: 부품 검출 (자체 수집 데이터셋)
+  - **모델 2**: 납땜 불량 검출 (자체 수집 데이터셋)
 - 불량 유형에 따른 자동 분류 (부품불량/납땜불량/폐기/정상)
 
 ### 시스템 구성
@@ -23,8 +23,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - 위치: 원격지 (같은 도시 내)
   - 연결: Tailscale VPN (100.x.x.x)
   - Flask 서버 + 이중 YOLO v11l 모델 + MySQL 데이터베이스 + REST API
-  - 모델 1: FPIC-Component (부품 검출)
-  - 모델 2: SolDef_AI (납땜 불량 검출)
+  - 모델 1: 부품 검출 모델 (자체 데이터셋)
+  - 모델 2: 납땜 불량 검출 모델 (자체 데이터셋)
 - **라즈베리파이 4 (3대)**: 좌/우 웹캠 + OHT 제어 (RPi.GPIO, 모터 제어)
 - **Windows PC**: C# WinForms 모니터링 앱 (.NET 6+)
 - **네트워크**:
@@ -79,10 +79,10 @@ mysql -u root -p pcb_inspection
 ### YOLO 모델 학습
 ```bash
 # 부품 검출 모델 학습
-python yolo/train_component_model.py --data data/fpic_component/data.yaml --epochs 100 --batch 16
+python yolo/train_component_model.py --data data/custom_component/data.yaml --epochs 100 --batch 16
 
 # 납땜 불량 모델 학습
-python yolo/train_solder_model.py --data data/soldef_ai/data.yaml --epochs 100 --batch 16
+python yolo/train_solder_model.py --data data/custom_solder/data.yaml --epochs 100 --batch 16
 
 # 또는 스크립트 사용
 bash scripts/train_component_model.sh
@@ -92,10 +92,10 @@ bash scripts/train_solder_model.sh
 ### 모델 평가
 ```bash
 # 부품 검출 모델 평가
-python yolo/evaluate_yolo.py --model models/fpic_component_best.pt
+python yolo/evaluate_yolo.py --model models/component_model_best.pt
 
 # 납땜 불량 모델 평가
-python yolo/evaluate_yolo.py --model models/soldef_ai_best.pt
+python yolo/evaluate_yolo.py --model models/solder_model_best.pt
 
 # 또는
 bash scripts/evaluate.sh
@@ -122,8 +122,8 @@ pytest tests/test_dual_model.py
 [라즈베리파이 2] 웹캠(우측) ──┘     (left_frame + right_frame)
                                          │
                                          ├→ 이중 모델 병렬 추론
-                                         │  ├─ 모델 1: 부품 검출 (FPIC)
-                                         │  └─ 모델 2: 납땜 검출 (SolDef)
+                                         │  ├─ 모델 1: 부품 검출
+                                         │  └─ 모델 2: 납땜 검출
                                          │
                                          ├→ 결과 융합 (Fusion Logic)
                                          ├→ 최종 판정 (4가지)
@@ -159,16 +159,16 @@ pytest tests/test_dual_model.py
 - `docs/`: 프로젝트 문서 (모든 MD 파일)
 - `server/`: Flask 추론 서버 (GPU PC에서 실행)
 - `models/`: AI 모델 정의 및 학습된 모델 파일
-  - `fpic_component_best.pt`: 부품 검출 모델 (25개 클래스)
-  - `soldef_ai_best.pt`: 납땜 불량 모델 (5-6개 클래스)
+  - `component_model_best.pt`: 부품 검출 모델 (자체 수집 데이터셋)
+  - `solder_model_best.pt`: 납땜 불량 모델 (자체 수집 데이터셋)
 - `yolo/`: 모델 학습 스크립트
 - `raspberry_pi/`: 라즈베리파이 클라이언트 (웹캠 + GPIO)
   - `dual_camera_client.py`: 양면 동시 촬영 클라이언트
 - `csharp_winforms/`: C# WinForms 모니터링 앱
 - `database/`: MySQL 데이터베이스 스키마 및 백업
 - `data/`: 데이터셋 (raw, processed)
-  - `fpic_component/`: FPIC-Component 데이터셋 (6,260 이미지)
-  - `soldef_ai/`: SolDef_AI 데이터셋 (1,150 이미지)
+  - `custom_component/`: 자체 수집 부품 검출 데이터셋 (목표: 200-300 이미지)
+  - `custom_solder/`: 자체 수집 납땜 불량 데이터셋 (목표: 200-300 이미지)
 - `configs/`: 설정 파일 (YAML)
 
 ### 데이터 흐름
@@ -176,8 +176,8 @@ pytest tests/test_dual_model.py
 2. **라즈베리파이**: JPEG 인코딩 → Base64 변환
 3. **라즈베리파이**: HTTP POST로 양면 프레임을 Flask 서버에 전송
 4. **Flask 서버**: 디코딩 → 이중 모델 병렬 AI 추론
-   - 좌측 프레임 → 부품 검출 모델 (FPIC-Component)
-   - 우측 프레임 → 납땜 불량 모델 (SolDef_AI)
+   - 좌측 프레임 → 부품 검출 모델
+   - 우측 프레임 → 납땜 불량 모델
 5. **Flask 서버**: 결과 융합 로직으로 최종 판정 (부품불량/납땜불량/폐기/정상)
 6. **Flask 서버**: MySQL에 검사 이력 저장
 7. **Flask 서버**: 최종 판정과 함께 JSON 응답 반환
@@ -250,8 +250,8 @@ debug: false
 device: cuda  # 또는 cpu
 
 # 이중 모델 경로
-component_model_path: models/fpic_component_best.pt  # 부품 검출 모델
-solder_model_path: models/soldef_ai_best.pt          # 납땜 불량 모델
+component_model_path: models/component_model_best.pt  # 부품 검출 모델
+solder_model_path: models/solder_model_best.pt        # 납땜 불량 모델
 ```
 
 **`configs/camera_config.yaml`** (웹캠 클라이언트)
@@ -275,7 +275,7 @@ jpeg_quality: 85
 **`configs/component_training.yaml`** (부품 검출 모델 학습)
 ```yaml
 model: yolo11l.pt
-data: data/fpic_component/data.yaml
+data: data/custom_component/data.yaml  # 자체 수집 데이터셋
 epochs: 100
 batch_size: 16
 image_size: 640
@@ -289,7 +289,7 @@ patience: 30
 **`configs/solder_training.yaml`** (납땜 불량 모델 학습)
 ```yaml
 model: yolo11l.pt
-data: data/soldef_ai/data.yaml
+data: data/custom_solder/data.yaml  # 자체 수집 데이터셋
 epochs: 100
 batch_size: 16
 image_size: 640
@@ -317,7 +317,8 @@ patience: 30
 - **라즈베리파이**: `docs/RaspberryPi_Setup.md` (양면 웹캠 + GPIO)
 
 **학습 관련**
-- **데이터셋 가이드**: `docs/Dataset_Guide.md` ⭐ (FPIC-Component + SolDef_AI)
+- **데이터 수집 가이드**: `docs/Data_Collection_Guide_Simple.md` ⭐ (자체 데이터셋 촬영 및 라벨링)
+- **데이터셋 가이드**: `docs/Dataset_Guide.md` (데이터셋 준비 및 구조)
 - **YOLO 학습 가이드**: `docs/YOLO_Training_Guide.md` (이중 모델 학습)
 - **YOLO 환경 구축**: `docs/Phase1_YOLO_Setup.md`
 - **로깅 전략**: `docs/Logging_Strategy.md` (통합 로깅 및 오류 추적)
@@ -326,8 +327,8 @@ patience: 30
 1. **하드웨어 사양**:
    - GPU: NVIDIA RTX 4080 Super (16GB VRAM)
    - AI 모델: 이중 YOLOv11l (Large) 모델
-     - 모델 1: FPIC-Component (부품 검출, 25개 클래스)
-     - 모델 2: SolDef_AI (납땜 불량, 5-6개 클래스)
+     - 모델 1: 부품 검출 모델 (자체 수집 데이터셋)
+     - 모델 2: 납땜 불량 모델 (자체 수집 데이터셋)
    - **학습 시 VRAM (실제 측정)**:
      - batch=16, imgsz=640: **12-14GB** (권장 ✅)
      - batch=32, imgsz=640: **18GB** (스와핑 발생 → 매우 느림 ❌)
@@ -376,19 +377,21 @@ patience: 30
 
 ### 불량 분류 기준
 
-**부품 불량 (Component Defects)** - FPIC-Component 모델
+**부품 불량 (Component Defects)** - 모델 1
 - Missing Component (부품 누락)
 - Wrong Component (잘못된 부품)
 - Misalignment (위치 오류)
-- 25개 부품 클래스 검출
+- 기타 부품 관련 불량
+- **참고**: 클래스 수 및 세부 분류는 자체 수집 데이터에 따라 결정
 
-**납땜 불량 (Soldering Defects)** - SolDef_AI 모델
+**납땜 불량 (Soldering Defects)** - 모델 2
 - Cold Joint (냉납)
 - Solder Bridge (브릿지)
 - Insufficient Solder (땜납 부족)
 - Excess Solder (땜납 과다)
 - Solder Ball (땜납 볼)
-- Tombstone (묘비 현상)
+- 기타 납땜 관련 불량
+- **참고**: 클래스 수 및 세부 분류는 자체 수집 데이터에 따라 결정
 
 **폐기 (Discard)**
 - 심각한 부품 불량 (Missing Component 다수)
@@ -399,13 +402,17 @@ patience: 30
 - 양면 모두 불량 없음
 
 ### 개발 우선순위
-1. ✅ Phase 1-3: 데이터셋 변경 및 이중 모델 설계 (완료)
-2. 🔄 Phase 4: 이중 YOLOv11l 모델 학습 (진행 중)
-   - FPIC-Component 모델 학습 (YOLOv11l)
-   - SolDef_AI 모델 학습 (YOLOv11l)
-3. Phase 5: Flask 서버 구축 및 결과 융합 로직 구현 ⭐
-4. Phase 6: 라즈베리파이 양면 촬영 및 통합 테스트
-5. Phase 7: 문서화 및 발표 준비
+1. ✅ Phase 1-3: 이중 모델 아키텍처 설계 (완료)
+2. 🔄 Phase 4: 자체 데이터 수집 및 라벨링 (진행 중)
+   - 부품 검출 데이터셋 촬영 및 라벨링 (목표: 200-300장)
+   - 납땜 불량 데이터셋 촬영 및 라벨링 (목표: 200-300장)
+   - Roboflow를 통한 어노테이션 및 증강
+3. Phase 5: 이중 YOLOv11l 모델 학습 ⭐
+   - 부품 검출 모델 학습 (YOLOv11l)
+   - 납땜 불량 모델 학습 (YOLOv11l)
+4. Phase 6: Flask 서버 구축 및 결과 융합 로직 구현
+5. Phase 7: 라즈베리파이 양면 촬영 및 통합 테스트
+6. Phase 8: 문서화 및 발표 준비
 
 ## 클로드 코드에서의 mcp-installer를 사용한 MCP (Model Context Protocol) 설치 및 설정 가이드
 공통 주의사항

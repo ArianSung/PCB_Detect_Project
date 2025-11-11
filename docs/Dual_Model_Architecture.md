@@ -1,5 +1,13 @@
 # 이중 모델 아키텍처 설계
 
+> **⚠️ 업데이트: 자체 수집 데이터셋 사용 (2025-01-11)**
+>
+> 이 문서의 모델 파일명은 참고용입니다. 실제 사용 데이터셋:
+> - **부품 검출 모델**: 자체 촬영 데이터셋 (200-300장, Roboflow 라벨링)
+> - **납땜 불량 모델**: 자체 촬영 데이터셋 (200-300장, Roboflow 라벨링)
+>
+> 데이터 수집 가이드: `Data_Collection_Guide_Simple.md`
+
 ## 시스템 흐름
 
 ```
@@ -25,11 +33,11 @@
 ```python
 class DualModelInference:
     def __init__(self):
-        # 모델 1: 부품 검출 (25개 클래스)
-        self.component_model = YOLO('models/fpic_component_best.pt')
+        # 모델 1: 부품 검출 (자체 수집 데이터셋)
+        self.component_model = YOLO('models/component_model_best.pt')
 
-        # 모델 2: 납땜 불량 (5-6개 클래스)
-        self.solder_model = YOLO('models/soldef_ai_best.pt')
+        # 모델 2: 납땜 불량 (자체 수집 데이터셋)
+        self.solder_model = YOLO('models/solder_model_best.pt')
 
     def predict_dual(self, left_frame, right_frame):
         """양면 동시 추론"""
@@ -293,14 +301,14 @@ def capture_and_send():
 
 ## 9. 구현 순서
 
-### Phase 1: 데이터셋 다운로드 (1일)
-1. FPIC-Component 다운로드
-2. SolDef_AI 다운로드
-3. YOLO 형식 변환
+### Phase 1: 데이터셋 수집 (1일)
+1. 실제 웹캠으로 부품/납땜 이미지 촬영 (각 200-300장)
+2. Roboflow 업로드 → 라벨링 → 증강 (3배 이상)
+3. YOLO 형식 Export 후 `data/custom_component`, `data/custom_solder` 구성
 
 ### Phase 2: 모델 학습 (2-3일)
-1. 부품 검출 모델 학습 (FPIC)
-2. 납땜 불량 모델 학습 (SolDef_AI)
+1. 부품 검출 모델 학습 (`custom_component`)
+2. 납땜 불량 모델 학습 (`custom_solder`)
 3. 성능 평가
 
 ### Phase 3: Flask 서버 구현 (1일)

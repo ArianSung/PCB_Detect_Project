@@ -160,8 +160,8 @@ private void InitializeMenuByRole()
 
 **주요 기능:**
 - Flask 서버의 MJPEG 스트림을 통해 **YOLO 바운딩 박스가 그려진 실시간 영상** 표시
-- 좌측 카메라: 부품 검출 결과 (FPIC-Component)
-- 우측 카메라: 납땜 불량 결과 (SolDef_AI)
+- 좌측 카메라: 부품 검출 결과 (custom_component)
+- 우측 카메라: 납땜 불량 결과 (custom_solder)
 - 30fps 실시간 스트리밍
 - 불량 발생 시 바운딩 박스 + 클래스 이름 + 신뢰도 표시
 

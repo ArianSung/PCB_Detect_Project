@@ -12,8 +12,8 @@
 - **추론 서버 (GPU PC)**:
   - GPU: NVIDIA RTX 4080 Super (16GB VRAM)
   - **AI 모델**: 이중 YOLOv11l (Large) 모델 ⭐ 변경
-    - **모델 1**: FPIC-Component (부품 검출, 25개 클래스)
-    - **모델 2**: SolDef_AI (납땜 불량 검출, 5-6개 클래스)
+    - **모델 1**: Component Model (자체 촬영 부품 데이터셋)
+    - **모델 2**: Solder Model (자체 촬영 납땜 데이터셋)
   - 위치: 원격지 (같은 도시 내)
   - Flask 서버 실행:
     - 로컬: 100.64.1.1:5000 (선택)
@@ -170,8 +170,8 @@ def predict_dual():
     양면(좌측+우측) 동시 검사 - 이중 YOLO 모델 ⭐ 업데이트
 
     아키텍처:
-    1. 좌측 프레임 → FPIC-Component 모델 (부품 검출, 25 클래스)
-    2. 우측 프레임 → SolDef_AI 모델 (납땜 불량, 5-6 클래스)
+    1. 좌측 프레임 → Component Model (부품 검출, 프로젝트 클래스)
+    2. 우측 프레임 → Solder Model (납땜 불량, 프로젝트 클래스)
     3. 결과 융합 로직 → 최종 판정 (normal/component_defect/solder_defect/discard)
     4. 라즈베리파이 1에만 GPIO 제어 신호 전송
 
@@ -286,8 +286,8 @@ class DualModelInferenceEngine:
     이중 YOLO 모델 추론 엔진 ⭐ 업데이트
 
     아키텍처:
-    - 모델 1: FPIC-Component (부품 검출, 25 클래스)
-    - 모델 2: SolDef_AI (납땜 불량, 5-6 클래스)
+    - 모델 1: Component Model (custom_component)
+    - 모델 2: Solder Model (custom_solder)
     - 결과 융합 로직
     """
 
@@ -296,17 +296,17 @@ class DualModelInferenceEngine:
         이중 모델 초기화
 
         Args:
-            component_model_path: 부품 검출 모델 경로 (FPIC-Component)
-            solder_model_path: 납땜 불량 모델 경로 (SolDef_AI)
+            component_model_path: 부품 검출 모델 경로 (custom_component)
+            solder_model_path: 납땜 불량 모델 경로 (custom_solder)
             device: 'cuda' 또는 'cpu'
         """
         self.device = device
 
-        # 모델 1: 부품 검출 (FPIC-Component, 25 클래스)
+        # 모델 1: 부품 검출 (Component Model, custom classes)
         self.component_model = YOLO(component_model_path)
         self.component_model.to(device)
 
-        # 모델 2: 납땜 불량 (SolDef_AI, 5-6 클래스)
+        # 모델 2: 납땜 불량 (Solder Model, custom classes)
         self.solder_model = YOLO(solder_model_path)
         self.solder_model.to(device)
 
@@ -316,13 +316,13 @@ class DualModelInferenceEngine:
 
     def predict_component(self, frame):
         """
-        부품 검출 추론 (FPIC-Component 모델)
+        부품 검출 추론 (Component Model)
 
         Args:
             frame: 좌측 카메라 이미지 (부품면)
 
         Returns:
-            dict: 부품 검출 결과 (25개 클래스)
+            dict: 부품 검출 결과 (프로젝트 정의 클래스)
         """
         start_time = time.time()
 
@@ -349,13 +349,13 @@ class DualModelInferenceEngine:
 
     def predict_solder(self, frame):
         """
-        납땜 불량 검출 추론 (SolDef_AI 모델)
+        납땜 불량 검출 추론 (Solder Model)
 
         Args:
             frame: 우측 카메라 이미지 (납땜면)
 
         Returns:
-            dict: 납땜 불량 결과 (5-6개 클래스)
+            dict: 납땜 불량 결과 (프로젝트 정의 클래스)
         """
         start_time = time.time()
 

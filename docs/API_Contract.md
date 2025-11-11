@@ -63,8 +63,8 @@ Host: 100.64.1.1:5000
     "solder_model": true
   },
   "model_info": {
-    "component_model": "FPIC-Component (25 classes)",
-    "solder_model": "SolDef_AI (5-6 classes)"
+    "component_model": "custom_component (project classes)",
+    "solder_model": "custom_solder (project classes)"
   },
   "version": "2.0.0"
 }
@@ -193,20 +193,19 @@ Content-Type: application/json
 - `"solder_defect"`: 납땜 불량 (GPIO 27)
 - `"discard"`: 폐기 (GPIO 22)
 
-**부품 불량 타입 (Component Model - FPIC-Component):**
+**부품 불량 타입 (Component Model - custom_component):**
 - `"missing_component"`: 부품 누락 ⚠️ 치명적
 - `"wrong_component"`: 잘못된 부품 ⚠️ 치명적
 - `"misalignment"`: 부품 위치 불량
 - `"damaged_component"`: 손상된 부품
-- 25개 부품 클래스: capacitor, resistor, IC, LED, diode, transistor, connector, inductor, relay, switch, potentiometer, crystal, fuse, battery, transformer, coil, sensor, microcontroller, capacitor_electrolytic, capacitor_ceramic, resistor_smd, pad, via, trace, hole
+- 프로젝트 기본 클래스 예시: resistor, led, diode, transistor, ic, switch, capacitor, sensor (세부 구성은 `data/custom_component/data.yaml` 참고)
 
-**납땜 불량 타입 (Solder Model - SolDef_AI):**
+**납땜 불량 타입 (Solder Model - custom_solder):**
 - `"solder_bridge"`: 납땜 브릿지 ⚠️ 치명적 (즉시 폐기)
-- `"no_good"`: 일반적인 납땜 불량
-- `"exc_solder"`: 과다 납땜 (Excessive Solder)
-- `"poor_solder"`: 불충분한 납땜 (Poor Solder Joint)
-- `"spike"`: 납땜 스파이크
-- `"tombstone"`: 툼스톰 현상 (선택적)
+- `"cold_joint"`: 냉납
+- `"insufficient_solder"`: 납땜 부족
+- `"excess_solder"`: 과다 납땜
+- `"misaligned_component"` / `"spike"` 등 프로젝트 정의 클래스 (세부 구성은 `data/custom_solder/data.yaml` 참고)
 
 **심각도 (severity) 레벨:**
 - `0`: 불량 없음
@@ -223,8 +222,8 @@ Content-Type: application/json
 **설명**: 좌우 카메라 프레임을 이중 YOLO 모델로 동시에 검사하고 결과 융합
 
 **아키텍처**:
-- **좌측 카메라 (left_image)** → Component Model (FPIC-Component, 25 클래스)
-- **우측 카메라 (right_image)** → Solder Model (SolDef_AI, 5-6 클래스)
+- **좌측 카메라 (left_image)** → Component Model (custom_component)
+- **우측 카메라 (right_image)** → Solder Model (custom_solder)
 - **Flask 서버**: 결과 융합 로직 (severity-based fusion)
 
 #### 요청 (Request)
@@ -1203,6 +1202,10 @@ rightStream.Start();
 
 | 버전 | 날짜 | 변경 내용 | 변경자 |
 |------|------|-----------|--------|
+| 2.1.0 | 2025-01-11 | ⭐ 자체 촬영 데이터셋 전환 (custom_component + custom_solder) | 팀 리더 |
+|  |  | - /health `model_info` 필드 명칭/설명 업데이트 |  |
+|  |  | - 부품/납땜 타입 정의를 프로젝트 커스텀 클래스로 조정 |  |
+|  |  | - 문서 전체에서 FPIC/SolDef 레거시 제거 |  |
 | 2.0.0 | 2025-10-31 | ⭐ 이중 모델 아키텍처 전환 (FPIC-Component + SolDef_AI) | 팀 리더 |
 |  |  | - /predict_dual 엔드포인트 대폭 개선 (결과 융합 로직) |  |
 |  |  | - /health 엔드포인트 모델 정보 변경 (component_model, solder_model) |  |
@@ -1219,7 +1222,7 @@ rightStream.Start();
 - [Flask 서버 구축 가이드](Flask_Server_Setup.md)
 - [라즈베리파이 클라이언트 가이드](RaspberryPi_Setup.md)
 - [C# WinForms 개발 가이드](CSharp_WinForms_Guide.md)
-- [데이터셋 가이드](Dataset_Guide.md) - FPIC-Component, SolDef_AI
+- [데이터셋 가이드](Dataset_Guide.md) - custom_component, custom_solder (자체 촬영)
 - [Git 워크플로우 가이드](Git_Workflow.md)
 
 ---

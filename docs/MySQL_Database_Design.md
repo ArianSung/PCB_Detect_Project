@@ -5,8 +5,8 @@
 PCB 불량 검사 시스템의 **양면 동시 검사 이력**, 통계, 시스템 로그를 저장하는 MySQL 데이터베이스 스키마 설계입니다.
 
 **⭐ 이중 모델 아키텍처 특징**:
-- **Component Model (부품 검출)**: FPIC-Component, 25 클래스
-- **Solder Model (납땜 불량)**: SolDef_AI, 5-6 클래스
+- **Component Model (부품 검출)**: custom_component (자체 촬영 데이터셋)
+- **Solder Model (납땜 불량)**: custom_solder (자체 촬영 데이터셋)
 - **Result Fusion (결과 융합)**: Flask 서버에서 두 모델 결과를 융합하여 최종 판정 (normal, component_defect, solder_defect, discard)
 
 ---

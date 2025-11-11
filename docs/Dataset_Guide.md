@@ -1,21 +1,76 @@
 # PCB 불량 검사 데이터셋 가이드
 
+> **⚠️ 중요: 데이터 수집 방식 변경**
+>
+> **기존 방식** (이 문서의 대부분 내용):
+> - 공개 데이터셋 사용 (FPIC-Component 6,260장 + SolDef_AI 1,150장)
+>
+> **현재 방식** (2025-01-11 변경) ⭐:
+> - **자체 촬영 데이터셋 사용**
+> - 부품 검출: 직접 촬영 (목표 200-300장)
+> - 납땜 불량: 직접 촬영 (목표 200-300장)
+> - **실제 사용 웹캠으로 촬영하여 실전 환경 최적화**
+>
+> **자체 데이터 수집 가이드**: `Data_Collection_Guide_Simple.md` ⭐⭐⭐ 참조
+
+---
+
 ## 목표
-이중 YOLO 모델 아키텍처를 위한 전문 데이터셋 다운로드 및 준비
+이중 YOLO 모델 아키텍처를 위한 **자체 수집** 데이터셋 준비
 
 **핵심 변경** ⭐:
-- **기존**: 커스텀 병합 데이터셋 (22-29 클래스, 심각한 불균형)
-- **신규**: 검증된 전문 데이터셋 2개
-  - **FPIC-Component**: 부품 검출 (25 클래스)
-  - **SolDef_AI**: 납땜 불량 (5-6 클래스)
+- **기존**: 공개 데이터셋 사용 (FPIC-Component, SolDef_AI)
+- **신규**: 자체 촬영 데이터셋
+  - **부품 검출 데이터셋**: 실제 웹캠으로 촬영 (200-300장)
+  - **납땜 불량 데이터셋**: 실제 웹캠으로 촬영 (200-300장)
+  - Roboflow를 통한 라벨링 및 증강
 
 **YOLO 환경 구축 및 학습 방법은 `docs/Phase1_YOLO_Setup.md`를 참조하세요.**
 
-**참고**: `Dual_Model_Architecture.md` (이중 모델 아키텍처 설계)
+**참고**:
+- `Dual_Model_Architecture.md` (이중 모델 아키텍처 설계)
+- `Data_Collection_Guide_Simple.md` ⭐⭐⭐ (자체 데이터 수집 완전 가이드)
 
 ---
 
 ## 이 프로젝트에서 사용하는 데이터셋 ⭐
+
+### 현재 방식: 자체 수집 데이터셋 ⭐⭐⭐
+
+**참고 문서**: `Data_Collection_Guide_Simple.md` (완전한 촬영 및 라벨링 가이드)
+
+**데이터셋 구조**:
+```
+data/
+├── custom_component/        # 부품 검출 데이터셋
+│   ├── images/
+│   │   ├── train/          # 70%
+│   │   ├── valid/          # 20%
+│   │   └── test/           # 10%
+│   ├── labels/             # YOLO 형식
+│   └── data.yaml
+└── custom_solder/          # 납땜 불량 데이터셋
+    ├── images/
+    │   ├── train/
+    │   ├── valid/
+    │   └── test/
+    ├── labels/
+    └── data.yaml
+```
+
+**장점**:
+- ✅ 실제 사용 환경 (웹캠, 조명, PCB)과 100% 일치
+- ✅ 프로젝트 요구사항에 완벽히 맞춤화
+- ✅ 라벨링 품질 완전 제어 가능
+- ✅ 추가 데이터 수집 및 개선 용이
+
+---
+
+## 참고: 공개 데이터셋 정보 (아카이브) 📦
+
+> **⚠️ 주의**: 아래 내용은 참고용입니다. 현재 프로젝트에서는 자체 수집 데이터셋을 사용합니다.
+
+### 구 방식에서 고려했던 공개 데이터셋
 
 ### 1. FPIC-Component Dataset ⭐⭐⭐ (모델 1 - 부품 검출)
 
@@ -464,41 +519,53 @@ visualize_yolo_annotation(
 
 ---
 
-## 다음 단계
+## 다음 단계 ⭐
 
-데이터 준비가 완료되면:
-
-### 1. 모델 학습 시작 ⭐
+### 1. 자체 데이터 수집 시작 (우선)
 ```bash
-# Component Model (FPIC-Component) 학습
+# 촬영 스크립트 사용 (Data_Collection_Guide_Simple.md 참조)
+conda activate pcb_defect
+python scripts/capture_simple.py
+
+# 목표:
+# - 부품 검출: 200-300장
+# - 납땜 불량: 200-300장
+# - Roboflow 라벨링 및 증강 (3배)
+```
+
+**완전한 가이드**: `Data_Collection_Guide_Simple.md` ⭐⭐⭐
+
+### 2. 라벨링 완료 후 모델 학습 ⭐
+```bash
+# Component Model (자체 데이터셋) 학습
 yolo detect train \
-  data=data/processed/component_model/data.yaml \
+  data=data/custom_component/data.yaml \
   model=yolo11l.pt \
-  epochs=150 \
+  epochs=100-150 \
   imgsz=640 \
-  batch=32 \
+  batch=16 \
   device=0 \
   project=runs/detect \
   name=component_model
 
-# Solder Model (SolDef_AI) 학습
+# Solder Model (자체 데이터셋) 학습
 yolo detect train \
-  data=data/processed/solder_model/data.yaml \
+  data=data/custom_solder/data.yaml \
   model=yolo11l.pt \
-  epochs=150 \
+  epochs=100-150 \
   imgsz=640 \
-  batch=32 \
+  batch=16 \
   device=0 \
   project=runs/detect \
   name=solder_model
 ```
 
-### 2. 성능 평가
-- Component Model: mAP@0.5, Precision, Recall (25 클래스)
-- Solder Model: mAP@0.5, Precision, Recall (5-6 클래스)
-- 치명적 결함 검출률 (solder_bridge) 특히 중요
+### 3. 성능 평가
+- Component Model: mAP@0.5, Precision, Recall
+- Solder Model: mAP@0.5, Precision, Recall
+- 실제 환경 테스트 (웹캠으로 실시간 추론)
 
-### 3. Flask 서버 통합
+### 4. Flask 서버 통합
 - `docs/Flask_Server_Setup.md` 참조
 - 이중 모델 로드 및 결과 융합 로직 구현
 
@@ -526,5 +593,6 @@ yolo detect train \
 ---
 
 **작성일**: 2025-10-31
-**버전**: 2.0 ⭐ (이중 모델 아키텍처 전환)
-**다음 단계**: 이중 모델 학습 시작 → Flask 서버 통합
+**업데이트**: 2025-01-11 (자체 데이터셋 수집 방식으로 변경)
+**버전**: 3.0 ⭐⭐ (자체 촬영 데이터셋 사용)
+**다음 단계**: 자체 데이터 수집 (`Data_Collection_Guide_Simple.md`) → 모델 학습 → Flask 서버 통합

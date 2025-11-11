@@ -1,13 +1,21 @@
 # PCB 불량 검사 프로젝트 (졸업 프로젝트)
 
+> **⚠️ 업데이트: 자체 수집 데이터셋 사용 (2025-01-11)**
+>
+> **데이터셋 변경**:
+> - **기존**: 공개 데이터셋 (FPIC-Component 6,260장 + SolDef_AI 1,150장)
+> - **현재**: 자체 촬영 데이터셋 (각 200-300장, 실제 웹캠 사용)
+>
+> **데이터 수집 가이드**: `Data_Collection_Guide_Simple.md` ⭐⭐⭐
+
 ## 프로젝트 개요
 
 **목표**: 컨베이어 벨트를 통해 들어오는 PCB의 양면을 실시간으로 검사하여 불량을 자동으로 검출하고 분류하는 이중 YOLO 딥러닝 시스템 개발
 
 **핵심 기술**:
 - 이중 YOLO v11l 모델 아키텍처 (Dual Model Architecture)
-  - **모델 1**: FPIC-Component (부품 검출, 25개 클래스)
-  - **모델 2**: SolDef_AI (납땜 불량 검출, 5-6개 클래스)
+  - **모델 1**: 부품 검출 (자체 수집 데이터셋)
+  - **모델 2**: 납땜 불량 검출 (자체 수집 데이터셋)
 - 병렬 추론 및 결과 융합 로직 (Flask 서버)
 - 실시간 비디오 스트리밍 및 웹 서버 통신 (Flask)
 - 양면 동시 검사 및 통합 판정
@@ -65,33 +73,34 @@
 
 ## 불량 검출 대상
 
-### 1. 부품 검출 (Component Detection) - FPIC-Component 데이터셋
-**모델 1 (좌측 카메라)** - 25개 클래스
-- 전자 부품 25종: capacitor, resistor, IC, LED, diode, transistor, connector, inductor, relay, switch, potentiometer, pads 등
+### 1. 부품 검출 (Component Detection) - 자체 수집 데이터셋
+**모델 1 (좌측 카메라)**
 - 부품 존재 여부 확인
 - 부품 위치 정확도 검증
 - 잘못된 부품 검출
+- 기타 부품 관련 불량
 
-**데이터셋 정보**:
-- 출처: FPIC-Component (IIT, India)
-- 이미지 수: 6,260장
-- 라벨 객체 수: 29,639개
-- 균형 잡힌 분포
+**데이터셋 정보** (목표):
+- 출처: 자체 촬영 (실제 사용 웹캠)
+- 이미지 수: 200-300장 (원본), 증강 후 600-900장
+- 라벨링: Roboflow (직접 어노테이션)
+- 클래스 수: 프로젝트 요구사항에 따라 결정
+- **참고**: `Data_Collection_Guide_Simple.md` 참조
 
-### 2. 납땜 불량 검출 (Soldering Defects) - SolDef_AI 데이터셋
-**모델 2 (우측 카메라)** - 5-6개 클래스
-- **no_good**: 일반적인 납땜 불량
-- **exc_solder**: 과다 납땜 (Excessive Solder)
-- **spike**: 납땜 스파이크
-- **poor_solder**: 불충분한 납땜 (Poor Solder Joint)
-- **solder_bridge**: 납땜 브릿지 (치명적 결함)
-- **tombstone**: 툼스톤 현상 (선택)
+### 2. 납땜 불량 검출 (Soldering Defects) - 자체 수집 데이터셋
+**모델 2 (우측 카메라)**
+- Cold Joint (냉납)
+- Solder Bridge (브릿지)
+- Insufficient Solder (땜납 부족)
+- Excess Solder (땜납 과다)
+- 기타 납땜 관련 불량
 
-**데이터셋 정보**:
-- 출처: SolDef_AI (Roboflow)
-- 이미지 수: 1,150장 (429장 Roboflow 버전)
-- 우주 항공 표준 (ECSS-Q-ST-70-38C) 기반
-- 고품질 어노테이션
+**데이터셋 정보** (목표):
+- 출처: 자체 촬영 (실제 사용 웹캠)
+- 이미지 수: 200-300장 (원본), 증강 후 600-900장
+- 라벨링: Roboflow (직접 어노테이션)
+- 클래스 수: 프로젝트 요구사항에 따라 결정
+- **참고**: `Data_Collection_Guide_Simple.md` 참조
 
 ### 3. 결과 융합 로직
 Flask 서버에서 두 모델의 결과를 통합하여 최종 판정:
@@ -125,29 +134,36 @@ Flask 서버에서 두 모델의 결과를 통합하여 최종 판정:
 
 ---
 
-### Phase 2: PCB 데이터 준비 (2-3주) ⭐ 업데이트
+### Phase 2: 자체 데이터 수집 및 라벨링 (1-2주) ⭐ 업데이트
 
-#### 선정 데이터셋
-**이중 모델 아키텍처를 위한 전문 데이터셋 사용**:
-1. **FPIC-Component** (부품 검출) - 모델 1
-2. **SolDef_AI** (납땜 불량) - 모델 2
+#### 데이터 수집 방식
+**자체 촬영 데이터셋 사용** (실제 환경 최적화):
+1. **부품 검출 데이터**: 실제 웹캠으로 직접 촬영 (200-300장)
+2. **납땜 불량 데이터**: 실제 웹캠으로 직접 촬영 (200-300장)
+
+**완전한 가이드**: `Data_Collection_Guide_Simple.md` ⭐⭐⭐
 
 #### 체크리스트
-- [x] 검증된 PCB 데이터셋 선정
-  - [x] FPIC-Component 데이터셋 확인 (IIT, India)
-  - [x] SolDef_AI 데이터셋 확인 (Roboflow, 우주항공 표준)
-  - [x] 데이터셋 품질 및 균형 검증
-- [ ] 데이터셋 1: FPIC-Component 다운로드 및 준비
-  - [ ] 데이터셋 다운로드 (6,260 이미지)
-  - [ ] 25개 부품 클래스 확인
-  - [ ] YOLO 형식 변환 (필요 시)
-  - [ ] Train/Val/Test 분할 확인
-- [ ] 데이터셋 2: SolDef_AI 다운로드 및 준비
-  - [ ] Roboflow에서 다운로드 (429-1,150 이미지)
-  - [ ] 5-6개 납땜 클래스 확인
-  - [ ] YOLO 형식 확인
-  - [ ] Train/Val/Test 분할 확인
+- [ ] 자체 데이터 수집 준비
+  - [ ] 부품 준비 (다이소 키트 또는 기존 부품)
+  - [ ] 촬영 환경 설정 (웹캠 + 조명 + PCB)
+  - [ ] 촬영 스크립트 준비 (`scripts/capture_simple.py`)
+- [ ] 부품 검출 데이터셋 수집
+  - [ ] 200-300장 촬영 (2-4시간)
+  - [ ] Roboflow 업로드
+  - [ ] 라벨링 완료 (6-12시간)
+  - [ ] 자동 증강 (3배)
+  - [ ] YOLO 형식 Export
+- [ ] 납땜 불량 데이터셋 수집
+  - [ ] 200-300장 촬영 (2-4시간)
+  - [ ] Roboflow 업로드
+  - [ ] 라벨링 완료 (6-12시간)
+  - [ ] 자동 증강 (3배)
+  - [ ] YOLO 형식 Export
 - [ ] 데이터 품질 검증
+  - [ ] 클래스 균형 확인
+  - [ ] 어노테이션 정확성 검증
+  - [ ] Train/Val/Test 분할 확인 (70/20/10)
   - [ ] 이미지 해상도 확인
   - [ ] 라벨 형식 검증 (YOLO format)
   - [ ] 클래스 분포 분석
@@ -163,38 +179,43 @@ Flask 서버에서 두 모델의 결과를 통합하여 최종 판정:
 
 ### Phase 3: 이중 YOLO 모델 학습 및 최적화 (3-4주) ⭐ 업데이트
 
-**핵심 변경**: 두 개의 독립적인 YOLO 모델을 각각 학습
+**핵심 변경**: 두 개의 독립적인 YOLO 모델을 **자체 촬영 데이터셋**으로 학습
 
-#### 모델 1: 부품 검출 모델 (FPIC-Component)
-- [x] 데이터셋: FPIC-Component (6,260 이미지, 25 클래스)
+#### 공통 준비
+- [ ] `data/custom_component/` 및 `data/custom_solder/`에 최신 촬영본 배치
+- [ ] Roboflow Export 버전(tag) 기록
+- [ ] `data.yaml` 내 클래스 이름/순서 검증
+- [ ] 증강 전략 확정 (좌우 반전, 밝기, 노이즈 등)
+
+#### 모델 1: 부품 검출 모델 (커스텀 데이터셋)
+- [ ] 데이터셋: `data/custom_component/data.yaml` (원본 200-300장, 증강 600-900장)
 - [ ] YOLOv11l 선택 (정확도 우선, RTX 4080 Super 최적화)
 - [ ] 학습 설정
-  - [ ] Epochs: 100-150
-  - [ ] Batch size: 16-32 (VRAM 16GB 활용)
+  - [ ] Epochs: 120-160
+  - [ ] Batch size: 16 (VRAM 16GB 기준, `accumulate=2`로 효과적 32 달성)
   - [ ] Image size: 640
-  - [ ] Optimizer: AdamW
-  - [ ] Learning rate: 0.001
+  - [ ] Optimizer: AdamW, `lr0=0.001`
+  - [ ] Warmup epochs: 3
 - [ ] 성능 평가
   - [ ] mAP@0.5 목표: > 0.85
-  - [ ] 부품별 검출 정확도 분석
-  - [ ] Precision/Recall 분석
-- [ ] 모델 저장: `models/fpic_component_best.pt`
+  - [ ] 클래스별 Precision/Recall 분석
+  - [ ] 실제 웹캠 샘플 재현성 확인
+- [ ] 모델 저장: `models/component_custom_best.pt`
 
-#### 모델 2: 납땜 불량 모델 (SolDef_AI)
-- [x] 데이터셋: SolDef_AI (1,150 이미지, 5-6 클래스)
+#### 모델 2: 납땜 불량 모델 (커스텀 데이터셋)
+- [ ] 데이터셋: `data/custom_solder/data.yaml` (원본 200-300장, 증강 600-900장)
 - [ ] YOLOv11l 선택 (정확도 우선)
 - [ ] 학습 설정
-  - [ ] Epochs: 100-150
-  - [ ] Batch size: 16-32
+  - [ ] Epochs: 120-160
+  - [ ] Batch size: 16 (`accumulate`로 필요 시 32 대응)
   - [ ] Image size: 640
   - [ ] Optimizer: AdamW
-  - [ ] Learning rate: 0.001
-  - [ ] Class weights 조정 (필요 시)
+  - [ ] Class weights 조정 (필요 시 라벨 분포 기반)
 - [ ] 성능 평가
-  - [ ] mAP@0.5 목표: > 0.90 (클래스 수 적어 높은 정확도 기대)
-  - [ ] 납땜 불량 타입별 정확도
-  - [ ] False Positive 최소화 중요
-- [ ] 모델 저장: `models/soldef_ai_best.pt`
+  - [ ] mAP@0.5 목표: > 0.90
+  - [ ] 납땜 타입별 혼동 행렬 확인
+  - [ ] False Positive 최소화 (특히 `normal`)
+- [ ] 모델 저장: `models/solder_custom_best.pt`
 
 #### 공통 최적화
 - [ ] 하이퍼파라미터 튜닝
