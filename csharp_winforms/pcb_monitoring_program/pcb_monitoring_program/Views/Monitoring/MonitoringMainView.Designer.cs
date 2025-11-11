@@ -32,12 +32,13 @@
             btn_PCBMonitoringView = new Button();
             btn_OHTMonitoringView = new Button();
             MonitoringPanel = new Panel();
+            btn_LineMonitoringView = new Button();
             SuspendLayout();
             // 
             // btn_BoxMonitoringView
             // 
             btn_BoxMonitoringView.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            btn_BoxMonitoringView.Location = new Point(117, 51);
+            btn_BoxMonitoringView.Location = new Point(116, 51);
             btn_BoxMonitoringView.Name = "btn_BoxMonitoringView";
             btn_BoxMonitoringView.Size = new Size(75, 40);
             btn_BoxMonitoringView.TabIndex = 4;
@@ -59,7 +60,7 @@
             // btn_OHTMonitoringView
             // 
             btn_OHTMonitoringView.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            btn_OHTMonitoringView.Location = new Point(209, 51);
+            btn_OHTMonitoringView.Location = new Point(298, 51);
             btn_OHTMonitoringView.Name = "btn_OHTMonitoringView";
             btn_OHTMonitoringView.Size = new Size(75, 40);
             btn_OHTMonitoringView.TabIndex = 5;
@@ -74,11 +75,23 @@
             MonitoringPanel.Size = new Size(1600, 800);
             MonitoringPanel.TabIndex = 6;
             // 
+            // btn_LineMonitoringView
+            // 
+            btn_LineMonitoringView.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            btn_LineMonitoringView.Location = new Point(207, 51);
+            btn_LineMonitoringView.Name = "btn_LineMonitoringView";
+            btn_LineMonitoringView.Size = new Size(75, 40);
+            btn_LineMonitoringView.TabIndex = 7;
+            btn_LineMonitoringView.Text = "LINE";
+            btn_LineMonitoringView.UseVisualStyleBackColor = true;
+            btn_LineMonitoringView.Click += btn_LineMonitoringView_Click;
+            // 
             // MonitoringMainView
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(64, 64, 64);
+            Controls.Add(btn_LineMonitoringView);
             Controls.Add(MonitoringPanel);
             Controls.Add(btn_OHTMonitoringView);
             Controls.Add(btn_BoxMonitoringView);
@@ -94,5 +107,6 @@
         private Button btn_PCBMonitoringView;
         private Button btn_OHTMonitoringView;
         private Panel MonitoringPanel;
+        private Button btn_LineMonitoringView;
     }
 }

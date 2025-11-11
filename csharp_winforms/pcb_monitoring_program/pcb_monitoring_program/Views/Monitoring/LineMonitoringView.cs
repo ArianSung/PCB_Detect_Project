@@ -10,18 +10,18 @@ using System.Windows.Forms;
 
 namespace pcb_monitoring_program.Views.Monitoring
 {
-    public partial class PCBMonitoringView : UserControl
+    public partial class LineMonitoringView : UserControl
     {
-        public PCBMonitoringView()
+        public LineMonitoringView()
         {
             InitializeComponent();
         }
 
-        private void PCBMonitoringView_Load(object sender, EventArgs e)
+        private void LineMonitoringView_Load(object sender, EventArgs e)
         {
-            UiStyleHelper.MakeRoundedPanel(cardPCBMonitoring, radius: 16, back: Color.FromArgb(44, 44, 44));
+            UiStyleHelper.MakeRoundedPanel(cardLineMonitoring, radius: 16, back: Color.FromArgb(44, 44, 44));
 
-            UiStyleHelper.AddShadowRoundedPanel(cardPCBMonitoring, 16);
+            UiStyleHelper.AddShadowRoundedPanel(cardLineMonitoring, 16);
         }
     }
 }
