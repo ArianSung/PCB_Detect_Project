@@ -1,19 +1,10 @@
-﻿using MySqlX.XDevAPI.Common;
-using pcb_monitoring_program.Views.Dashboard;
+﻿using pcb_monitoring_program.Views.Dashboard;
 using pcb_monitoring_program.Views.Monitoring;
 using pcb_monitoring_program.Views.Settings;
 using pcb_monitoring_program.Views.Statistics;
 using pcb_monitoring_program.Views.UserManagement;
-using pcb_monitoring_program;
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 
 
@@ -21,22 +12,39 @@ namespace pcb_monitoring_program
 {
     public partial class MainForm : Form
     {
-        private DashboardView _UcDashboard = new DashboardView();
-        private MainStatisticsView _UcStatistics = new MainStatisticsView();
-        private MonitoringMainView _UcMonitoring = new MonitoringMainView();
-        private UserManagementView _UcUserManagement = new UserManagementView();
-        private SettingView _UcSetting = new SettingView();
-        public MainForm()
+        public event EventHandler? LogoutRequested;
+
+        private readonly DashboardView _UcDashboard = new DashboardView();
+        private readonly MainStatisticsView _UcStatistics = new MainStatisticsView();
+        private readonly MonitoringMainView _UcMonitoring = new MonitoringMainView();
+        private readonly UserManagementView _UcUserManagement = new UserManagementView();
+        private readonly SettingView _UcSetting = new SettingView();
+        private readonly string _username;
+        private readonly string _role;
+
+        public MainForm() : this("이   름", "권   한")
+        {
+        }
+
+        public MainForm(string username, string role)
         {
             InitializeComponent();
+            _username = username;
+            _role = role;
         }
+
         private void ShowInPanel(UserControl page) //콘텐츠 패널 전환 메서드
         {
-            // 1) 기존 컨트롤 모두 제거
-            panelContent.Controls.Clear();
+            if (!panelContent.Controls.Contains(page))
+            {
+                page.Dock = DockStyle.Fill;
+                panelContent.Controls.Add(page);
+            }
 
-            // 2) 패널에 추가
-            panelContent.Controls.Add(page);
+            foreach (Control ctrl in panelContent.Controls)
+            {
+                ctrl.Visible = false;
+            }
 
             page.Visible = true;
             page.BringToFront();
@@ -79,20 +87,15 @@ namespace pcb_monitoring_program
 
         private void btnLogout_Click(object sender, EventArgs e)
         {
-            labelusername.Text = "이   름";
-            labeluserauthority.Text = "[ 권   한 ]";
-            //labelTitle.Text = "Login";
-
-            // 로그인 폼으로 돌아가기
-            LoginForm loginForm = new LoginForm();
-            loginForm.Show();
-            this.Hide();
+            LogoutRequested?.Invoke(this, EventArgs.Empty);
         }
 
         private void MainForm_Load(object sender, EventArgs e)
         {
             UiStyleHelper.MakeRoundedPanel(cardLogout, radius: 16, back: Color.FromArgb(44, 44, 44));
             UiStyleHelper.AddShadowRoundedPanel(cardLogout, 16);
+            labelusername.Text = _username;
+            labeluserauthority.Text = $"[ {_role} ]";
 
             labelTitle.Text = "Dashboard";
             UiStyleHelper.MakeRoundedButton(btnDashboard);

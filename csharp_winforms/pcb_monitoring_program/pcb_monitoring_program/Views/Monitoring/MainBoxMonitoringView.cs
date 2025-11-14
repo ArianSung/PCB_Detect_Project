@@ -20,10 +20,6 @@ namespace pcb_monitoring_program.Views.Monitoring
         {
             InitializeComponent();
             boxMonitoringView = new BoxMonitoringView();
-            InitChildView(boxMonitoringView);
-            ShowView(boxMonitoringView);
-
-            boxMonitoringView = new BoxMonitoringView();
             boxLine2 = new BoxLine2();
             boxLine3 = new BoxLine3();
 

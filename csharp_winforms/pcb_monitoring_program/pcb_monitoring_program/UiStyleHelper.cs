@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Windows.Forms;
+using System.Windows.Forms.DataVisualization.Charting;
 
 namespace pcb_monitoring_program
 {
@@ -196,6 +197,71 @@ namespace pcb_monitoring_program
 
             return shadow;
         }
+
+        public static void ConfigureBoxRateChart(Chart chart, IEnumerable<(string name, int current, int max, Color color)> boxData)
+        {
+            if (chart == null) throw new ArgumentNullException(nameof(chart));
+            if (boxData == null) throw new ArgumentNullException(nameof(boxData));
+
+            chart.DataSource = null;
+            chart.Series.Clear();
+            chart.ChartAreas.Clear();
+            chart.Legends.Clear();
+
+            chart.BackColor = Color.FromArgb(40, 40, 40);
+            chart.BorderlineWidth = 0;
+
+            var area = new ChartArea("Main")
+            {
+                BackColor = Color.Transparent
+            };
+            area.AxisX.Minimum = 0;
+            area.AxisX.Maximum = 4;
+            area.AxisX.Interval = 1;
+            area.AxisX.MajorGrid.Enabled = true;
+            area.AxisX.MajorGrid.LineColor = Color.FromArgb(70, 70, 70);
+            area.AxisX.LabelStyle.ForeColor = Color.Gainsboro;
+            area.AxisX.LabelStyle.Font = new Font("맑은 고딕", 9);
+
+            area.AxisY.MajorGrid.Enabled = false;
+            area.AxisY.LabelStyle.ForeColor = Color.Gainsboro;
+            area.AxisY.LabelStyle.Font = new Font("맑은 고딕", 9);
+            area.AxisY.Interval = 1;
+            area.AxisY.IsReversed = false;
+
+            chart.ChartAreas.Add(area);
+
+            var series = new Series("BoxRate")
+            {
+                ChartArea = "Main",
+                ChartType = SeriesChartType.Bar,
+                IsValueShownAsLabel = true,
+                LabelForeColor = Color.Gainsboro,
+                Font = new Font("맑은 고딕", 8, FontStyle.Bold)
+            };
+            series["PointWidth"] = "0.6";
+            series.IsXValueIndexed = true;
+            series.XValueType = ChartValueType.String;
+            series.YValueType = ChartValueType.Int32;
+
+            foreach (var item in boxData)
+            {
+                var point = new DataPoint();
+                point.SetValueY(Math.Max(0, item.current));
+                point.AxisLabel = item.name;
+                point.Color = item.color;
+                point.Label = $"{item.current}/{item.max}";
+
+                if (item.max > 0 && item.current >= item.max)
+                {
+                    point.BorderColor = Color.Yellow;
+                    point.BorderWidth = 3;
+                }
+
+                series.Points.Add(point);
+            }
+
+            chart.Series.Add(series);
+        }
     }
 }
-
