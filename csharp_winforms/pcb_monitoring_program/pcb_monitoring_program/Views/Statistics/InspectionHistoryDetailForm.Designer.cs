@@ -76,6 +76,8 @@
             kryptonDataGridView1.Location = new Point(718, 67);
             kryptonDataGridView1.Name = "kryptonDataGridView1";
             kryptonDataGridView1.PaletteMode = ComponentFactory.Krypton.Toolkit.PaletteMode.Office2010Black;
+            kryptonDataGridView1.ReadOnly = true;
+            kryptonDataGridView1.RowHeadersVisible = false;
             dataGridViewCellStyle2.BackColor = Color.FromArgb(44, 44, 44);
             dataGridViewCellStyle2.Font = new Font("맑은 고딕", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
             dataGridViewCellStyle2.ForeColor = Color.White;
@@ -222,36 +224,43 @@
             // 
             date.HeaderText = "날짜";
             date.Name = "date";
+            date.ReadOnly = true;
             // 
             // time
             // 
             time.HeaderText = "시간";
             time.Name = "time";
+            time.ReadOnly = true;
             // 
             // CameraID
             // 
             CameraID.HeaderText = "카메라 ID";
             CameraID.Name = "CameraID";
+            CameraID.ReadOnly = true;
             // 
             // PCBID
             // 
             PCBID.HeaderText = "PCB ID";
             PCBID.Name = "PCBID";
+            PCBID.ReadOnly = true;
             // 
             // DefectType
             // 
             DefectType.HeaderText = "불량 유형";
             DefectType.Name = "DefectType";
+            DefectType.ReadOnly = true;
             // 
             // DefectLocation
             // 
             DefectLocation.HeaderText = "불량 위치";
             DefectLocation.Name = "DefectLocation";
+            DefectLocation.ReadOnly = true;
             // 
             // productionline
             // 
             productionline.HeaderText = "생산 라인";
             productionline.Name = "productionline";
+            productionline.ReadOnly = true;
             // 
             // pictureBox1
             // 

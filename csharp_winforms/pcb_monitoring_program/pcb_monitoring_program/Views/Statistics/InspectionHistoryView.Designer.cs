@@ -29,40 +29,42 @@
         private void InitializeComponent()
         {
             components = new System.ComponentModel.Container();
-            DataGridViewCellStyle dataGridViewCellStyle1 = new DataGridViewCellStyle();
-            DataGridViewCellStyle dataGridViewCellStyle2 = new DataGridViewCellStyle();
+            DataGridViewCellStyle dataGridViewCellStyle9 = new DataGridViewCellStyle();
+            DataGridViewCellStyle dataGridViewCellStyle10 = new DataGridViewCellStyle();
             cardfilter = new Panel();
-            panel2 = new Panel();
-            checkBox16 = new CheckBox();
-            checkBox15 = new CheckBox();
-            checkBox8 = new CheckBox();
-            checkBox7 = new CheckBox();
-            checkBox14 = new CheckBox();
-            label7 = new Label();
-            panel1 = new Panel();
-            checkBox4 = new CheckBox();
-            checkBox5 = new CheckBox();
-            checkBox6 = new CheckBox();
+            cardproductionline = new Panel();
+            CB_ProductionLine_3 = new CheckBox();
+            CB_ProductionLine_2 = new CheckBox();
+            CB_ProductionLine_All = new CheckBox();
+            CB_ProductionLine_1 = new CheckBox();
+            label_ProductionLine_All = new Label();
+            cardDefectLocation = new Panel();
+            CB_DefectLocation_Right = new CheckBox();
+            CB_DefectLocation_Left = new CheckBox();
+            CB_DefectLocation_All = new CheckBox();
+            CB_DefectLocation_Lower = new CheckBox();
+            CB_DefectLocation_Upper = new CheckBox();
             label5 = new Label();
             cardCameraID = new Panel();
-            checkBox1 = new CheckBox();
-            checkBox2 = new CheckBox();
-            checkBox3 = new CheckBox();
-            label3 = new Label();
+            CB_CameraID_CAM03 = new CheckBox();
+            CB_CameraID_All = new CheckBox();
+            CB_CameraID_CAM02 = new CheckBox();
+            CB_CameraID_CAM01 = new CheckBox();
+            label_CameraID = new Label();
             cardDefectType = new Panel();
-            checkBox9 = new CheckBox();
-            checkBox10 = new CheckBox();
-            checkBox11 = new CheckBox();
-            checkBox12 = new CheckBox();
-            checkBox13 = new CheckBox();
-            label6 = new Label();
+            CB_DefectType_All = new CheckBox();
+            CB_DefectType_Scrap = new CheckBox();
+            CB_DefectType_SolderingDefect = new CheckBox();
+            CB_DefectType_ComponentDefect = new CheckBox();
+            CB_DefectType_Normal = new CheckBox();
+            label_DefectType = new Label();
             btn_filterSearch = new Button();
             label1 = new Label();
             cardday = new Panel();
-            kryptonDateTimePicker2 = new ComponentFactory.Krypton.Toolkit.KryptonDateTimePicker();
-            label2 = new Label();
-            label4 = new Label();
-            kryptonDateTimePicker1 = new ComponentFactory.Krypton.Toolkit.KryptonDateTimePicker();
+            DTP_EndDate = new ComponentFactory.Krypton.Toolkit.KryptonDateTimePicker();
+            label_datelRange = new Label();
+            label_Date = new Label();
+            DTP_StartDate = new ComponentFactory.Krypton.Toolkit.KryptonDateTimePicker();
             cardSearchresult = new Panel();
             kryptonDataGridView1 = new ComponentFactory.Krypton.Toolkit.KryptonDataGridView();
             date = new DataGridViewTextBoxColumn();
@@ -77,8 +79,8 @@
             kryptonManager1 = new ComponentFactory.Krypton.Toolkit.KryptonManager(components);
             button1 = new Button();
             cardfilter.SuspendLayout();
-            panel2.SuspendLayout();
-            panel1.SuspendLayout();
+            cardproductionline.SuspendLayout();
+            cardDefectLocation.SuspendLayout();
             cardCameraID.SuspendLayout();
             cardDefectType.SuspendLayout();
             cardday.SuspendLayout();
@@ -88,8 +90,8 @@
             // 
             // cardfilter
             // 
-            cardfilter.Controls.Add(panel2);
-            cardfilter.Controls.Add(panel1);
+            cardfilter.Controls.Add(cardproductionline);
+            cardfilter.Controls.Add(cardDefectLocation);
             cardfilter.Controls.Add(cardCameraID);
             cardfilter.Controls.Add(cardDefectType);
             cardfilter.Controls.Add(btn_filterSearch);
@@ -99,138 +101,159 @@
             cardfilter.Name = "cardfilter";
             cardfilter.Size = new Size(578, 700);
             cardfilter.TabIndex = 4;
-            cardfilter.Paint += cardfilter_Paint;
             // 
-            // panel2
+            // cardproductionline
             // 
-            panel2.Controls.Add(checkBox16);
-            panel2.Controls.Add(checkBox15);
-            panel2.Controls.Add(checkBox8);
-            panel2.Controls.Add(checkBox7);
-            panel2.Controls.Add(checkBox14);
-            panel2.Controls.Add(label7);
-            panel2.Location = new Point(0, 535);
-            panel2.Name = "panel2";
-            panel2.Size = new Size(555, 111);
-            panel2.TabIndex = 13;
+            cardproductionline.Controls.Add(CB_ProductionLine_3);
+            cardproductionline.Controls.Add(CB_ProductionLine_2);
+            cardproductionline.Controls.Add(CB_ProductionLine_All);
+            cardproductionline.Controls.Add(CB_ProductionLine_1);
+            cardproductionline.Controls.Add(label_ProductionLine_All);
+            cardproductionline.Location = new Point(3, 586);
+            cardproductionline.Name = "cardproductionline";
+            cardproductionline.Size = new Size(555, 111);
+            cardproductionline.TabIndex = 13;
             // 
-            // checkBox16
+            // CB_ProductionLine_3
             // 
-            checkBox16.AutoSize = true;
-            checkBox16.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
-            checkBox16.ForeColor = Color.White;
-            checkBox16.Location = new Point(359, 55);
-            checkBox16.Name = "checkBox16";
-            checkBox16.Size = new Size(80, 29);
-            checkBox16.TabIndex = 12;
-            checkBox16.Text = "라인4";
-            checkBox16.UseVisualStyleBackColor = true;
+            CB_ProductionLine_3.AutoSize = true;
+            CB_ProductionLine_3.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_ProductionLine_3.ForeColor = Color.White;
+            CB_ProductionLine_3.Location = new Point(405, 55);
+            CB_ProductionLine_3.Name = "CB_ProductionLine_3";
+            CB_ProductionLine_3.Size = new Size(80, 29);
+            CB_ProductionLine_3.TabIndex = 11;
+            CB_ProductionLine_3.Text = "라인3";
+            CB_ProductionLine_3.UseVisualStyleBackColor = true;
+            CB_ProductionLine_3.CheckedChanged += CB_ProductionLine_3_CheckedChanged;
             // 
-            // checkBox15
+            // CB_ProductionLine_2
             // 
-            checkBox15.AutoSize = true;
-            checkBox15.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
-            checkBox15.ForeColor = Color.White;
-            checkBox15.Location = new Point(273, 55);
-            checkBox15.Name = "checkBox15";
-            checkBox15.Size = new Size(80, 29);
-            checkBox15.TabIndex = 11;
-            checkBox15.Text = "라인3";
-            checkBox15.UseVisualStyleBackColor = true;
+            CB_ProductionLine_2.AutoSize = true;
+            CB_ProductionLine_2.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_ProductionLine_2.ForeColor = Color.White;
+            CB_ProductionLine_2.Location = new Point(265, 55);
+            CB_ProductionLine_2.Name = "CB_ProductionLine_2";
+            CB_ProductionLine_2.Size = new Size(80, 29);
+            CB_ProductionLine_2.TabIndex = 10;
+            CB_ProductionLine_2.Text = "라인2";
+            CB_ProductionLine_2.UseVisualStyleBackColor = true;
+            CB_ProductionLine_2.CheckedChanged += CB_ProductionLine_2_CheckedChanged;
             // 
-            // checkBox8
+            // CB_ProductionLine_All
             // 
-            checkBox8.AutoSize = true;
-            checkBox8.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
-            checkBox8.ForeColor = Color.White;
-            checkBox8.Location = new Point(187, 55);
-            checkBox8.Name = "checkBox8";
-            checkBox8.Size = new Size(80, 29);
-            checkBox8.TabIndex = 10;
-            checkBox8.Text = "라인2";
-            checkBox8.UseVisualStyleBackColor = true;
+            CB_ProductionLine_All.AutoSize = true;
+            CB_ProductionLine_All.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_ProductionLine_All.ForeColor = Color.White;
+            CB_ProductionLine_All.Location = new Point(15, 55);
+            CB_ProductionLine_All.Name = "CB_ProductionLine_All";
+            CB_ProductionLine_All.Size = new Size(69, 29);
+            CB_ProductionLine_All.TabIndex = 9;
+            CB_ProductionLine_All.Text = "전체";
+            CB_ProductionLine_All.UseVisualStyleBackColor = true;
+            CB_ProductionLine_All.CheckedChanged += CB_ProductionLine_All_CheckedChanged;
             // 
-            // checkBox7
+            // CB_ProductionLine_1
             // 
-            checkBox7.AutoSize = true;
-            checkBox7.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
-            checkBox7.ForeColor = Color.White;
-            checkBox7.Location = new Point(15, 55);
-            checkBox7.Name = "checkBox7";
-            checkBox7.Size = new Size(69, 29);
-            checkBox7.TabIndex = 9;
-            checkBox7.Text = "전체";
-            checkBox7.UseVisualStyleBackColor = true;
+            CB_ProductionLine_1.AutoSize = true;
+            CB_ProductionLine_1.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_ProductionLine_1.ForeColor = Color.White;
+            CB_ProductionLine_1.Location = new Point(125, 55);
+            CB_ProductionLine_1.Name = "CB_ProductionLine_1";
+            CB_ProductionLine_1.Size = new Size(80, 29);
+            CB_ProductionLine_1.TabIndex = 7;
+            CB_ProductionLine_1.Text = "라인1";
+            CB_ProductionLine_1.UseVisualStyleBackColor = true;
+            CB_ProductionLine_1.CheckedChanged += CB_ProductionLine_1_CheckedChanged;
             // 
-            // checkBox14
+            // label_ProductionLine_All
             // 
-            checkBox14.AutoSize = true;
-            checkBox14.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
-            checkBox14.ForeColor = Color.White;
-            checkBox14.Location = new Point(101, 55);
-            checkBox14.Name = "checkBox14";
-            checkBox14.Size = new Size(80, 29);
-            checkBox14.TabIndex = 7;
-            checkBox14.Text = "라인1";
-            checkBox14.UseVisualStyleBackColor = true;
+            label_ProductionLine_All.AutoSize = true;
+            label_ProductionLine_All.Font = new Font("맑은 고딕", 18F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            label_ProductionLine_All.ForeColor = Color.White;
+            label_ProductionLine_All.Location = new Point(0, 3);
+            label_ProductionLine_All.Name = "label_ProductionLine_All";
+            label_ProductionLine_All.Size = new Size(118, 32);
+            label_ProductionLine_All.TabIndex = 0;
+            label_ProductionLine_All.Text = "생산 라인";
             // 
-            // label7
+            // cardDefectLocation
             // 
-            label7.AutoSize = true;
-            label7.Font = new Font("맑은 고딕", 18F, FontStyle.Bold, GraphicsUnit.Point, 129);
-            label7.ForeColor = Color.White;
-            label7.Location = new Point(0, 3);
-            label7.Name = "label7";
-            label7.Size = new Size(118, 32);
-            label7.TabIndex = 0;
-            label7.Text = "생산 라인";
+            cardDefectLocation.Controls.Add(CB_DefectLocation_Right);
+            cardDefectLocation.Controls.Add(CB_DefectLocation_Left);
+            cardDefectLocation.Controls.Add(CB_DefectLocation_All);
+            cardDefectLocation.Controls.Add(CB_DefectLocation_Lower);
+            cardDefectLocation.Controls.Add(CB_DefectLocation_Upper);
+            cardDefectLocation.Controls.Add(label5);
+            cardDefectLocation.Location = new Point(0, 459);
+            cardDefectLocation.Name = "cardDefectLocation";
+            cardDefectLocation.Size = new Size(555, 111);
+            cardDefectLocation.TabIndex = 12;
             // 
-            // panel1
+            // CB_DefectLocation_Right
             // 
-            panel1.Controls.Add(checkBox4);
-            panel1.Controls.Add(checkBox5);
-            panel1.Controls.Add(checkBox6);
-            panel1.Controls.Add(label5);
-            panel1.Location = new Point(0, 418);
-            panel1.Name = "panel1";
-            panel1.Size = new Size(555, 111);
-            panel1.TabIndex = 12;
+            CB_DefectLocation_Right.AutoSize = true;
+            CB_DefectLocation_Right.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_DefectLocation_Right.ForeColor = Color.White;
+            CB_DefectLocation_Right.Location = new Point(432, 55);
+            CB_DefectLocation_Right.Name = "CB_DefectLocation_Right";
+            CB_DefectLocation_Right.Size = new Size(79, 29);
+            CB_DefectLocation_Right.TabIndex = 11;
+            CB_DefectLocation_Right.Text = "Right";
+            CB_DefectLocation_Right.UseVisualStyleBackColor = true;
+            CB_DefectLocation_Right.CheckedChanged += CB_DefectLocation_Right_CheckedChanged;
             // 
-            // checkBox4
+            // CB_DefectLocation_Left
             // 
-            checkBox4.AutoSize = true;
-            checkBox4.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
-            checkBox4.ForeColor = Color.White;
-            checkBox4.Location = new Point(15, 55);
-            checkBox4.Name = "checkBox4";
-            checkBox4.Size = new Size(69, 29);
-            checkBox4.TabIndex = 9;
-            checkBox4.Text = "전체";
-            checkBox4.UseVisualStyleBackColor = true;
+            CB_DefectLocation_Left.AutoSize = true;
+            CB_DefectLocation_Left.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_DefectLocation_Left.ForeColor = Color.White;
+            CB_DefectLocation_Left.Location = new Point(339, 55);
+            CB_DefectLocation_Left.Name = "CB_DefectLocation_Left";
+            CB_DefectLocation_Left.Size = new Size(65, 29);
+            CB_DefectLocation_Left.TabIndex = 10;
+            CB_DefectLocation_Left.Text = "Left";
+            CB_DefectLocation_Left.UseVisualStyleBackColor = true;
+            CB_DefectLocation_Left.CheckedChanged += CB_DefectLocation_Left_CheckedChanged;
             // 
-            // checkBox5
+            // CB_DefectLocation_All
             // 
-            checkBox5.AutoSize = true;
-            checkBox5.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
-            checkBox5.ForeColor = Color.White;
-            checkBox5.Location = new Point(254, 55);
-            checkBox5.Name = "checkBox5";
-            checkBox5.Size = new Size(126, 29);
-            checkBox5.TabIndex = 8;
-            checkBox5.Text = "뒷면카메라";
-            checkBox5.UseVisualStyleBackColor = true;
+            CB_DefectLocation_All.AutoSize = true;
+            CB_DefectLocation_All.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_DefectLocation_All.ForeColor = Color.White;
+            CB_DefectLocation_All.Location = new Point(15, 55);
+            CB_DefectLocation_All.Name = "CB_DefectLocation_All";
+            CB_DefectLocation_All.Size = new Size(69, 29);
+            CB_DefectLocation_All.TabIndex = 9;
+            CB_DefectLocation_All.Text = "전체";
+            CB_DefectLocation_All.UseVisualStyleBackColor = true;
+            CB_DefectLocation_All.CheckedChanged += CB_DefectLocation_All_CheckedChanged;
             // 
-            // checkBox6
+            // CB_DefectLocation_Lower
             // 
-            checkBox6.AutoSize = true;
-            checkBox6.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
-            checkBox6.ForeColor = Color.White;
-            checkBox6.Location = new Point(101, 55);
-            checkBox6.Name = "checkBox6";
-            checkBox6.Size = new Size(126, 29);
-            checkBox6.TabIndex = 7;
-            checkBox6.Text = "앞면카메라";
-            checkBox6.UseVisualStyleBackColor = true;
+            CB_DefectLocation_Lower.AutoSize = true;
+            CB_DefectLocation_Lower.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_DefectLocation_Lower.ForeColor = Color.White;
+            CB_DefectLocation_Lower.Location = new Point(226, 55);
+            CB_DefectLocation_Lower.Name = "CB_DefectLocation_Lower";
+            CB_DefectLocation_Lower.Size = new Size(85, 29);
+            CB_DefectLocation_Lower.TabIndex = 8;
+            CB_DefectLocation_Lower.Text = "Lower";
+            CB_DefectLocation_Lower.UseVisualStyleBackColor = true;
+            CB_DefectLocation_Lower.CheckedChanged += CB_DefectLocation_Lower_CheckedChanged;
+            // 
+            // CB_DefectLocation_Upper
+            // 
+            CB_DefectLocation_Upper.AutoSize = true;
+            CB_DefectLocation_Upper.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_DefectLocation_Upper.ForeColor = Color.White;
+            CB_DefectLocation_Upper.Location = new Point(112, 55);
+            CB_DefectLocation_Upper.Name = "CB_DefectLocation_Upper";
+            CB_DefectLocation_Upper.Size = new Size(86, 29);
+            CB_DefectLocation_Upper.TabIndex = 7;
+            CB_DefectLocation_Upper.Text = "Upper";
+            CB_DefectLocation_Upper.UseVisualStyleBackColor = true;
+            CB_DefectLocation_Upper.CheckedChanged += CB_DefectLocation_Upper_CheckedChanged;
             // 
             // label5
             // 
@@ -245,145 +268,167 @@
             // 
             // cardCameraID
             // 
-            cardCameraID.Controls.Add(checkBox1);
-            cardCameraID.Controls.Add(checkBox2);
-            cardCameraID.Controls.Add(checkBox3);
-            cardCameraID.Controls.Add(label3);
-            cardCameraID.Location = new Point(0, 301);
+            cardCameraID.Controls.Add(CB_CameraID_CAM03);
+            cardCameraID.Controls.Add(CB_CameraID_All);
+            cardCameraID.Controls.Add(CB_CameraID_CAM02);
+            cardCameraID.Controls.Add(CB_CameraID_CAM01);
+            cardCameraID.Controls.Add(label_CameraID);
+            cardCameraID.Location = new Point(0, 330);
             cardCameraID.Name = "cardCameraID";
             cardCameraID.Size = new Size(555, 111);
             cardCameraID.TabIndex = 11;
             // 
-            // checkBox1
+            // CB_CameraID_CAM03
             // 
-            checkBox1.AutoSize = true;
-            checkBox1.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
-            checkBox1.ForeColor = Color.White;
-            checkBox1.Location = new Point(15, 55);
-            checkBox1.Name = "checkBox1";
-            checkBox1.Size = new Size(69, 29);
-            checkBox1.TabIndex = 9;
-            checkBox1.Text = "전체";
-            checkBox1.UseVisualStyleBackColor = true;
+            CB_CameraID_CAM03.AutoSize = true;
+            CB_CameraID_CAM03.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_CameraID_CAM03.ForeColor = Color.White;
+            CB_CameraID_CAM03.Location = new Point(408, 55);
+            CB_CameraID_CAM03.Name = "CB_CameraID_CAM03";
+            CB_CameraID_CAM03.Size = new Size(96, 29);
+            CB_CameraID_CAM03.TabIndex = 10;
+            CB_CameraID_CAM03.Text = "CAM03";
+            CB_CameraID_CAM03.UseVisualStyleBackColor = true;
+            CB_CameraID_CAM03.CheckedChanged += CB_CameraID_CAM03_CheckedChanged;
             // 
-            // checkBox2
+            // CB_CameraID_All
             // 
-            checkBox2.AutoSize = true;
-            checkBox2.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
-            checkBox2.ForeColor = Color.White;
-            checkBox2.Location = new Point(292, 55);
-            checkBox2.Name = "checkBox2";
-            checkBox2.Size = new Size(126, 29);
-            checkBox2.TabIndex = 8;
-            checkBox2.Text = "뒷면카메라";
-            checkBox2.UseVisualStyleBackColor = true;
+            CB_CameraID_All.AutoSize = true;
+            CB_CameraID_All.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_CameraID_All.ForeColor = Color.White;
+            CB_CameraID_All.Location = new Point(15, 55);
+            CB_CameraID_All.Name = "CB_CameraID_All";
+            CB_CameraID_All.Size = new Size(69, 29);
+            CB_CameraID_All.TabIndex = 9;
+            CB_CameraID_All.Text = "전체";
+            CB_CameraID_All.UseVisualStyleBackColor = true;
+            CB_CameraID_All.CheckedChanged += CB_CameraID_All_CheckedChanged;
             // 
-            // checkBox3
+            // CB_CameraID_CAM02
             // 
-            checkBox3.AutoSize = true;
-            checkBox3.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
-            checkBox3.ForeColor = Color.White;
-            checkBox3.Location = new Point(125, 55);
-            checkBox3.Name = "checkBox3";
-            checkBox3.Size = new Size(126, 29);
-            checkBox3.TabIndex = 7;
-            checkBox3.Text = "앞면카메라";
-            checkBox3.UseVisualStyleBackColor = true;
+            CB_CameraID_CAM02.AutoSize = true;
+            CB_CameraID_CAM02.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_CameraID_CAM02.ForeColor = Color.White;
+            CB_CameraID_CAM02.Location = new Point(268, 55);
+            CB_CameraID_CAM02.Name = "CB_CameraID_CAM02";
+            CB_CameraID_CAM02.Size = new Size(96, 29);
+            CB_CameraID_CAM02.TabIndex = 8;
+            CB_CameraID_CAM02.Text = "CAM02";
+            CB_CameraID_CAM02.UseVisualStyleBackColor = true;
+            CB_CameraID_CAM02.CheckedChanged += CB_CameraID_CAM02_CheckedChanged;
             // 
-            // label3
+            // CB_CameraID_CAM01
             // 
-            label3.AutoSize = true;
-            label3.Font = new Font("맑은 고딕", 18F, FontStyle.Bold, GraphicsUnit.Point, 129);
-            label3.ForeColor = Color.White;
-            label3.Location = new Point(0, 3);
-            label3.Name = "label3";
-            label3.Size = new Size(119, 32);
-            label3.TabIndex = 0;
-            label3.Text = "카메라 ID";
+            CB_CameraID_CAM01.AutoSize = true;
+            CB_CameraID_CAM01.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_CameraID_CAM01.ForeColor = Color.White;
+            CB_CameraID_CAM01.Location = new Point(128, 55);
+            CB_CameraID_CAM01.Name = "CB_CameraID_CAM01";
+            CB_CameraID_CAM01.Size = new Size(96, 29);
+            CB_CameraID_CAM01.TabIndex = 7;
+            CB_CameraID_CAM01.Text = "CAM01";
+            CB_CameraID_CAM01.UseVisualStyleBackColor = true;
+            CB_CameraID_CAM01.CheckedChanged += CB_CameraID_CAM01_CheckedChanged;
+            // 
+            // label_CameraID
+            // 
+            label_CameraID.AutoSize = true;
+            label_CameraID.Font = new Font("맑은 고딕", 18F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            label_CameraID.ForeColor = Color.White;
+            label_CameraID.Location = new Point(0, 3);
+            label_CameraID.Name = "label_CameraID";
+            label_CameraID.Size = new Size(119, 32);
+            label_CameraID.TabIndex = 0;
+            label_CameraID.Text = "카메라 ID";
             // 
             // cardDefectType
             // 
-            cardDefectType.Controls.Add(checkBox9);
-            cardDefectType.Controls.Add(checkBox10);
-            cardDefectType.Controls.Add(checkBox11);
-            cardDefectType.Controls.Add(checkBox12);
-            cardDefectType.Controls.Add(checkBox13);
-            cardDefectType.Controls.Add(label6);
-            cardDefectType.Location = new Point(0, 184);
+            cardDefectType.Controls.Add(CB_DefectType_All);
+            cardDefectType.Controls.Add(CB_DefectType_Scrap);
+            cardDefectType.Controls.Add(CB_DefectType_SolderingDefect);
+            cardDefectType.Controls.Add(CB_DefectType_ComponentDefect);
+            cardDefectType.Controls.Add(CB_DefectType_Normal);
+            cardDefectType.Controls.Add(label_DefectType);
+            cardDefectType.Location = new Point(0, 197);
             cardDefectType.Name = "cardDefectType";
             cardDefectType.Size = new Size(555, 111);
             cardDefectType.TabIndex = 10;
             // 
-            // checkBox9
+            // CB_DefectType_All
             // 
-            checkBox9.AutoSize = true;
-            checkBox9.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
-            checkBox9.ForeColor = Color.White;
-            checkBox9.Location = new Point(15, 55);
-            checkBox9.Name = "checkBox9";
-            checkBox9.Size = new Size(69, 29);
-            checkBox9.TabIndex = 9;
-            checkBox9.Text = "전체";
-            checkBox9.UseVisualStyleBackColor = true;
+            CB_DefectType_All.AutoSize = true;
+            CB_DefectType_All.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_DefectType_All.ForeColor = Color.White;
+            CB_DefectType_All.Location = new Point(15, 55);
+            CB_DefectType_All.Name = "CB_DefectType_All";
+            CB_DefectType_All.Size = new Size(69, 29);
+            CB_DefectType_All.TabIndex = 9;
+            CB_DefectType_All.Text = "전체";
+            CB_DefectType_All.UseVisualStyleBackColor = true;
+            CB_DefectType_All.CheckedChanged += CB_DefectType_All_CheckedChanged;
             // 
-            // checkBox10
+            // CB_DefectType_Scrap
             // 
-            checkBox10.AutoSize = true;
-            checkBox10.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
-            checkBox10.ForeColor = Color.White;
-            checkBox10.Location = new Point(435, 55);
-            checkBox10.Name = "checkBox10";
-            checkBox10.Size = new Size(69, 29);
-            checkBox10.TabIndex = 8;
-            checkBox10.Text = "폐기";
-            checkBox10.UseVisualStyleBackColor = true;
+            CB_DefectType_Scrap.AutoSize = true;
+            CB_DefectType_Scrap.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_DefectType_Scrap.ForeColor = Color.White;
+            CB_DefectType_Scrap.Location = new Point(435, 55);
+            CB_DefectType_Scrap.Name = "CB_DefectType_Scrap";
+            CB_DefectType_Scrap.Size = new Size(69, 29);
+            CB_DefectType_Scrap.TabIndex = 8;
+            CB_DefectType_Scrap.Text = "폐기";
+            CB_DefectType_Scrap.UseVisualStyleBackColor = true;
+            CB_DefectType_Scrap.CheckedChanged += CB_DefectType_Scrap_CheckedChanged;
             // 
-            // checkBox11
+            // CB_DefectType_SolderingDefect
             // 
-            checkBox11.AutoSize = true;
-            checkBox11.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
-            checkBox11.ForeColor = Color.White;
-            checkBox11.Location = new Point(311, 55);
-            checkBox11.Name = "checkBox11";
-            checkBox11.Size = new Size(107, 29);
-            checkBox11.TabIndex = 7;
-            checkBox11.Text = "납땜불량";
-            checkBox11.UseVisualStyleBackColor = true;
+            CB_DefectType_SolderingDefect.AutoSize = true;
+            CB_DefectType_SolderingDefect.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_DefectType_SolderingDefect.ForeColor = Color.White;
+            CB_DefectType_SolderingDefect.Location = new Point(311, 55);
+            CB_DefectType_SolderingDefect.Name = "CB_DefectType_SolderingDefect";
+            CB_DefectType_SolderingDefect.Size = new Size(107, 29);
+            CB_DefectType_SolderingDefect.TabIndex = 7;
+            CB_DefectType_SolderingDefect.Text = "납땜불량";
+            CB_DefectType_SolderingDefect.UseVisualStyleBackColor = true;
+            CB_DefectType_SolderingDefect.CheckedChanged += CB_DefectType_SolderingDefect_CheckedChanged;
             // 
-            // checkBox12
+            // CB_DefectType_ComponentDefect
             // 
-            checkBox12.AutoSize = true;
-            checkBox12.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
-            checkBox12.ForeColor = Color.White;
-            checkBox12.Location = new Point(187, 55);
-            checkBox12.Name = "checkBox12";
-            checkBox12.Size = new Size(107, 29);
-            checkBox12.TabIndex = 6;
-            checkBox12.Text = "부품불량";
-            checkBox12.UseVisualStyleBackColor = true;
+            CB_DefectType_ComponentDefect.AutoSize = true;
+            CB_DefectType_ComponentDefect.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_DefectType_ComponentDefect.ForeColor = Color.White;
+            CB_DefectType_ComponentDefect.Location = new Point(187, 55);
+            CB_DefectType_ComponentDefect.Name = "CB_DefectType_ComponentDefect";
+            CB_DefectType_ComponentDefect.Size = new Size(107, 29);
+            CB_DefectType_ComponentDefect.TabIndex = 6;
+            CB_DefectType_ComponentDefect.Text = "부품불량";
+            CB_DefectType_ComponentDefect.UseVisualStyleBackColor = true;
+            CB_DefectType_ComponentDefect.CheckedChanged += CB_DefectType_ComponentDefect_CheckedChanged;
             // 
-            // checkBox13
+            // CB_DefectType_Normal
             // 
-            checkBox13.AutoSize = true;
-            checkBox13.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
-            checkBox13.ForeColor = Color.White;
-            checkBox13.Location = new Point(101, 55);
-            checkBox13.Name = "checkBox13";
-            checkBox13.Size = new Size(69, 29);
-            checkBox13.TabIndex = 5;
-            checkBox13.Text = "정상";
-            checkBox13.UseVisualStyleBackColor = true;
+            CB_DefectType_Normal.AutoSize = true;
+            CB_DefectType_Normal.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
+            CB_DefectType_Normal.ForeColor = Color.White;
+            CB_DefectType_Normal.Location = new Point(101, 55);
+            CB_DefectType_Normal.Name = "CB_DefectType_Normal";
+            CB_DefectType_Normal.Size = new Size(69, 29);
+            CB_DefectType_Normal.TabIndex = 5;
+            CB_DefectType_Normal.Text = "정상";
+            CB_DefectType_Normal.UseVisualStyleBackColor = true;
+            CB_DefectType_Normal.CheckedChanged += CB_DefectType_Normal_CheckedChanged;
             // 
-            // label6
+            // label_DefectType
             // 
-            label6.AutoSize = true;
-            label6.Font = new Font("맑은 고딕", 18F, FontStyle.Bold, GraphicsUnit.Point, 129);
-            label6.ForeColor = Color.White;
-            label6.Location = new Point(0, 3);
-            label6.Name = "label6";
-            label6.Size = new Size(118, 32);
-            label6.TabIndex = 0;
-            label6.Text = "불량 유형";
+            label_DefectType.AutoSize = true;
+            label_DefectType.Font = new Font("맑은 고딕", 18F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            label_DefectType.ForeColor = Color.White;
+            label_DefectType.Location = new Point(0, 3);
+            label_DefectType.Name = "label_DefectType";
+            label_DefectType.Size = new Size(118, 32);
+            label_DefectType.TabIndex = 0;
+            label_DefectType.Text = "불량 유형";
             // 
             // btn_filterSearch
             // 
@@ -408,62 +453,62 @@
             // 
             // cardday
             // 
-            cardday.Controls.Add(kryptonDateTimePicker2);
-            cardday.Controls.Add(label2);
-            cardday.Controls.Add(label4);
-            cardday.Controls.Add(kryptonDateTimePicker1);
+            cardday.Controls.Add(DTP_EndDate);
+            cardday.Controls.Add(label_datelRange);
+            cardday.Controls.Add(label_Date);
+            cardday.Controls.Add(DTP_StartDate);
             cardday.Location = new Point(0, 67);
             cardday.Name = "cardday";
             cardday.Size = new Size(555, 111);
             cardday.TabIndex = 7;
             // 
-            // kryptonDateTimePicker2
+            // DTP_EndDate
             // 
-            kryptonDateTimePicker2.Location = new Point(296, 60);
-            kryptonDateTimePicker2.Name = "kryptonDateTimePicker2";
-            kryptonDateTimePicker2.Size = new Size(248, 31);
-            kryptonDateTimePicker2.StateCommon.Back.Color1 = Color.FromArgb(44, 44, 44);
-            kryptonDateTimePicker2.StateCommon.Border.Color1 = Color.FromArgb(44, 44, 44);
-            kryptonDateTimePicker2.StateCommon.Border.Color2 = Color.FromArgb(44, 44, 44);
-            kryptonDateTimePicker2.StateCommon.Border.DrawBorders = ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Top | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Bottom | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Left | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Right;
-            kryptonDateTimePicker2.StateCommon.Content.Color1 = Color.White;
-            kryptonDateTimePicker2.StateCommon.Content.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
-            kryptonDateTimePicker2.TabIndex = 9;
+            DTP_EndDate.Location = new Point(296, 60);
+            DTP_EndDate.Name = "DTP_EndDate";
+            DTP_EndDate.Size = new Size(248, 31);
+            DTP_EndDate.StateCommon.Back.Color1 = Color.FromArgb(44, 44, 44);
+            DTP_EndDate.StateCommon.Border.Color1 = Color.FromArgb(44, 44, 44);
+            DTP_EndDate.StateCommon.Border.Color2 = Color.FromArgb(44, 44, 44);
+            DTP_EndDate.StateCommon.Border.DrawBorders = ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Top | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Bottom | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Left | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Right;
+            DTP_EndDate.StateCommon.Content.Color1 = Color.White;
+            DTP_EndDate.StateCommon.Content.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            DTP_EndDate.TabIndex = 9;
             // 
-            // label2
+            // label_datelRange
             // 
-            label2.AutoSize = true;
-            label2.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
-            label2.ForeColor = Color.White;
-            label2.Location = new Point(254, 50);
-            label2.Name = "label2";
-            label2.Size = new Size(26, 25);
-            label2.TabIndex = 3;
-            label2.Text = "~";
+            label_datelRange.AutoSize = true;
+            label_datelRange.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            label_datelRange.ForeColor = Color.White;
+            label_datelRange.Location = new Point(254, 50);
+            label_datelRange.Name = "label_datelRange";
+            label_datelRange.Size = new Size(26, 25);
+            label_datelRange.TabIndex = 3;
+            label_datelRange.Text = "~";
             // 
-            // label4
+            // label_Date
             // 
-            label4.AutoSize = true;
-            label4.Font = new Font("맑은 고딕", 18F, FontStyle.Bold, GraphicsUnit.Point, 129);
-            label4.ForeColor = Color.White;
-            label4.Location = new Point(0, 3);
-            label4.Name = "label4";
-            label4.Size = new Size(62, 32);
-            label4.TabIndex = 0;
-            label4.Text = "날짜";
+            label_Date.AutoSize = true;
+            label_Date.Font = new Font("맑은 고딕", 18F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            label_Date.ForeColor = Color.White;
+            label_Date.Location = new Point(0, 3);
+            label_Date.Name = "label_Date";
+            label_Date.Size = new Size(62, 32);
+            label_Date.TabIndex = 0;
+            label_Date.Text = "날짜";
             // 
-            // kryptonDateTimePicker1
+            // DTP_StartDate
             // 
-            kryptonDateTimePicker1.Location = new Point(15, 60);
-            kryptonDateTimePicker1.Name = "kryptonDateTimePicker1";
-            kryptonDateTimePicker1.Size = new Size(248, 31);
-            kryptonDateTimePicker1.StateCommon.Back.Color1 = Color.FromArgb(44, 44, 44);
-            kryptonDateTimePicker1.StateCommon.Border.Color1 = Color.FromArgb(44, 44, 44);
-            kryptonDateTimePicker1.StateCommon.Border.Color2 = Color.FromArgb(44, 44, 44);
-            kryptonDateTimePicker1.StateCommon.Border.DrawBorders = ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Top | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Bottom | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Left | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Right;
-            kryptonDateTimePicker1.StateCommon.Content.Color1 = Color.White;
-            kryptonDateTimePicker1.StateCommon.Content.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
-            kryptonDateTimePicker1.TabIndex = 8;
+            DTP_StartDate.Location = new Point(15, 60);
+            DTP_StartDate.Name = "DTP_StartDate";
+            DTP_StartDate.Size = new Size(248, 31);
+            DTP_StartDate.StateCommon.Back.Color1 = Color.FromArgb(44, 44, 44);
+            DTP_StartDate.StateCommon.Border.Color1 = Color.FromArgb(44, 44, 44);
+            DTP_StartDate.StateCommon.Border.Color2 = Color.FromArgb(44, 44, 44);
+            DTP_StartDate.StateCommon.Border.DrawBorders = ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Top | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Bottom | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Left | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Right;
+            DTP_StartDate.StateCommon.Content.Color1 = Color.White;
+            DTP_StartDate.StateCommon.Content.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            DTP_StartDate.TabIndex = 8;
             // 
             // cardSearchresult
             // 
@@ -478,12 +523,12 @@
             kryptonDataGridView1.AllowUserToAddRows = false;
             kryptonDataGridView1.AllowUserToResizeColumns = false;
             kryptonDataGridView1.AllowUserToResizeRows = false;
-            dataGridViewCellStyle1.BackColor = Color.FromArgb(44, 44, 44);
-            dataGridViewCellStyle1.Font = new Font("맑은 고딕", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
-            dataGridViewCellStyle1.ForeColor = Color.White;
-            dataGridViewCellStyle1.SelectionBackColor = Color.FromArgb(44, 44, 44);
-            dataGridViewCellStyle1.SelectionForeColor = Color.White;
-            kryptonDataGridView1.AlternatingRowsDefaultCellStyle = dataGridViewCellStyle1;
+            dataGridViewCellStyle9.BackColor = Color.FromArgb(44, 44, 44);
+            dataGridViewCellStyle9.Font = new Font("맑은 고딕", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            dataGridViewCellStyle9.ForeColor = Color.White;
+            dataGridViewCellStyle9.SelectionBackColor = Color.FromArgb(44, 44, 44);
+            dataGridViewCellStyle9.SelectionForeColor = Color.White;
+            kryptonDataGridView1.AlternatingRowsDefaultCellStyle = dataGridViewCellStyle9;
             kryptonDataGridView1.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
             kryptonDataGridView1.ClipboardCopyMode = DataGridViewClipboardCopyMode.Disable;
             kryptonDataGridView1.ColumnHeadersHeight = 41;
@@ -493,12 +538,12 @@
             kryptonDataGridView1.Location = new Point(0, 0);
             kryptonDataGridView1.Name = "kryptonDataGridView1";
             kryptonDataGridView1.PaletteMode = ComponentFactory.Krypton.Toolkit.PaletteMode.Office2010Black;
-            dataGridViewCellStyle2.BackColor = Color.FromArgb(44, 44, 44);
-            dataGridViewCellStyle2.Font = new Font("맑은 고딕", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
-            dataGridViewCellStyle2.ForeColor = Color.White;
-            dataGridViewCellStyle2.SelectionBackColor = Color.FromArgb(44, 44, 44);
-            dataGridViewCellStyle2.SelectionForeColor = Color.White;
-            kryptonDataGridView1.RowsDefaultCellStyle = dataGridViewCellStyle2;
+            dataGridViewCellStyle10.BackColor = Color.FromArgb(44, 44, 44);
+            dataGridViewCellStyle10.Font = new Font("맑은 고딕", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            dataGridViewCellStyle10.ForeColor = Color.White;
+            dataGridViewCellStyle10.SelectionBackColor = Color.FromArgb(44, 44, 44);
+            dataGridViewCellStyle10.SelectionForeColor = Color.White;
+            kryptonDataGridView1.RowsDefaultCellStyle = dataGridViewCellStyle10;
             kryptonDataGridView1.RowTemplate.DefaultCellStyle.BackColor = Color.FromArgb(44, 44, 44);
             kryptonDataGridView1.RowTemplate.DefaultCellStyle.Font = new Font("맑은 고딕", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
             kryptonDataGridView1.RowTemplate.DefaultCellStyle.ForeColor = Color.White;
@@ -697,10 +742,10 @@
             Load += InspectionHistoryView_Load;
             cardfilter.ResumeLayout(false);
             cardfilter.PerformLayout();
-            panel2.ResumeLayout(false);
-            panel2.PerformLayout();
-            panel1.ResumeLayout(false);
-            panel1.PerformLayout();
+            cardproductionline.ResumeLayout(false);
+            cardproductionline.PerformLayout();
+            cardDefectLocation.ResumeLayout(false);
+            cardDefectLocation.PerformLayout();
             cardCameraID.ResumeLayout(false);
             cardCameraID.PerformLayout();
             cardDefectType.ResumeLayout(false);
@@ -717,37 +762,37 @@
         private Panel cardfilter;
         private Panel cardSearchresult;
         private Label label1;
-        private Label label2;
+        private Label label_datelRange;
         private Button btn_filterSearch;
         private ComponentFactory.Krypton.Toolkit.KryptonManager kryptonManager1;
-        private ComponentFactory.Krypton.Toolkit.KryptonDateTimePicker kryptonDateTimePicker1;
-        private ComponentFactory.Krypton.Toolkit.KryptonDateTimePicker kryptonDateTimePicker2;
+        private ComponentFactory.Krypton.Toolkit.KryptonDateTimePicker DTP_StartDate;
+        private ComponentFactory.Krypton.Toolkit.KryptonDateTimePicker DTP_EndDate;
         private Panel cardday;
-        private Label label4;
+        private Label label_Date;
         private Panel cardCameraID;
-        private CheckBox checkBox1;
-        private CheckBox checkBox2;
-        private CheckBox checkBox3;
-        private Label label3;
+        private CheckBox CB_CameraID_All;
+        private CheckBox CB_CameraID_CAM02;
+        private CheckBox CB_CameraID_CAM01;
+        private Label label_CameraID;
         private Panel cardDefectType;
-        private CheckBox checkBox9;
-        private CheckBox checkBox10;
-        private CheckBox checkBox11;
-        private CheckBox checkBox12;
-        private CheckBox checkBox13;
-        private Label label6;
+        private CheckBox CB_DefectType_All;
+        private CheckBox CB_DefectType_Scrap;
+        private CheckBox CB_DefectType_SolderingDefect;
+        private CheckBox CB_DefectType_ComponentDefect;
+        private CheckBox CB_DefectType_Normal;
+        private Label label_DefectType;
         private TenTec.Windows.iGridLib.iGCellStyle iGrid1DefaultCellStyle1;
         private TenTec.Windows.iGridLib.iGColHdrStyle iGrid1DefaultColHdrStyle1;
         private ComponentFactory.Krypton.Toolkit.KryptonDataGridView kryptonDataGridView1;
-        private Panel panel1;
-        private CheckBox checkBox4;
-        private CheckBox checkBox5;
-        private CheckBox checkBox6;
+        private Panel cardDefectLocation;
+        private CheckBox CB_DefectLocation_All;
+        private CheckBox CB_DefectLocation_Lower;
+        private CheckBox CB_DefectLocation_Upper;
         private Label label5;
-        private Panel panel2;
-        private CheckBox checkBox7;
-        private CheckBox checkBox14;
-        private Label label7;
+        private Panel cardproductionline;
+        private CheckBox CB_ProductionLine_All;
+        private CheckBox CB_ProductionLine_1;
+        private Label label_ProductionLine_All;
         private DataGridViewTextBoxColumn date;
         private DataGridViewTextBoxColumn time;
         private DataGridViewTextBoxColumn CameraID;
@@ -755,9 +800,11 @@
         private DataGridViewTextBoxColumn DefectType;
         private DataGridViewTextBoxColumn DefectLocation;
         private DataGridViewTextBoxColumn productionline;
-        private CheckBox checkBox16;
-        private CheckBox checkBox15;
-        private CheckBox checkBox8;
+        private CheckBox CB_ProductionLine_3;
+        private CheckBox CB_ProductionLine_2;
         private Button button1;
+        private CheckBox CB_CameraID_CAM03;
+        private CheckBox CB_DefectLocation_Right;
+        private CheckBox CB_DefectLocation_Left;
     }
 }
