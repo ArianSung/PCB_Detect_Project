@@ -37,6 +37,12 @@
     <Compile Update="Views\Statistics\StatisticsView.cs">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Update="Views\UserManagement\UserManagementForm_AddUser.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="Views\UserManagement\UserManagementForm_EditUser.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Update="Views\UserManagement\UserManagementView.cs">
       <SubType>UserControl</SubType>
     </Compile>
