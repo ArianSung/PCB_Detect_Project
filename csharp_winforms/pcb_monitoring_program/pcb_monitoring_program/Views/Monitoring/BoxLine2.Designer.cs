@@ -1,6 +1,6 @@
 ﻿namespace pcb_monitoring_program.Views.Monitoring
 {
-    partial class BoxMonitoringView
+    partial class BoxLine2
     {
         /// <summary> 
         /// 필수 디자이너 변수입니다.
@@ -31,46 +31,26 @@
             System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
             System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
             System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
-            cardBOXMonitoring = new Panel();
-            label2 = new Label();
-            pictureBox1 = new PictureBox();
+            cardBoxRateLine2 = new Panel();
             label1 = new Label();
             BoxRateChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
-            cardBoxRate = new Panel();
-            cardBOXMonitoring.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
+            cardBOXLine2 = new Panel();
+            label2 = new Label();
+            pictureBox1 = new PictureBox();
+            cardBoxRateLine2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)BoxRateChart).BeginInit();
-            cardBoxRate.SuspendLayout();
+            cardBOXLine2.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             SuspendLayout();
             // 
-            // cardBOXMonitoring
+            // cardBoxRateLine2
             // 
-            cardBOXMonitoring.Controls.Add(label2);
-            cardBOXMonitoring.Controls.Add(pictureBox1);
-            cardBOXMonitoring.Location = new Point(3, 3);
-            cardBOXMonitoring.Name = "cardBOXMonitoring";
-            cardBOXMonitoring.Size = new Size(755, 675);
-            cardBOXMonitoring.TabIndex = 3;
-            // 
-            // label2
-            // 
-            label2.AutoSize = true;
-            label2.Font = new Font("맑은 고딕", 12F, FontStyle.Bold, GraphicsUnit.Point, 129);
-            label2.ForeColor = SystemColors.Window;
-            label2.Location = new Point(0, 0);
-            label2.Name = "label2";
-            label2.Size = new Size(189, 21);
-            label2.TabIndex = 4;
-            label2.Text = "LINE 1 BOX Monitoring";
-            // 
-            // pictureBox1
-            // 
-            pictureBox1.BackColor = Color.FromArgb(128, 128, 255);
-            pictureBox1.Location = new Point(51, 43);
-            pictureBox1.Name = "pictureBox1";
-            pictureBox1.Size = new Size(640, 616);
-            pictureBox1.TabIndex = 0;
-            pictureBox1.TabStop = false;
+            cardBoxRateLine2.Controls.Add(label1);
+            cardBoxRateLine2.Controls.Add(BoxRateChart);
+            cardBoxRateLine2.Location = new Point(799, 3);
+            cardBoxRateLine2.Name = "cardBoxRateLine2";
+            cardBoxRateLine2.Size = new Size(743, 372);
+            cardBoxRateLine2.TabIndex = 9;
             // 
             // label1
             // 
@@ -81,7 +61,7 @@
             label1.Name = "label1";
             label1.Size = new Size(152, 21);
             label1.TabIndex = 6;
-            label1.Text = "LINE 1 박스 적재율";
+            label1.Text = "LINE 2 박스 적재율";
             // 
             // BoxRateChart
             // 
@@ -101,41 +81,61 @@
             BoxRateChart.TabIndex = 5;
             BoxRateChart.Text = "chart1";
             // 
-            // cardBoxRate
+            // cardBOXLine2
             // 
-            cardBoxRate.Controls.Add(label1);
-            cardBoxRate.Controls.Add(BoxRateChart);
-            cardBoxRate.Location = new Point(799, 3);
-            cardBoxRate.Name = "cardBoxRate";
-            cardBoxRate.Size = new Size(743, 372);
-            cardBoxRate.TabIndex = 7;
+            cardBOXLine2.Controls.Add(label2);
+            cardBOXLine2.Controls.Add(pictureBox1);
+            cardBOXLine2.Location = new Point(3, 3);
+            cardBOXLine2.Name = "cardBOXLine2";
+            cardBOXLine2.Size = new Size(755, 675);
+            cardBOXLine2.TabIndex = 8;
             // 
-            // BoxMonitoringView
+            // label2
+            // 
+            label2.AutoSize = true;
+            label2.Font = new Font("맑은 고딕", 12F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            label2.ForeColor = SystemColors.Window;
+            label2.Location = new Point(0, 0);
+            label2.Name = "label2";
+            label2.Size = new Size(189, 21);
+            label2.TabIndex = 4;
+            label2.Text = "LINE 2 BOX Monitoring";
+            // 
+            // pictureBox1
+            // 
+            pictureBox1.BackColor = Color.FromArgb(128, 128, 255);
+            pictureBox1.Location = new Point(51, 43);
+            pictureBox1.Name = "pictureBox1";
+            pictureBox1.Size = new Size(640, 616);
+            pictureBox1.TabIndex = 0;
+            pictureBox1.TabStop = false;
+            // 
+            // BoxLine2
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(64, 64, 64);
-            Controls.Add(cardBoxRate);
-            Controls.Add(cardBOXMonitoring);
-            Name = "BoxMonitoringView";
+            Controls.Add(cardBoxRateLine2);
+            Controls.Add(cardBOXLine2);
+            Name = "BoxLine2";
             Size = new Size(1600, 700);
-            Load += BoxMonitoringView_Load;
-            cardBOXMonitoring.ResumeLayout(false);
-            cardBOXMonitoring.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
+            Load += BoxLine2_Load;
+            cardBoxRateLine2.ResumeLayout(false);
+            cardBoxRateLine2.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)BoxRateChart).EndInit();
-            cardBoxRate.ResumeLayout(false);
-            cardBoxRate.PerformLayout();
+            cardBOXLine2.ResumeLayout(false);
+            cardBOXLine2.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
             ResumeLayout(false);
         }
 
         #endregion
 
-        private Panel cardBOXMonitoring;
+        private Panel cardBoxRateLine2;
+        private Label label1;
+        private System.Windows.Forms.DataVisualization.Charting.Chart BoxRateChart;
+        private Panel cardBOXLine2;
         private Label label2;
         private PictureBox pictureBox1;
-        private System.Windows.Forms.DataVisualization.Charting.Chart BoxRateChart;
-        private Label label1;
-        private Panel cardBoxRate;
     }
 }

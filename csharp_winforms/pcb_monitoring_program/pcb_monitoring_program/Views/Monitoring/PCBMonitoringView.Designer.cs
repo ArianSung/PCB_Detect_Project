@@ -29,88 +29,101 @@
         private void InitializeComponent()
         {
             pictureBox1 = new PictureBox();
-            pictureBox2 = new PictureBox();
-            cardPCBMonitoring = new Panel();
-            label1 = new Label();
+            cardPCBFrontMonitoring = new Panel();
             label2 = new Label();
+            cardPCBBackMonitoring = new Panel();
+            label1 = new Label();
+            pictureBox2 = new PictureBox();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
+            cardPCBFrontMonitoring.SuspendLayout();
+            cardPCBBackMonitoring.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).BeginInit();
-            cardPCBMonitoring.SuspendLayout();
             SuspendLayout();
             // 
             // pictureBox1
             // 
             pictureBox1.BackColor = Color.FromArgb(128, 128, 255);
-            pictureBox1.Location = new Point(52, 73);
+            pictureBox1.Location = new Point(52, 40);
             pictureBox1.Name = "pictureBox1";
             pictureBox1.Size = new Size(640, 616);
             pictureBox1.TabIndex = 0;
             pictureBox1.TabStop = false;
             // 
-            // pictureBox2
+            // cardPCBFrontMonitoring
             // 
-            pictureBox2.BackColor = Color.FromArgb(128, 128, 255);
-            pictureBox2.Location = new Point(903, 73);
-            pictureBox2.Name = "pictureBox2";
-            pictureBox2.Size = new Size(640, 616);
-            pictureBox2.TabIndex = 1;
-            pictureBox2.TabStop = false;
-            // 
-            // cardPCBMonitoring
-            // 
-            cardPCBMonitoring.Controls.Add(label1);
-            cardPCBMonitoring.Controls.Add(label2);
-            cardPCBMonitoring.Controls.Add(pictureBox1);
-            cardPCBMonitoring.Controls.Add(pictureBox2);
-            cardPCBMonitoring.Location = new Point(0, 38);
-            cardPCBMonitoring.Name = "cardPCBMonitoring";
-            cardPCBMonitoring.Size = new Size(1597, 715);
-            cardPCBMonitoring.TabIndex = 2;
-            // 
-            // label1
-            // 
-            label1.AutoSize = true;
-            label1.Font = new Font("맑은 고딕", 12F, FontStyle.Bold, GraphicsUnit.Point, 129);
-            label1.ForeColor = SystemColors.Window;
-            label1.Location = new Point(903, 40);
-            label1.Name = "label1";
-            label1.Size = new Size(82, 21);
-            label1.TabIndex = 5;
-            label1.Text = "PCB Back";
+            cardPCBFrontMonitoring.Controls.Add(label2);
+            cardPCBFrontMonitoring.Controls.Add(pictureBox1);
+            cardPCBFrontMonitoring.Location = new Point(3, 3);
+            cardPCBFrontMonitoring.Name = "cardPCBFrontMonitoring";
+            cardPCBFrontMonitoring.Size = new Size(752, 682);
+            cardPCBFrontMonitoring.TabIndex = 2;
             // 
             // label2
             // 
             label2.AutoSize = true;
             label2.Font = new Font("맑은 고딕", 12F, FontStyle.Bold, GraphicsUnit.Point, 129);
             label2.ForeColor = SystemColors.Window;
-            label2.Location = new Point(52, 40);
+            label2.Location = new Point(3, 0);
             label2.Name = "label2";
-            label2.Size = new Size(86, 21);
+            label2.Size = new Size(142, 21);
             label2.TabIndex = 4;
-            label2.Text = "PCB Front";
+            label2.Text = "LINE 1 PCB Front";
+            // 
+            // cardPCBBackMonitoring
+            // 
+            cardPCBBackMonitoring.Controls.Add(label1);
+            cardPCBBackMonitoring.Controls.Add(pictureBox2);
+            cardPCBBackMonitoring.Location = new Point(847, 3);
+            cardPCBBackMonitoring.Name = "cardPCBBackMonitoring";
+            cardPCBBackMonitoring.Size = new Size(752, 682);
+            cardPCBBackMonitoring.TabIndex = 5;
+            // 
+            // label1
+            // 
+            label1.AutoSize = true;
+            label1.Font = new Font("맑은 고딕", 12F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            label1.ForeColor = SystemColors.Window;
+            label1.Location = new Point(3, 0);
+            label1.Name = "label1";
+            label1.Size = new Size(138, 21);
+            label1.TabIndex = 4;
+            label1.Text = "LINE 1 PCB Back";
+            // 
+            // pictureBox2
+            // 
+            pictureBox2.BackColor = Color.FromArgb(128, 128, 255);
+            pictureBox2.Location = new Point(52, 40);
+            pictureBox2.Name = "pictureBox2";
+            pictureBox2.Size = new Size(640, 616);
+            pictureBox2.TabIndex = 0;
+            pictureBox2.TabStop = false;
             // 
             // PCBMonitoringView
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(64, 64, 64);
-            Controls.Add(cardPCBMonitoring);
+            Controls.Add(cardPCBBackMonitoring);
+            Controls.Add(cardPCBFrontMonitoring);
             Name = "PCBMonitoringView";
-            Size = new Size(1600, 800);
+            Size = new Size(1600, 700);
             Load += PCBMonitoringView_Load;
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
+            cardPCBFrontMonitoring.ResumeLayout(false);
+            cardPCBFrontMonitoring.PerformLayout();
+            cardPCBBackMonitoring.ResumeLayout(false);
+            cardPCBBackMonitoring.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();
-            cardPCBMonitoring.ResumeLayout(false);
-            cardPCBMonitoring.PerformLayout();
             ResumeLayout(false);
         }
 
         #endregion
 
         private PictureBox pictureBox1;
-        private PictureBox pictureBox2;
-        private Panel cardPCBMonitoring;
-        private Label label1;
+        private Panel cardPCBFrontMonitoring;
         private Label label2;
+        private Panel cardPCBBackMonitoring;
+        private Label label1;
+        private PictureBox pictureBox2;
     }
 }
