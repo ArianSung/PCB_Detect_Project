@@ -889,6 +889,5 @@ namespace pcb_monitoring_program.Views.Dashboard
             };
             chart.Legends.Add(legend);
         }
-
     }
 }

@@ -81,7 +81,7 @@ namespace pcb_monitoring_program
         {
             labelusername.Text = "이   름";
             labeluserauthority.Text = "[ 권   한 ]";
-            labelTitle.Text = "Login";
+            //labelTitle.Text = "Login";
 
             // 로그인 폼으로 돌아가기
             LoginForm loginForm = new LoginForm();
@@ -91,6 +91,9 @@ namespace pcb_monitoring_program
 
         private void MainForm_Load(object sender, EventArgs e)
         {
+            UiStyleHelper.MakeRoundedPanel(cardLogout, radius: 16, back: Color.FromArgb(44, 44, 44));
+            UiStyleHelper.AddShadowRoundedPanel(cardLogout, 16);
+
             labelTitle.Text = "Dashboard";
             UiStyleHelper.MakeRoundedButton(btnDashboard);
             UiStyleHelper.MakeRoundedButton(btnStatistics);
