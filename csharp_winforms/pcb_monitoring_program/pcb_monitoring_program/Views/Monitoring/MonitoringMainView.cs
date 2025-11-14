@@ -13,33 +13,38 @@ namespace pcb_monitoring_program.Views.Monitoring
 {
     public partial class MonitoringMainView : UserControl
     {
-        private PCBMonitoringView pcbMonitoringView;
-        private BoxMonitoringView boxMonitoringView;
+        private MainPCBMonitoringView mainpcbMonitoringView;
+        private MainBoxMonitoringView mainboxMonitoringView;
         private OHTMonitoringView ohtMonitoringView;
+        private LineMonitoringView lineMonitoringView;
         public MonitoringMainView()
         {
             InitializeComponent();
             // 1) 자식 뷰 인스턴스 생성
-            pcbMonitoringView = new PCBMonitoringView();
-            boxMonitoringView = new BoxMonitoringView();
+            mainpcbMonitoringView = new MainPCBMonitoringView();
+            mainboxMonitoringView = new MainBoxMonitoringView();
             ohtMonitoringView = new OHTMonitoringView();
+            lineMonitoringView = new LineMonitoringView();
 
             // 2) 패널에 등록(숨긴 상태로)
-            InitChildView(pcbMonitoringView);
-            InitChildView(boxMonitoringView);
+            InitChildView(mainpcbMonitoringView);
+            InitChildView(mainboxMonitoringView);
             InitChildView(ohtMonitoringView);
+            InitChildView(lineMonitoringView);
 
             // 3) 처음 들어오면 "통계" 화면부터 보이게
-            ShowView(pcbMonitoringView);
+            ShowView(mainpcbMonitoringView);
 
             // 4) 탭 버튼 스타일 (메인폼이랑 비슷하게)
             UiStyleHelper.MakeRoundedButton(btn_PCBMonitoringView, 24);
             UiStyleHelper.MakeRoundedButton(btn_BoxMonitoringView, 24);
             UiStyleHelper.MakeRoundedButton(btn_OHTMonitoringView, 24);
+            UiStyleHelper.MakeRoundedButton(btn_LineMonitoringView, 24);
 
             UiStyleHelper.AttachDropShadow(btn_PCBMonitoringView, radius: 16, offset: 4);
             UiStyleHelper.AttachDropShadow(btn_BoxMonitoringView, radius: 16, offset: 4);
             UiStyleHelper.AttachDropShadow(btn_OHTMonitoringView, radius: 16, offset: 4);
+            UiStyleHelper.AttachDropShadow(btn_LineMonitoringView, radius: 16, offset: 4);
 
             // 5) 버튼 기본 색/스타일(원하면)
             foreach (Control ctrl in this.Controls)
@@ -73,19 +78,25 @@ namespace pcb_monitoring_program.Views.Monitoring
 
         private void btn_PCBMonitoringView_Click(object sender, EventArgs e)
         {
-            ShowView(pcbMonitoringView);
+            ShowView(mainpcbMonitoringView);
             UiStyleHelper.HighlightButton((Button)sender);
         }
 
         private void btn_BoxMonitoringView_Click(object sender, EventArgs e)
         {
-            ShowView(boxMonitoringView);
+            ShowView(mainboxMonitoringView);
             UiStyleHelper.HighlightButton((Button)sender);
         }
 
         private void btn_OHTMonitoringView_Click(object sender, EventArgs e)
         {
             ShowView(ohtMonitoringView);
+            UiStyleHelper.HighlightButton((Button)sender);
+        }
+
+        private void btn_LineMonitoringView_Click(object sender, EventArgs e)
+        {
+            ShowView(lineMonitoringView);
             UiStyleHelper.HighlightButton((Button)sender);
         }
     }
