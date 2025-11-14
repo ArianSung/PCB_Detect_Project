@@ -11,31 +11,32 @@ using System.Windows.Forms.DataVisualization.Charting;
 
 namespace pcb_monitoring_program.Views.Monitoring
 {
-    public partial class BoxMonitoringView : UserControl
+    public partial class BoxLine2 : UserControl
     {
-        public BoxMonitoringView()
+        public BoxLine2()
         {
             InitializeComponent();
+
         }
-        private void BoxMonitoringView_Load(object sender, EventArgs e)
+
+        private void BoxLine2_Load(object sender, EventArgs e)
         {
-            UiStyleHelper.MakeRoundedPanel(cardBOXMonitoring, radius: 16, back: Color.FromArgb(44, 44, 44));
-            UiStyleHelper.MakeRoundedPanel(cardBoxRate, radius: 16, back: Color.FromArgb(44, 44, 44));
+            UiStyleHelper.MakeRoundedPanel(cardBOXLine2, radius: 16, back: Color.FromArgb(44, 44, 44));
+            UiStyleHelper.MakeRoundedPanel(cardBoxRateLine2, radius: 16, back: Color.FromArgb(44, 44, 44));
 
-            UiStyleHelper.AddShadowRoundedPanel(cardBOXMonitoring, 16);
-            UiStyleHelper.AddShadowRoundedPanel(cardBoxRate, 16);
+            UiStyleHelper.AddShadowRoundedPanel(cardBOXLine2, 16);
+            UiStyleHelper.AddShadowRoundedPanel(cardBoxRateLine2, 16);
 
-            SetupBoxRateChart();
+            SetupBoxRateChart2();
         }
-
-        private void SetupBoxRateChart()
+        private void SetupBoxRateChart2()
         {
             // 1) 데이터: 위에서 아래로 "정상 → 부품불량 → 납땜불량"
             var boxData = new (string name, int current, int max, Color color)[]
             {
-                ("정상",     2, 3, Color.FromArgb(100, 181, 246)),
-                ("부품불량",  3, 3, Color.FromArgb(238,  99,  99)),
-                ("납땜불량",  1, 3, Color.FromArgb(255, 170,   0)),
+                ("정상",     3, 3, Color.FromArgb(100, 181, 246)),
+                ("부품불량",  1, 3, Color.FromArgb(238,  99,  99)),
+                ("납땜불량",  2, 3, Color.FromArgb(255, 170,   0)),
             };
 
             var chart = BoxRateChart;

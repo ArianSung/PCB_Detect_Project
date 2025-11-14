@@ -19,9 +19,14 @@ namespace pcb_monitoring_program.Views.Monitoring
 
         private void PCBMonitoringView_Load(object sender, EventArgs e)
         {
-            UiStyleHelper.MakeRoundedPanel(cardPCBMonitoring, radius: 16, back: Color.FromArgb(44, 44, 44));
+            UiStyleHelper.MakeRoundedPanel(cardPCBFrontMonitoring, radius: 16, back: Color.FromArgb(44, 44, 44));
+            UiStyleHelper.MakeRoundedPanel(cardPCBBackMonitoring, radius: 16, back: Color.FromArgb(44, 44, 44));
 
-            UiStyleHelper.AddShadowRoundedPanel(cardPCBMonitoring, 16);
+            UiStyleHelper.AddShadowRoundedPanel(cardPCBFrontMonitoring, 16);
+            UiStyleHelper.AddShadowRoundedPanel(cardPCBBackMonitoring, 16);
+
+
         }
+
     }
 }
