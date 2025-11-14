@@ -27,19 +27,12 @@ namespace pcb_monitoring_program.Views.Statistics
                 kryptonDataGridView1.DefaultCellStyle.Padding = new Padding(12, 10, 12, 10);
                 kryptonDataGridView1.RowTemplate.Height = 44;
                 kryptonDataGridView1.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None; // 고정 높이
-                kryptonDataGridView1.ColumnHeadersHeight = 44;
-                kryptonDataGridView1.ColumnHeadersDefaultCellStyle.Padding = new Padding(8, 6, 8, 6);
-                kryptonDataGridView1.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.False;
                 kryptonDataGridView1.RowHeadersVisible = true;
                 kryptonDataGridView1.RowHeadersWidth = 48;
                 kryptonDataGridView1.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
 
                 // (Krypton 전용: 가시적 효과 확실)
                 kryptonDataGridView1.StateCommon.DataCell.Content.Padding = new Padding(12, 10, 12, 10);
-                kryptonDataGridView1.StateCommon.HeaderColumn.Content.Padding = new Padding(8, 6, 8, 6);
-                // (선택) 폰트
-                // kryptonDataGridView1.StateCommon.DataCell.Content.Font = new Font("Segoe UI", 10F);
-                // kryptonDataGridView1.StateCommon.HeaderColumn.Content.Font = new Font("Segoe UI Semibold", 10.5F);
 
                 // 1) 그리드 준비 (행헤더 보이기 등)
                 kryptonDataGridView1.RowHeadersVisible = true;
@@ -71,70 +64,77 @@ namespace pcb_monitoring_program.Views.Statistics
                 kryptonDataGridView1.DataBindingComplete += (s, e) => EnsureTransposedOnce();
         }
 
-        /// <summary>
         /// 전치 작업을 폼 수명 동안 딱 한 번만 수행
-        /// </summary>
         private void EnsureTransposedOnce()
         {
             if (_transposedOnce) return;
             if (kryptonDataGridView1 == null) return;
 
             _transposedOnce = true;
+            kryptonDataGridView1.AllowUserToAddRows = false;
 
             // 1. 전치 실행
             TransposeInPlace(kryptonDataGridView1, "항목");
 
-            // ===============================================
-            // ⭐ 2. 표 간격 조절 로직 적용 (전치 후 실행)
-            // ===============================================
+            // 2. 오른쪽 컬럼 헤더 이름 변경
+            if (kryptonDataGridView1.Columns.Count > 1)
+                kryptonDataGridView1.Columns[1].HeaderText = "값";
 
-            // 가로 간격 확보 (너비 310에 맞게 열을 균등하게 채움)
+            // 3. 기본 설정
             kryptonDataGridView1.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            kryptonDataGridView1.ScrollBars = ScrollBars.Horizontal;
+            kryptonDataGridView1.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None;
+            kryptonDataGridView1.AllowUserToResizeRows = false;
 
-            // 세로 간격 확보 (높이 640에 맞게 행 높이를 계산하여 채움)
-            const int TargetGridHeight = 640;
+            // 4. 실제 행들만 가져오기
+            var dataRows = kryptonDataGridView1.Rows
+                .Cast<DataGridViewRow>()
+                .Where(r => !r.IsNewRow)
+                .ToList();
 
-            // 코드에서 설정된 컬럼 헤더의 높이 (kryptonDataGridView1.ColumnHeadersHeight = 44)
-            int columnHeaderHeight = kryptonDataGridView1.ColumnHeadersHeight;
+            int rowCount = dataRows.Count;
+            if (rowCount == 0) return;
 
-            int rowCount = kryptonDataGridView1.Rows.Count;
+            // 5. 전체 행 높이 계산 (헤더 제외)
+            int totalHeightForRows = kryptonDataGridView1.ClientSize.Height;
+            if (kryptonDataGridView1.ColumnHeadersVisible)
+                totalHeightForRows -= kryptonDataGridView1.ColumnHeadersHeight;
 
-            if (rowCount > 0)
+            if (totalHeightForRows <= 0) return;
+
+            // 6. 기본 균등 분배
+            int baseHeight = totalHeightForRows / rowCount;
+            if (baseHeight < 1) baseHeight = 1;
+
+            kryptonDataGridView1.RowTemplate.Height = baseHeight;
+            foreach (var r in dataRows)
+                r.Height = baseHeight;
+
+            // 7. 실제 그려진 높이 측정 후 보정
+            kryptonDataGridView1.PerformLayout();
+
+            Rectangle firstRect = kryptonDataGridView1.GetRowDisplayRectangle(dataRows.First().Index, true);
+            Rectangle lastRect = kryptonDataGridView1.GetRowDisplayRectangle(dataRows.Last().Index, true);
+            int currentHeight = lastRect.Bottom - firstRect.Top;
+
+            int diff = totalHeightForRows - currentHeight;
+            if (diff != 0)
             {
-                // 데이터 행에 사용 가능한 총 높이 계산 (640 - 44 = 596)
-                int availableHeight = TargetGridHeight - columnHeaderHeight;
-
-                // 행당 균등 높이 계산
-                int newRowHeight = availableHeight / rowCount;
-                int remainingHeight = availableHeight - (newRowHeight * rowCount);
-
-                kryptonDataGridView1.RowTemplate.Height = newRowHeight;
-
-                // 현재 존재하는 모든 행에 계산된 높이 적용
-                for (int i = 0; i < rowCount; i++)
-                {
-                    kryptonDataGridView1.Rows[i].Height = newRowHeight;
-                }
-
-                // 잔여 픽셀을 마지막 행에 더해 그리드 높이를 정확히 640으로 만듭니다.
-                if (remainingHeight > 0)
-                {
-                    kryptonDataGridView1.Rows[rowCount - 1].Height += remainingHeight;
-                }
-
-                // 사용자가 행 높이를 수동으로 변경하지 못하도록 설정
-                kryptonDataGridView1.AllowUserToResizeRows = false;
-                kryptonDataGridView1.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None;
+                int newLast = dataRows.Last().Height + diff;
+                if (newLast < 1) newLast = 1;
+                dataRows.Last().Height = newLast;
             }
+
+            // 8. 스크롤 초기화
+            kryptonDataGridView1.FirstDisplayedScrollingRowIndex = 0;
         }
+
 
         // ===================== 전치(가로/세로 반전) 유틸 =====================
 
-        /// <summary>
         /// source의 현재 표시 데이터를 읽어 target에 가로/세로 반전하여 채웁니다.
         /// 수동 열/행 방식과 DataSource 바인딩 방식 모두 지원.
         /// 숨김행/열은 제외(원하면 관련 조건 제거).
-        /// </summary>
         private void TransposeGrid(DataGridView source, DataGridView target, string firstColHeader = "항목")
         {
             // 1) 실제 표시되는 행(입력행/숨김행 제외)
@@ -164,7 +164,10 @@ namespace pcb_monitoring_program.Views.Statistics
             {
                 int r = rowIndexes[i];
                 string rowHeader = source.Rows[r].HeaderCell?.Value?.ToString();
-                if (string.IsNullOrWhiteSpace(rowHeader)) rowHeader = $"Row{i + 1}";
+                //if (string.IsNullOrWhiteSpace(rowHeader)) rowHeader = $"Row{i + 1}";
+                //target.Columns.Add($"row{i}", rowHeader);
+                if (string.IsNullOrWhiteSpace(rowHeader))
+                    rowHeader = "";
                 target.Columns.Add($"row{i}", rowHeader);
             }
 
@@ -197,9 +200,7 @@ namespace pcb_monitoring_program.Views.Statistics
             target.ResumeLayout();
         }
 
-        /// <summary>
         /// 같은 그리드에 덮어쓰기(인플레이스) 전치.
-        /// </summary>
         private void TransposeInPlace(DataGridView grid, string firstColHeader = "항목")
         {
             using (var temp = new DataGridView())

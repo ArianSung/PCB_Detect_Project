@@ -42,7 +42,9 @@
             labeluserauthority = new Label();
             pictureBox2 = new PictureBox();
             btnLogout = new Button();
+            cardLogout = new Panel();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).BeginInit();
+            cardLogout.SuspendLayout();
             SuspendLayout();
             // 
             // btnDashboard
@@ -140,10 +142,10 @@
             // labelusername
             // 
             labelusername.AutoSize = true;
-            labelusername.BackColor = Color.FromArgb(64, 64, 64);
+            labelusername.BackColor = Color.FromArgb(44, 44, 44);
             labelusername.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
             labelusername.ForeColor = Color.White;
-            labelusername.Location = new Point(95, 22);
+            labelusername.Location = new Point(74, 10);
             labelusername.Name = "labelusername";
             labelusername.Size = new Size(71, 25);
             labelusername.TabIndex = 9;
@@ -152,9 +154,9 @@
             // labeluserauthority
             // 
             labeluserauthority.AutoSize = true;
-            labeluserauthority.BackColor = Color.FromArgb(64, 64, 64);
+            labeluserauthority.BackColor = Color.FromArgb(44, 44, 44);
             labeluserauthority.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
-            labeluserauthority.Location = new Point(95, 47);
+            labeluserauthority.Location = new Point(74, 35);
             labeluserauthority.Name = "labeluserauthority";
             labeluserauthority.Size = new Size(97, 25);
             labeluserauthority.TabIndex = 10;
@@ -162,28 +164,43 @@
             // 
             // pictureBox2
             // 
-            pictureBox2.BackColor = Color.FromArgb(64, 64, 64);
+            pictureBox2.BackColor = Color.FromArgb(44, 44, 44);
             pictureBox2.ErrorImage = null;
             pictureBox2.Image = Properties.Resources.Main_user_user_white;
             pictureBox2.InitialImage = null;
-            pictureBox2.Location = new Point(22, 19);
+            pictureBox2.Location = new Point(3, 13);
             pictureBox2.Name = "pictureBox2";
-            pictureBox2.Size = new Size(67, 80);
+            pictureBox2.Size = new Size(76, 90);
             pictureBox2.SizeMode = PictureBoxSizeMode.Zoom;
             pictureBox2.TabIndex = 11;
             pictureBox2.TabStop = false;
             // 
             // btnLogout
             // 
+            btnLogout.FlatAppearance.BorderSize = 0;
+            btnLogout.FlatStyle = FlatStyle.Flat;
             btnLogout.Font = new Font("Arial", 15.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnLogout.Location = new Point(18, 13);
+            btnLogout.ForeColor = Color.White;
+            btnLogout.Location = new Point(136, 73);
             btnLogout.Name = "btnLogout";
-            btnLogout.Size = new Size(245, 90);
+            btnLogout.Size = new Size(100, 33);
             btnLogout.TabIndex = 12;
-            btnLogout.Text = " Log out ";
+            btnLogout.Text = "Log out";
             btnLogout.TextAlign = ContentAlignment.BottomRight;
             btnLogout.UseVisualStyleBackColor = true;
             btnLogout.Click += btnLogout_Click;
+            // 
+            // cardLogout
+            // 
+            cardLogout.BackColor = Color.FromArgb(44, 44, 44);
+            cardLogout.Controls.Add(pictureBox2);
+            cardLogout.Controls.Add(labeluserauthority);
+            cardLogout.Controls.Add(labelusername);
+            cardLogout.Controls.Add(btnLogout);
+            cardLogout.Location = new Point(12, 12);
+            cardLogout.Name = "cardLogout";
+            cardLogout.Size = new Size(245, 111);
+            cardLogout.TabIndex = 13;
             // 
             // MainForm
             // 
@@ -191,9 +208,7 @@
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(64, 64, 64);
             ClientSize = new Size(1904, 1051);
-            Controls.Add(pictureBox2);
-            Controls.Add(labeluserauthority);
-            Controls.Add(labelusername);
+            Controls.Add(cardLogout);
             Controls.Add(labelTime);
             Controls.Add(panelContent);
             Controls.Add(btnSetting);
@@ -201,7 +216,6 @@
             Controls.Add(btnMonitoring);
             Controls.Add(btnStatistics);
             Controls.Add(btnDashboard);
-            Controls.Add(btnLogout);
             Controls.Add(labelTitle);
             ForeColor = SystemColors.Window;
             Name = "MainForm";
@@ -209,6 +223,8 @@
             WindowState = FormWindowState.Maximized;
             Load += MainForm_Load;
             ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();
+            cardLogout.ResumeLayout(false);
+            cardLogout.PerformLayout();
             ResumeLayout(false);
             PerformLayout();
         }
@@ -228,5 +244,6 @@
         private Label labeluserauthority;
         private PictureBox pictureBox2;
         private Button btnLogout;
+        private Panel cardLogout;
     }
 }
