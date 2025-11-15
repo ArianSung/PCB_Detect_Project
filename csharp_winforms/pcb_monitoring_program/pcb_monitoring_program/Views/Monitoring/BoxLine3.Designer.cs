@@ -28,17 +28,17 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend2 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
             cardBoxRateLine3 = new Panel();
             label1 = new Label();
-            BoxRateChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
+            BoxRateChartLine3 = new System.Windows.Forms.DataVisualization.Charting.Chart();
             cardBOXLine3 = new Panel();
             label2 = new Label();
             pictureBox1 = new PictureBox();
             cardBoxRateLine3.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)BoxRateChart).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)BoxRateChartLine3).BeginInit();
             cardBOXLine3.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             SuspendLayout();
@@ -46,7 +46,7 @@
             // cardBoxRateLine3
             // 
             cardBoxRateLine3.Controls.Add(label1);
-            cardBoxRateLine3.Controls.Add(BoxRateChart);
+            cardBoxRateLine3.Controls.Add(BoxRateChartLine3);
             cardBoxRateLine3.Location = new Point(799, 3);
             cardBoxRateLine3.Name = "cardBoxRateLine3";
             cardBoxRateLine3.Size = new Size(743, 372);
@@ -55,31 +55,31 @@
             // label1
             // 
             label1.AutoSize = true;
-            label1.Font = new Font("맑은 고딕", 12F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            label1.Font = new Font("맑은 고딕", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 129);
             label1.ForeColor = SystemColors.Window;
             label1.Location = new Point(3, 0);
             label1.Name = "label1";
-            label1.Size = new Size(152, 21);
+            label1.Size = new Size(197, 30);
             label1.TabIndex = 6;
             label1.Text = "LINE 3 박스 적재율";
             // 
-            // BoxRateChart
+            // BoxRateChartLine3
             // 
-            BoxRateChart.BackColor = Color.Transparent;
-            chartArea1.Name = "ChartArea1";
-            BoxRateChart.ChartAreas.Add(chartArea1);
-            legend1.Name = "Legend1";
-            BoxRateChart.Legends.Add(legend1);
-            BoxRateChart.Location = new Point(0, 79);
-            BoxRateChart.Name = "BoxRateChart";
-            series1.ChartArea = "ChartArea1";
-            series1.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Bar;
-            series1.Legend = "Legend1";
-            series1.Name = "Series1";
-            BoxRateChart.Series.Add(series1);
-            BoxRateChart.Size = new Size(740, 290);
-            BoxRateChart.TabIndex = 5;
-            BoxRateChart.Text = "chart1";
+            BoxRateChartLine3.BackColor = Color.Transparent;
+            chartArea2.Name = "ChartArea1";
+            BoxRateChartLine3.ChartAreas.Add(chartArea2);
+            legend2.Name = "Legend1";
+            BoxRateChartLine3.Legends.Add(legend2);
+            BoxRateChartLine3.Location = new Point(0, 79);
+            BoxRateChartLine3.Name = "BoxRateChartLine3";
+            series2.ChartArea = "ChartArea1";
+            series2.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Bar;
+            series2.Legend = "Legend1";
+            series2.Name = "Series1";
+            BoxRateChartLine3.Series.Add(series2);
+            BoxRateChartLine3.Size = new Size(740, 290);
+            BoxRateChartLine3.TabIndex = 5;
+            BoxRateChartLine3.Text = "chart1";
             // 
             // cardBOXLine3
             // 
@@ -93,11 +93,11 @@
             // label2
             // 
             label2.AutoSize = true;
-            label2.Font = new Font("맑은 고딕", 12F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            label2.Font = new Font("맑은 고딕", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 129);
             label2.ForeColor = SystemColors.Window;
             label2.Location = new Point(0, 0);
             label2.Name = "label2";
-            label2.Size = new Size(189, 21);
+            label2.Size = new Size(248, 30);
             label2.TabIndex = 4;
             label2.Text = "LINE 3 BOX Monitoring";
             // 
@@ -122,7 +122,7 @@
             Load += BoxLine3_Load;
             cardBoxRateLine3.ResumeLayout(false);
             cardBoxRateLine3.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)BoxRateChart).EndInit();
+            ((System.ComponentModel.ISupportInitialize)BoxRateChartLine3).EndInit();
             cardBOXLine3.ResumeLayout(false);
             cardBOXLine3.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
@@ -133,7 +133,7 @@
 
         private Panel cardBoxRateLine3;
         private Label label1;
-        private System.Windows.Forms.DataVisualization.Charting.Chart BoxRateChart;
+        private System.Windows.Forms.DataVisualization.Charting.Chart BoxRateChartLine3;
         private Panel cardBOXLine3;
         private Label label2;
         private PictureBox pictureBox1;

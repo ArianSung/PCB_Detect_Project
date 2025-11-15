@@ -46,7 +46,6 @@
             colJob = new DataGridViewTextBoxColumn();
             colUpdatedAt = new DataGridViewTextBoxColumn();
             cardOHTCall = new Panel();
-            cmbJobType = new ComboBox();
             lblLastCall = new Label();
             btnOhtCall = new Button();
             cmbBoxId = new ComboBox();
@@ -152,14 +151,14 @@
             dataGridViewCellStyle1.SelectionForeColor = Color.White;
             dataGridViewCellStyle1.WrapMode = DataGridViewTriState.False;
             dgvOhtStatus.DefaultCellStyle = dataGridViewCellStyle1;
-            dgvOhtStatus.Location = new Point(3, 34);
+            dgvOhtStatus.Location = new Point(74, 43);
             dgvOhtStatus.MultiSelect = false;
             dgvOhtStatus.Name = "dgvOhtStatus";
             dgvOhtStatus.ReadOnly = true;
             dgvOhtStatus.RowHeadersVisible = false;
             dgvOhtStatus.RowTemplate.Height = 45;
             dgvOhtStatus.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            dgvOhtStatus.Size = new Size(650, 213);
+            dgvOhtStatus.Size = new Size(632, 219);
             dgvOhtStatus.TabIndex = 0;
             // 
             // colOhtId
@@ -205,7 +204,6 @@
             // 
             // cardOHTCall
             // 
-            cardOHTCall.Controls.Add(cmbJobType);
             cardOHTCall.Controls.Add(lblLastCall);
             cardOHTCall.Controls.Add(btnOhtCall);
             cardOHTCall.Controls.Add(cmbBoxId);
@@ -220,14 +218,6 @@
             cardOHTCall.Name = "cardOHTCall";
             cardOHTCall.Size = new Size(535, 284);
             cardOHTCall.TabIndex = 8;
-            // 
-            // cmbJobType
-            // 
-            cmbJobType.FormattingEnabled = true;
-            cmbJobType.Location = new Point(174, 113);
-            cmbJobType.Name = "cmbJobType";
-            cmbJobType.Size = new Size(162, 23);
-            cmbJobType.TabIndex = 22;
             // 
             // lblLastCall
             // 
@@ -420,7 +410,6 @@
         private DataGridViewTextBoxColumn colJob;
         private DataGridViewTextBoxColumn colUpdatedAt;
         private Label label3;
-        private ComboBox cmbJobType;
         private Label label8;
         private ListView lvCallHistory;
         private ColumnHeader columnHeader1;

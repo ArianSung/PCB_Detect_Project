@@ -38,7 +38,7 @@ namespace pcb_monitoring_program.Views.Monitoring
                 ("납땜불량",  3, 3, Color.FromArgb(255, 170,   0)),
             };
 
-            var chart = BoxRateChart;
+            var chart = BoxRateChartLine3;
 
             // 2) 완전 초기화 + 데이터바인딩 끊기
             chart.DataSource = null;
