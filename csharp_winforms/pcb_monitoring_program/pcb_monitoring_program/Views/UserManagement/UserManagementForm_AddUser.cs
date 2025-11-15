@@ -20,10 +20,10 @@ namespace pcb_monitoring_program.Views.UserManagement
             UiStyleHelper.MakeRoundedPanel(cardAddUser, radius: 16, back: Color.FromArgb(44, 44, 44));
             UiStyleHelper.AddShadowRoundedPanel(cardAddUser, 16);
 
-            UiStyleHelper.MakeRoundedButton(btn_UserManage_AddUser, 24);
-            UiStyleHelper.MakeRoundedButton(btn_UserManage_cancel, 24);
-            UiStyleHelper.AttachDropShadow(btn_UserManage_AddUser, radius: 12, offset: 6);
-            UiStyleHelper.AttachDropShadow(btn_UserManage_cancel, radius: 12, offset: 6);
+            UiStyleHelper.MakeRoundedButton(btn_UM_ADD_AddUser, 24);
+            UiStyleHelper.MakeRoundedButton(btn_UM_ADD_cancel, 24);
+            UiStyleHelper.AttachDropShadow(btn_UM_ADD_AddUser, radius: 12, offset: 6);
+            UiStyleHelper.AttachDropShadow(btn_UM_ADD_cancel, radius: 12, offset: 6);
         }
         private void btn_UserManage_AddUser_Click(object sender, EventArgs e)
         {

@@ -49,7 +49,7 @@ namespace pcb_monitoring_program.Views.Settings
                 MessageBox.Show("연결 테스트에 성공하셨습니다.", "설정", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             else
-                            {
+            {
                 MessageBox.Show("연결 테스트가 취소되었습니다.", "설정", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
@@ -68,7 +68,7 @@ namespace pcb_monitoring_program.Views.Settings
             {
                 MessageBox.Show("설정 저장이 취소되었습니다.", "설정", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
-                
+
         }
 
         private void btn_Setting_cancel_Click(object sender, EventArgs e)
