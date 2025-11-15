@@ -3,9 +3,7 @@ using pcb_monitoring_program.DatabaseManager.Models;
 
 namespace pcb_monitoring_program.DatabaseManager.Filters
 {
-    /// <summary>
     /// 알람 필터 클래스
-    /// </summary>
     public class AlertFilter
     {
         public bool? IsResolved { get; set; }
@@ -20,9 +18,7 @@ namespace pcb_monitoring_program.DatabaseManager.Filters
             IsResolved = false;
         }
 
-        /// <summary>
         /// 필터가 비어있는지 확인
-        /// </summary>
         public bool IsEmpty()
         {
             return !IsResolved.HasValue &&

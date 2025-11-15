@@ -3,9 +3,7 @@ using pcb_monitoring_program.DatabaseManager.Models;
 
 namespace pcb_monitoring_program.DatabaseManager.Filters
 {
-    /// <summary>
     /// 사용자 활동 로그 필터 클래스
-    /// </summary>
     public class UserLogFilter
     {
         public int? UserId { get; set; }
@@ -21,9 +19,7 @@ namespace pcb_monitoring_program.DatabaseManager.Filters
             EndDate = DateTime.Now;
         }
 
-        /// <summary>
         /// 필터가 비어있는지 확인
-        /// </summary>
         public bool IsEmpty()
         {
             return !UserId.HasValue &&

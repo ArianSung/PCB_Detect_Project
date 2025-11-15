@@ -2,9 +2,7 @@ using System;
 
 namespace pcb_monitoring_program.DatabaseManager.Models
 {
-    /// <summary>
     /// 알람/알림 모델
-    /// </summary>
     public class Alert
     {
         public int Id { get; set; }
@@ -25,9 +23,7 @@ namespace pcb_monitoring_program.DatabaseManager.Models
         }
     }
 
-    /// <summary>
     /// 알람 유형
-    /// </summary>
     public enum AlertType
     {
         DefectRateHigh,     // 불량률 높음
@@ -37,9 +33,7 @@ namespace pcb_monitoring_program.DatabaseManager.Models
         BoxFull             // 박스 가득참
     }
 
-    /// <summary>
     /// 알람 심각도
-    /// </summary>
     public enum AlertSeverity
     {
         Low,        // 낮음
