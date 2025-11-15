@@ -43,7 +43,6 @@
             label_ID = new Label();
             label_UserLogin = new Label();
             pictureBox_user_image = new PictureBox();
-            textBox4 = new TextBox();
             cardLogin.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox_Message).BeginInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox_lock).BeginInit();
@@ -66,7 +65,6 @@
             cardLogin.Controls.Add(label_ID);
             cardLogin.Controls.Add(label_UserLogin);
             cardLogin.Controls.Add(pictureBox_user_image);
-            cardLogin.Controls.Add(textBox4);
             cardLogin.Location = new Point(635, 260);
             cardLogin.Name = "cardLogin";
             cardLogin.Size = new Size(630, 600);
@@ -237,7 +235,6 @@
         private Panel cardLogin;
         private Label label_UserLogin;
         private PictureBox pictureBox_user_image;
-        private TextBox textBox4;
         private PictureBox pictureBox_Message;
         private PictureBox pictureBox_lock;
         private Panel panel_PW;
