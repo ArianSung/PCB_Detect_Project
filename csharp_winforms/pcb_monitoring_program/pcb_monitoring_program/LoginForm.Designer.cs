@@ -29,69 +29,65 @@
         private void InitializeComponent()
         {
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(LoginForm));
-            userIdTextBox = new TextBox();
-            passwordTextBox = new TextBox();
             cardLogin = new Panel();
+            passwordTextBox = new TextBox();
+            userIdTextBox = new TextBox();
             btn_login = new Button();
             pictureBox6 = new PictureBox();
             pictureBox7 = new PictureBox();
             panel3 = new Panel();
-            textBox1 = new TextBox();
             panel4 = new Panel();
-            textBox2 = new TextBox();
             label4 = new Label();
             label5 = new Label();
             label6 = new Label();
             pictureBox3 = new PictureBox();
-            textBox4 = new TextBox();
             cardLogin.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox6).BeginInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox7).BeginInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox3).BeginInit();
             SuspendLayout();
             // 
-            // userIdTextBox
-            // 
-            userIdTextBox.BackColor = Color.FromArgb(64, 64, 64);
-            userIdTextBox.BorderStyle = BorderStyle.None;
-            userIdTextBox.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            userIdTextBox.ForeColor = SystemColors.Window;
-            userIdTextBox.Location = new Point(868, 528);
-            userIdTextBox.Name = "userIdTextBox";
-            userIdTextBox.Size = new Size(312, 37);
-            userIdTextBox.TabIndex = 8;
-            // 
-            // passwordTextBox
-            // 
-            passwordTextBox.BackColor = Color.FromArgb(64, 64, 64);
-            passwordTextBox.BorderStyle = BorderStyle.None;
-            passwordTextBox.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            passwordTextBox.ForeColor = SystemColors.Window;
-            passwordTextBox.Location = new Point(868, 608);
-            passwordTextBox.Name = "passwordTextBox";
-            passwordTextBox.Size = new Size(312, 37);
-            passwordTextBox.TabIndex = 9;
-            passwordTextBox.UseSystemPasswordChar = true;
-            // 
             // cardLogin
             // 
             cardLogin.BackColor = Color.FromArgb(44, 44, 44);
+            cardLogin.Controls.Add(passwordTextBox);
+            cardLogin.Controls.Add(userIdTextBox);
             cardLogin.Controls.Add(btn_login);
             cardLogin.Controls.Add(pictureBox6);
             cardLogin.Controls.Add(pictureBox7);
             cardLogin.Controls.Add(panel3);
-            cardLogin.Controls.Add(textBox1);
             cardLogin.Controls.Add(panel4);
-            cardLogin.Controls.Add(textBox2);
             cardLogin.Controls.Add(label4);
             cardLogin.Controls.Add(label5);
             cardLogin.Controls.Add(label6);
             cardLogin.Controls.Add(pictureBox3);
-            cardLogin.Controls.Add(textBox4);
             cardLogin.Location = new Point(635, 260);
             cardLogin.Name = "cardLogin";
             cardLogin.Size = new Size(630, 600);
             cardLogin.TabIndex = 19;
+            // 
+            // passwordTextBox
+            // 
+            passwordTextBox.BackColor = Color.FromArgb(44, 44, 44);
+            passwordTextBox.BorderStyle = BorderStyle.None;
+            passwordTextBox.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            passwordTextBox.ForeColor = Color.White;
+            passwordTextBox.Location = new Point(223, 359);
+            passwordTextBox.Name = "passwordTextBox";
+            passwordTextBox.Size = new Size(312, 37);
+            passwordTextBox.TabIndex = 40;
+            passwordTextBox.UseSystemPasswordChar = true;
+            // 
+            // userIdTextBox
+            // 
+            userIdTextBox.BackColor = Color.FromArgb(44, 44, 44);
+            userIdTextBox.BorderStyle = BorderStyle.None;
+            userIdTextBox.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            userIdTextBox.ForeColor = Color.White;
+            userIdTextBox.Location = new Point(223, 279);
+            userIdTextBox.Name = "userIdTextBox";
+            userIdTextBox.Size = new Size(312, 37);
+            userIdTextBox.TabIndex = 39;
             // 
             // btn_login
             // 
@@ -137,17 +133,6 @@
             panel3.Size = new Size(455, 5);
             panel3.TabIndex = 37;
             // 
-            // textBox1
-            // 
-            textBox1.BackColor = Color.FromArgb(44, 44, 44);
-            textBox1.BorderStyle = BorderStyle.None;
-            textBox1.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            textBox1.ForeColor = SystemColors.Window;
-            textBox1.Location = new Point(223, 279);
-            textBox1.Name = "textBox1";
-            textBox1.Size = new Size(312, 37);
-            textBox1.TabIndex = 34;
-            // 
             // panel4
             // 
             panel4.BackColor = Color.Silver;
@@ -156,18 +141,6 @@
             panel4.Name = "panel4";
             panel4.Size = new Size(455, 5);
             panel4.TabIndex = 36;
-            // 
-            // textBox2
-            // 
-            textBox2.BackColor = Color.FromArgb(44, 44, 44);
-            textBox2.BorderStyle = BorderStyle.None;
-            textBox2.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            textBox2.ForeColor = SystemColors.Window;
-            textBox2.Location = new Point(223, 359);
-            textBox2.Name = "textBox2";
-            textBox2.Size = new Size(312, 37);
-            textBox2.TabIndex = 35;
-            textBox2.UseSystemPasswordChar = true;
             // 
             // label4
             // 
@@ -212,26 +185,14 @@
             pictureBox3.TabIndex = 31;
             pictureBox3.TabStop = false;
             // 
-            // textBox4
-            // 
-            textBox4.BackColor = Color.FromArgb(44, 44, 44);
-            textBox4.BorderStyle = BorderStyle.None;
-            textBox4.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            textBox4.ForeColor = SystemColors.Window;
-            textBox4.Location = new Point(223, 198);
-            textBox4.Name = "textBox4";
-            textBox4.Size = new Size(340, 37);
-            textBox4.TabIndex = 13;
-            // 
             // LoginForm
             // 
+            AcceptButton = btn_login;
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(64, 64, 64);
             ClientSize = new Size(1904, 1041);
             Controls.Add(cardLogin);
-            Controls.Add(userIdTextBox);
-            Controls.Add(passwordTextBox);
             Name = "LoginForm";
             Text = "LoginForm";
             cardLogin.ResumeLayout(false);
@@ -240,24 +201,21 @@
             ((System.ComponentModel.ISupportInitialize)pictureBox7).EndInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox3).EndInit();
             ResumeLayout(false);
-            PerformLayout();
         }
 
         #endregion
-        private TextBox userIdTextBox;
-        private TextBox passwordTextBox;
+
         private Panel cardLogin;
         private Label label6;
         private PictureBox pictureBox3;
-        private TextBox textBox4;
         private PictureBox pictureBox6;
         private PictureBox pictureBox7;
         private Panel panel3;
-        private TextBox textBox1;
         private Panel panel4;
-        private TextBox textBox2;
         private Label label4;
         private Label label5;
         private Button btn_login;
+        private TextBox passwordTextBox;
+        private TextBox userIdTextBox;
     }
 }
