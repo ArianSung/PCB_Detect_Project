@@ -23,36 +23,36 @@ namespace pcb_monitoring_program.Views.Statistics
             this.Load += (s, e) =>
             {
                 // ✅ 셀 간격/행 높이/헤더 패딩 설정
-                kryptonDataGridView1.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-                kryptonDataGridView1.DefaultCellStyle.Padding = new Padding(12, 10, 12, 10);
-                kryptonDataGridView1.RowTemplate.Height = 44;
-                kryptonDataGridView1.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None; // 고정 높이
-                kryptonDataGridView1.RowHeadersVisible = true;
-                kryptonDataGridView1.RowHeadersWidth = 48;
-                kryptonDataGridView1.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+                DGV_IHD_result.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+                DGV_IHD_result.DefaultCellStyle.Padding = new Padding(12, 10, 12, 10);
+                DGV_IHD_result.RowTemplate.Height = 44;
+                DGV_IHD_result.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None; // 고정 높이
+                DGV_IHD_result.RowHeadersVisible = true;
+                DGV_IHD_result.RowHeadersWidth = 48;
+                DGV_IHD_result.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
 
                 // (Krypton 전용: 가시적 효과 확실)
-                kryptonDataGridView1.StateCommon.DataCell.Content.Padding = new Padding(12, 10, 12, 10);
+                DGV_IHD_result.StateCommon.DataCell.Content.Padding = new Padding(12, 10, 12, 10);
 
                 // 1) 그리드 준비 (행헤더 보이기 등)
-                kryptonDataGridView1.RowHeadersVisible = true;
+                DGV_IHD_result.RowHeadersVisible = true;
 
                 // 2) (안전장치) 디자이너에서 열을 안 만들었다면 자동 생성
-                if (kryptonDataGridView1.Columns.Count == 0)
+                if (DGV_IHD_result.Columns.Count == 0)
                 {
                     // Name은 코드 접근용, HeaderText는 사용자 표시용
-                    kryptonDataGridView1.Columns.Add("date", "날짜");
-                    kryptonDataGridView1.Columns.Add("time", "시간");
-                    kryptonDataGridView1.Columns.Add("CameraID", "카메라 ID");
-                    kryptonDataGridView1.Columns.Add("PCBID", "PCB ID");
-                    kryptonDataGridView1.Columns.Add("DefectType", "불량 유형");
-                    kryptonDataGridView1.Columns.Add("DefectLocation", "불량 위치");
-                    kryptonDataGridView1.Columns.Add("productionline", "생산 라인");
+                    DGV_IHD_result.Columns.Add("date", "날짜");
+                    DGV_IHD_result.Columns.Add("time", "시간");
+                    DGV_IHD_result.Columns.Add("CameraID", "카메라 ID");
+                    DGV_IHD_result.Columns.Add("PCBID", "PCB ID");
+                    DGV_IHD_result.Columns.Add("DefectType", "불량 유형");
+                    DGV_IHD_result.Columns.Add("DefectLocation", "불량 위치");
+                    DGV_IHD_result.Columns.Add("productionline", "생산 라인");
                 }
 
                 // 3) 임의의 테스트 데이터 주입 (원하면 삭제/수정)
                 //    디자이너에서 만든 열 순서: date, time, CameraID, PCBID, DefectType, DefectLocation, productionline
-                kryptonDataGridView1.Rows.Add("2025-11-11", "10:30", "CAM01", "PCB001", "스크래치", "A-5", "1라인");
+                DGV_IHD_result.Rows.Add("2025-11-11", "10:30", "CAM01", "PCB001", "스크래치", "A-5", "1라인");
 
                 // 4) 컨트롤/데이터가 모두 준비된 직후 전치 수행 (최초 1회)
                 this.BeginInvoke((Action)EnsureTransposedOnce);
@@ -60,34 +60,34 @@ namespace pcb_monitoring_program.Views.Statistics
             };
 
             // DataSource 바인딩을 쓰는 경우에도 바인딩 완료 후 최초 1회 전치
-            if (kryptonDataGridView1 != null)
-                kryptonDataGridView1.DataBindingComplete += (s, e) => EnsureTransposedOnce();
+            if (DGV_IHD_result != null)
+                DGV_IHD_result.DataBindingComplete += (s, e) => EnsureTransposedOnce();
         }
 
         /// 전치 작업을 폼 수명 동안 딱 한 번만 수행
         private void EnsureTransposedOnce()
         {
             if (_transposedOnce) return;
-            if (kryptonDataGridView1 == null) return;
+            if (DGV_IHD_result == null) return;
 
             _transposedOnce = true;
-            kryptonDataGridView1.AllowUserToAddRows = false;
+            DGV_IHD_result.AllowUserToAddRows = false;
 
             // 1. 전치 실행
-            TransposeInPlace(kryptonDataGridView1, "항목");
+            TransposeInPlace(DGV_IHD_result, "항목");
 
             // 2. 오른쪽 컬럼 헤더 이름 변경
-            if (kryptonDataGridView1.Columns.Count > 1)
-                kryptonDataGridView1.Columns[1].HeaderText = "값";
+            if (DGV_IHD_result.Columns.Count > 1)
+                DGV_IHD_result.Columns[1].HeaderText = "값";
 
             // 3. 기본 설정
-            kryptonDataGridView1.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            kryptonDataGridView1.ScrollBars = ScrollBars.Horizontal;
-            kryptonDataGridView1.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None;
-            kryptonDataGridView1.AllowUserToResizeRows = false;
+            DGV_IHD_result.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            DGV_IHD_result.ScrollBars = ScrollBars.Horizontal;
+            DGV_IHD_result.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None;
+            DGV_IHD_result.AllowUserToResizeRows = false;
 
             // 4. 실제 행들만 가져오기
-            var dataRows = kryptonDataGridView1.Rows
+            var dataRows = DGV_IHD_result.Rows
                 .Cast<DataGridViewRow>()
                 .Where(r => !r.IsNewRow)
                 .ToList();
@@ -96,9 +96,9 @@ namespace pcb_monitoring_program.Views.Statistics
             if (rowCount == 0) return;
 
             // 5. 전체 행 높이 계산 (헤더 제외)
-            int totalHeightForRows = kryptonDataGridView1.ClientSize.Height;
-            if (kryptonDataGridView1.ColumnHeadersVisible)
-                totalHeightForRows -= kryptonDataGridView1.ColumnHeadersHeight;
+            int totalHeightForRows = DGV_IHD_result.ClientSize.Height;
+            if (DGV_IHD_result.ColumnHeadersVisible)
+                totalHeightForRows -= DGV_IHD_result.ColumnHeadersHeight;
 
             if (totalHeightForRows <= 0) return;
 
@@ -106,15 +106,15 @@ namespace pcb_monitoring_program.Views.Statistics
             int baseHeight = totalHeightForRows / rowCount;
             if (baseHeight < 1) baseHeight = 1;
 
-            kryptonDataGridView1.RowTemplate.Height = baseHeight;
+            DGV_IHD_result.RowTemplate.Height = baseHeight;
             foreach (var r in dataRows)
                 r.Height = baseHeight;
 
             // 7. 실제 그려진 높이 측정 후 보정
-            kryptonDataGridView1.PerformLayout();
+            DGV_IHD_result.PerformLayout();
 
-            Rectangle firstRect = kryptonDataGridView1.GetRowDisplayRectangle(dataRows.First().Index, true);
-            Rectangle lastRect = kryptonDataGridView1.GetRowDisplayRectangle(dataRows.Last().Index, true);
+            Rectangle firstRect = DGV_IHD_result.GetRowDisplayRectangle(dataRows.First().Index, true);
+            Rectangle lastRect = DGV_IHD_result.GetRowDisplayRectangle(dataRows.Last().Index, true);
             int currentHeight = lastRect.Bottom - firstRect.Top;
 
             int diff = totalHeightForRows - currentHeight;
@@ -126,7 +126,7 @@ namespace pcb_monitoring_program.Views.Statistics
             }
 
             // 8. 스크롤 초기화
-            kryptonDataGridView1.FirstDisplayedScrollingRowIndex = 0;
+            DGV_IHD_result.FirstDisplayedScrollingRowIndex = 0;
         }
 
 

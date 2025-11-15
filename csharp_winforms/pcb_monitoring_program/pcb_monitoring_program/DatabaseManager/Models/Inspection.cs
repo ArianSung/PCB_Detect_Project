@@ -3,9 +3,7 @@ using System.Collections.Generic;
 
 namespace pcb_monitoring_program.DatabaseManager.Models
 {
-    /// <summary>
     /// 검사 결과 이력 모델
-    /// </summary>
     public class Inspection
     {
         public int Id { get; set; }

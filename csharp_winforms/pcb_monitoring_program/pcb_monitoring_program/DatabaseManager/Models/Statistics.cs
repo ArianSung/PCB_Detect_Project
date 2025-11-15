@@ -3,9 +3,7 @@ using System.Collections.Generic;
 
 namespace pcb_monitoring_program.DatabaseManager.Models
 {
-    /// <summary>
     /// 통계 데이터 모델
-    /// </summary>
     public class Statistics
     {
         public int TotalInspections { get; set; }
@@ -27,9 +25,7 @@ namespace pcb_monitoring_program.DatabaseManager.Models
             DefectTypeCounts = new Dictionary<string, int>();
         }
 
-        /// <summary>
         /// 불량률 계산 (%)
-        /// </summary>
         public void CalculateDefectRate()
         {
             if (TotalInspections > 0)
@@ -44,9 +40,7 @@ namespace pcb_monitoring_program.DatabaseManager.Models
         }
     }
 
-    /// <summary>
     /// 일별 통계 모델
-    /// </summary>
     public class DailyStatistics
     {
         public DateTime StatDate { get; set; }
@@ -60,9 +54,7 @@ namespace pcb_monitoring_program.DatabaseManager.Models
         public DateTime UpdatedAt { get; set; }
     }
 
-    /// <summary>
     /// 시간별 통계 모델
-    /// </summary>
     public class HourlyStatistics
     {
         public DateTime StatDatetime { get; set; }
