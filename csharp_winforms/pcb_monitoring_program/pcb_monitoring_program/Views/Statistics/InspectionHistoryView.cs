@@ -88,11 +88,11 @@ namespace pcb_monitoring_program.Views.Statistics
             _isInternalUpdate = true;
 
             // 네 개가 모두 체크되어 있으면 All 체크, 아니면 All 해제
-            CB_DefectType_All.Checked =
-                CB_DefectType_Normal.Checked &&
-                CB_DefectType_ComponentDefect.Checked &&
-                CB_DefectType_SolderingDefect.Checked &&
-                CB_DefectType_Scrap.Checked;
+            CB_IH_DefectType_All.Checked =
+                CB_IH_DefectType_Normal.Checked &&
+                CB_IH_DefectType_ComponentDefect.Checked &&
+                CB_IH_DefectType_SolderingDefect.Checked &&
+                CB_IH_DefectType_Scrap.Checked;
 
             _isInternalUpdate = false;
         }
@@ -101,15 +101,15 @@ namespace pcb_monitoring_program.Views.Statistics
         {
             if (_isInternalUpdate) return; // 내부 업데이트면 무시 (옵션이지만 깔끔)
 
-            bool isChecked = CB_DefectType_All.Checked;
+            bool isChecked = CB_IH_DefectType_All.Checked;
 
             // 이벤트 루프 방지 위해 temporarily flag 사용
             _isInternalUpdate = true;
 
-            CB_DefectType_Normal.Checked = isChecked;
-            CB_DefectType_ComponentDefect.Checked = isChecked;
-            CB_DefectType_SolderingDefect.Checked = isChecked;
-            CB_DefectType_Scrap.Checked = isChecked;
+            CB_IH_DefectType_Normal.Checked = isChecked;
+            CB_IH_DefectType_ComponentDefect.Checked = isChecked;
+            CB_IH_DefectType_SolderingDefect.Checked = isChecked;
+            CB_IH_DefectType_Scrap.Checked = isChecked;
 
             _isInternalUpdate = false;
         }
@@ -142,10 +142,10 @@ namespace pcb_monitoring_program.Views.Statistics
             _isInternalUpdate = true;
 
             // 네 개가 모두 체크되어 있으면 All 체크, 아니면 All 해제
-            CB_CameraID_All.Checked =
-                CB_CameraID_CAM01.Checked &&
-                CB_CameraID_CAM02.Checked &&
-                CB_CameraID_CAM03.Checked;
+            CB_IH_CameraID_All.Checked =
+                CB_IH_CameraID_CAM01.Checked &&
+                CB_IH_CameraID_CAM02.Checked &&
+                CB_IH_CameraID_CAM03.Checked;
 
             _isInternalUpdate = false;
         }
@@ -154,14 +154,14 @@ namespace pcb_monitoring_program.Views.Statistics
         {
             if (_isInternalUpdate) return; // 내부 업데이트면 무시 (옵션이지만 깔끔)
 
-            bool isChecked = CB_CameraID_All.Checked;
+            bool isChecked = CB_IH_CameraID_All.Checked;
 
             // 이벤트 루프 방지 위해 temporarily flag 사용
             _isInternalUpdate = true;
 
-            CB_CameraID_CAM01.Checked = isChecked;
-            CB_CameraID_CAM02.Checked = isChecked;
-            CB_CameraID_CAM03.Checked = isChecked;
+            CB_IH_CameraID_CAM01.Checked = isChecked;
+            CB_IH_CameraID_CAM02.Checked = isChecked;
+            CB_IH_CameraID_CAM03.Checked = isChecked;
 
             _isInternalUpdate = false;
         }
@@ -189,11 +189,11 @@ namespace pcb_monitoring_program.Views.Statistics
             _isInternalUpdate = true;
 
             // 네 개가 모두 체크되어 있으면 All 체크, 아니면 All 해제
-            CB_DefectLocation_All.Checked =
-                CB_DefectLocation_Upper.Checked &&
-                CB_DefectLocation_Lower.Checked &&
-                CB_DefectLocation_Left.Checked &&
-                CB_DefectLocation_Right.Checked;
+            CB_IH_DefectLocation_All.Checked =
+                CB_IH_DefectLocation_Upper.Checked &&
+                CB_IH_DefectLocation_Lower.Checked &&
+                CB_IH_DefectLocation_Left.Checked &&
+                CB_IH_DefectLocation_Right.Checked;
 
             _isInternalUpdate = false;
         }
@@ -202,15 +202,15 @@ namespace pcb_monitoring_program.Views.Statistics
         {
             if (_isInternalUpdate) return; // 내부 업데이트면 무시 (옵션이지만 깔끔)
 
-            bool isChecked = CB_DefectLocation_All.Checked;
+            bool isChecked = CB_IH_DefectLocation_All.Checked;
 
             // 이벤트 루프 방지 위해 temporarily flag 사용
             _isInternalUpdate = true;
 
-            CB_DefectLocation_Upper.Checked = isChecked;
-            CB_DefectLocation_Lower.Checked = isChecked;
-            CB_DefectLocation_Left.Checked = isChecked;
-            CB_DefectLocation_Right.Checked = isChecked;
+            CB_IH_DefectLocation_Upper.Checked = isChecked;
+            CB_IH_DefectLocation_Lower.Checked = isChecked;
+            CB_IH_DefectLocation_Left.Checked = isChecked;
+            CB_IH_DefectLocation_Right.Checked = isChecked;
 
             _isInternalUpdate = false;
         }
@@ -243,10 +243,10 @@ namespace pcb_monitoring_program.Views.Statistics
             _isInternalUpdate = true;
 
             // 네 개가 모두 체크되어 있으면 All 체크, 아니면 All 해제
-            CB_ProductionLine_All.Checked =
-                CB_ProductionLine_1.Checked &&
-                CB_ProductionLine_2.Checked &&
-                CB_ProductionLine_3.Checked;
+            CB_IH_ProductionLine_All.Checked =
+                CB_IH_ProductionLine_1.Checked &&
+                CB_IH_ProductionLine_2.Checked &&
+                CB_IH_ProductionLine_3.Checked;
 
             _isInternalUpdate = false;
         }
@@ -255,14 +255,14 @@ namespace pcb_monitoring_program.Views.Statistics
         {
             if (_isInternalUpdate) return; // 내부 업데이트면 무시 (옵션이지만 깔끔)
 
-            bool isChecked = CB_ProductionLine_All.Checked;
+            bool isChecked = CB_IH_ProductionLine_All.Checked;
 
             // 이벤트 루프 방지 위해 temporarily flag 사용
             _isInternalUpdate = true;
 
-            CB_ProductionLine_1.Checked = isChecked;
-            CB_ProductionLine_2.Checked = isChecked;
-            CB_ProductionLine_3.Checked = isChecked;
+            CB_IH_ProductionLine_1.Checked = isChecked;
+            CB_IH_ProductionLine_2.Checked = isChecked;
+            CB_IH_ProductionLine_3.Checked = isChecked;
 
             _isInternalUpdate = false;
         }

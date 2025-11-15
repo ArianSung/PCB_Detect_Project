@@ -2,9 +2,7 @@ using System;
 
 namespace pcb_monitoring_program.DatabaseManager.Models
 {
-    /// <summary>
     /// 사용자 활동 로그 모델
-    /// </summary>
     public class UserLog
     {
         public int Id { get; set; }
@@ -24,9 +22,7 @@ namespace pcb_monitoring_program.DatabaseManager.Models
         }
     }
 
-    /// <summary>
     /// 사용자 활동 유형
-    /// </summary>
     public enum UserActionType
     {
         Login,              // 로그인

@@ -33,18 +33,21 @@
             passwordTextBox = new TextBox();
             userIdTextBox = new TextBox();
             btn_login = new Button();
-            pictureBox6 = new PictureBox();
-            pictureBox7 = new PictureBox();
-            panel3 = new Panel();
-            panel4 = new Panel();
-            label4 = new Label();
-            label5 = new Label();
-            label6 = new Label();
-            pictureBox3 = new PictureBox();
+            pictureBox_Message = new PictureBox();
+            pictureBox_lock = new PictureBox();
+            panel_PW = new Panel();
+            textBox_ID = new TextBox();
+            panel_ID = new Panel();
+            textBox_PW = new TextBox();
+            label_PW = new Label();
+            label_ID = new Label();
+            label_UserLogin = new Label();
+            pictureBox_user_image = new PictureBox();
+            textBox4 = new TextBox();
             cardLogin.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox6).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)pictureBox7).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)pictureBox3).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)pictureBox_Message).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)pictureBox_lock).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)pictureBox_user_image).BeginInit();
             SuspendLayout();
             // 
             // cardLogin
@@ -53,14 +56,17 @@
             cardLogin.Controls.Add(passwordTextBox);
             cardLogin.Controls.Add(userIdTextBox);
             cardLogin.Controls.Add(btn_login);
-            cardLogin.Controls.Add(pictureBox6);
-            cardLogin.Controls.Add(pictureBox7);
-            cardLogin.Controls.Add(panel3);
-            cardLogin.Controls.Add(panel4);
-            cardLogin.Controls.Add(label4);
-            cardLogin.Controls.Add(label5);
-            cardLogin.Controls.Add(label6);
-            cardLogin.Controls.Add(pictureBox3);
+            cardLogin.Controls.Add(pictureBox_Message);
+            cardLogin.Controls.Add(pictureBox_lock);
+            cardLogin.Controls.Add(panel_PW);
+            cardLogin.Controls.Add(textBox_ID);
+            cardLogin.Controls.Add(panel_ID);
+            cardLogin.Controls.Add(textBox_PW);
+            cardLogin.Controls.Add(label_PW);
+            cardLogin.Controls.Add(label_ID);
+            cardLogin.Controls.Add(label_UserLogin);
+            cardLogin.Controls.Add(pictureBox_user_image);
+            cardLogin.Controls.Add(textBox4);
             cardLogin.Location = new Point(635, 260);
             cardLogin.Name = "cardLogin";
             cardLogin.Size = new Size(630, 600);
@@ -104,86 +110,109 @@
             btn_login.UseVisualStyleBackColor = false;
             btn_login.Click += btn_login_Click;
             // 
-            // pictureBox6
+            // pictureBox_Message
             // 
-            pictureBox6.Image = Properties.Resources.Login_mail_white;
-            pictureBox6.Location = new Point(90, 275);
-            pictureBox6.Name = "pictureBox6";
-            pictureBox6.Size = new Size(40, 40);
-            pictureBox6.SizeMode = PictureBoxSizeMode.StretchImage;
-            pictureBox6.TabIndex = 21;
-            pictureBox6.TabStop = false;
+            pictureBox_Message.Image = Properties.Resources.Login_mail_white;
+            pictureBox_Message.Location = new Point(90, 275);
+            pictureBox_Message.Name = "pictureBox_Message";
+            pictureBox_Message.Size = new Size(40, 40);
+            pictureBox_Message.SizeMode = PictureBoxSizeMode.StretchImage;
+            pictureBox_Message.TabIndex = 21;
+            pictureBox_Message.TabStop = false;
             // 
-            // pictureBox7
+            // pictureBox_lock
             // 
-            pictureBox7.Image = Properties.Resources.Login_unlock_white;
-            pictureBox7.Location = new Point(83, 343);
-            pictureBox7.Name = "pictureBox7";
-            pictureBox7.Size = new Size(54, 50);
-            pictureBox7.SizeMode = PictureBoxSizeMode.StretchImage;
-            pictureBox7.TabIndex = 20;
-            pictureBox7.TabStop = false;
+            pictureBox_lock.Image = Properties.Resources.Login_unlock_white;
+            pictureBox_lock.Location = new Point(83, 343);
+            pictureBox_lock.Name = "pictureBox_lock";
+            pictureBox_lock.Size = new Size(54, 50);
+            pictureBox_lock.SizeMode = PictureBoxSizeMode.StretchImage;
+            pictureBox_lock.TabIndex = 20;
+            pictureBox_lock.TabStop = false;
             // 
-            // panel3
+            // panel_PW
             // 
-            panel3.BackColor = Color.Silver;
-            panel3.ForeColor = Color.Silver;
-            panel3.Location = new Point(80, 402);
-            panel3.Name = "panel3";
-            panel3.Size = new Size(455, 5);
-            panel3.TabIndex = 37;
+            panel_PW.BackColor = Color.Silver;
+            panel_PW.ForeColor = Color.Silver;
+            panel_PW.Location = new Point(80, 402);
+            panel_PW.Name = "panel_PW";
+            panel_PW.Size = new Size(455, 5);
+            panel_PW.TabIndex = 37;
             // 
-            // panel4
+            // textBox_ID
             // 
-            panel4.BackColor = Color.Silver;
-            panel4.ForeColor = Color.Silver;
-            panel4.Location = new Point(80, 322);
-            panel4.Name = "panel4";
-            panel4.Size = new Size(455, 5);
-            panel4.TabIndex = 36;
+            textBox_ID.BackColor = Color.FromArgb(44, 44, 44);
+            textBox_ID.BorderStyle = BorderStyle.None;
+            textBox_ID.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            textBox_ID.ForeColor = Color.White;
+            textBox_ID.Location = new Point(223, 279);
+            textBox_ID.Name = "textBox_ID";
+            textBox_ID.Size = new Size(312, 37);
+            textBox_ID.TabIndex = 34;
             // 
-            // label4
+            // panel_ID
             // 
-            label4.AutoSize = true;
-            label4.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            label4.ForeColor = SystemColors.Window;
-            label4.Location = new Point(136, 349);
-            label4.Name = "label4";
-            label4.Size = new Size(68, 36);
-            label4.TabIndex = 33;
-            label4.Text = "PW";
+            panel_ID.BackColor = Color.Silver;
+            panel_ID.ForeColor = Color.Silver;
+            panel_ID.Location = new Point(80, 322);
+            panel_ID.Name = "panel_ID";
+            panel_ID.Size = new Size(455, 5);
+            panel_ID.TabIndex = 36;
             // 
-            // label5
+            // textBox_PW
             // 
-            label5.AutoSize = true;
-            label5.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            label5.ForeColor = SystemColors.Window;
-            label5.Location = new Point(136, 269);
-            label5.Name = "label5";
-            label5.Size = new Size(47, 36);
-            label5.TabIndex = 32;
-            label5.Text = "ID";
+            textBox_PW.BackColor = Color.FromArgb(44, 44, 44);
+            textBox_PW.BorderStyle = BorderStyle.None;
+            textBox_PW.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            textBox_PW.ForeColor = Color.White;
+            textBox_PW.Location = new Point(223, 359);
+            textBox_PW.Name = "textBox_PW";
+            textBox_PW.Size = new Size(312, 37);
+            textBox_PW.TabIndex = 35;
+            textBox_PW.UseSystemPasswordChar = true;
             // 
-            // label6
+            // label_PW
             // 
-            label6.AutoSize = true;
-            label6.Font = new Font("Arial", 44.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            label6.ForeColor = SystemColors.Window;
-            label6.Location = new Point(167, 139);
-            label6.Name = "label6";
-            label6.Size = new Size(315, 66);
-            label6.TabIndex = 20;
-            label6.Text = "User Login";
+            label_PW.AutoSize = true;
+            label_PW.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            label_PW.ForeColor = SystemColors.Window;
+            label_PW.Location = new Point(136, 349);
+            label_PW.Name = "label_PW";
+            label_PW.Size = new Size(68, 36);
+            label_PW.TabIndex = 33;
+            label_PW.Text = "PW";
             // 
-            // pictureBox3
+            // label_ID
             // 
-            pictureBox3.Image = (Image)resources.GetObject("pictureBox3.Image");
-            pictureBox3.Location = new Point(261, 39);
-            pictureBox3.Name = "pictureBox3";
-            pictureBox3.Size = new Size(100, 97);
-            pictureBox3.SizeMode = PictureBoxSizeMode.Zoom;
-            pictureBox3.TabIndex = 31;
-            pictureBox3.TabStop = false;
+            label_ID.AutoSize = true;
+            label_ID.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            label_ID.ForeColor = SystemColors.Window;
+            label_ID.Location = new Point(136, 269);
+            label_ID.Name = "label_ID";
+            label_ID.Size = new Size(47, 36);
+            label_ID.TabIndex = 32;
+            label_ID.Text = "ID";
+            // 
+            // label_UserLogin
+            // 
+            label_UserLogin.AutoSize = true;
+            label_UserLogin.Font = new Font("Arial", 44.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            label_UserLogin.ForeColor = SystemColors.Window;
+            label_UserLogin.Location = new Point(167, 139);
+            label_UserLogin.Name = "label_UserLogin";
+            label_UserLogin.Size = new Size(315, 66);
+            label_UserLogin.TabIndex = 20;
+            label_UserLogin.Text = "User Login";
+            // 
+            // pictureBox_user_image
+            // 
+            pictureBox_user_image.Image = (Image)resources.GetObject("pictureBox_user_image.Image");
+            pictureBox_user_image.Location = new Point(261, 39);
+            pictureBox_user_image.Name = "pictureBox_user_image";
+            pictureBox_user_image.Size = new Size(100, 97);
+            pictureBox_user_image.SizeMode = PictureBoxSizeMode.Zoom;
+            pictureBox_user_image.TabIndex = 31;
+            pictureBox_user_image.TabStop = false;
             // 
             // LoginForm
             // 
@@ -197,23 +226,26 @@
             Text = "LoginForm";
             cardLogin.ResumeLayout(false);
             cardLogin.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox6).EndInit();
-            ((System.ComponentModel.ISupportInitialize)pictureBox7).EndInit();
-            ((System.ComponentModel.ISupportInitialize)pictureBox3).EndInit();
+            ((System.ComponentModel.ISupportInitialize)pictureBox_Message).EndInit();
+            ((System.ComponentModel.ISupportInitialize)pictureBox_lock).EndInit();
+            ((System.ComponentModel.ISupportInitialize)pictureBox_user_image).EndInit();
             ResumeLayout(false);
         }
 
         #endregion
 
         private Panel cardLogin;
-        private Label label6;
-        private PictureBox pictureBox3;
-        private PictureBox pictureBox6;
-        private PictureBox pictureBox7;
-        private Panel panel3;
-        private Panel panel4;
-        private Label label4;
-        private Label label5;
+        private Label label_UserLogin;
+        private PictureBox pictureBox_user_image;
+        private TextBox textBox4;
+        private PictureBox pictureBox_Message;
+        private PictureBox pictureBox_lock;
+        private Panel panel_PW;
+        private TextBox textBox_ID;
+        private Panel panel_ID;
+        private TextBox textBox_PW;
+        private Label label_PW;
+        private Label label_ID;
         private Button btn_login;
         private TextBox passwordTextBox;
         private TextBox userIdTextBox;
