@@ -8,7 +8,7 @@ PCB 불량 검사 Flask 추론 서버
     flask --app server/app run --host=0.0.0.0 --port=5000
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response, render_template_string
 from flask_cors import CORS
 import base64
 import cv2
@@ -18,6 +18,7 @@ import logging
 import time
 import os
 from pathlib import Path
+import threading
 
 # .env 파일 로드
 try:
@@ -61,6 +62,17 @@ db = DatabaseManager(**DB_CONFIG)
 # yolo_model = YOLO('models/yolo/final/yolo_best.pt')
 yolo_model = None  # 임시
 
+# 실시간 뷰어를 위한 전역 변수
+latest_frames = {
+    'left': None,
+    'right': None
+}
+latest_results = {
+    'left': {},
+    'right': {}
+}
+frame_lock = threading.Lock()
+
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -71,6 +83,107 @@ def health_check():
         'server': 'Flask PCB Inspection Server',
         'version': '1.0.0'
     })
+
+
+@app.route('/predict_test', methods=['POST'])
+def predict_test():
+    """
+    카메라 테스트용 엔드포인트 (DB 저장 없음)
+
+    Request JSON:
+        {
+            "camera_id": "left" or "right",
+            "image": "base64_encoded_jpeg_image"
+        }
+
+    Response JSON:
+        {
+            "status": "ok",
+            "camera_id": "left",
+            "defect_type": "정상",
+            "confidence": 0.95,
+            "inference_time_ms": 5.2,
+            "timestamp": "2025-01-27T15:30:45.123456",
+            "note": "테스트 모드 (DB 저장 안 함)"
+        }
+    """
+    start_time = time.time()
+
+    try:
+        # 1. 요청 데이터 검증
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'error': 'Request body is empty'
+            }), 400
+
+        camera_id = data.get('camera_id')
+        image_base64 = data.get('image')
+
+        if not camera_id or not image_base64:
+            return jsonify({
+                'status': 'error',
+                'error': 'Missing required fields: camera_id, image'
+            }), 400
+
+        # 2. Base64 디코딩 및 프레임 검증
+        try:
+            image_bytes = base64.b64decode(image_base64)
+            nparr = np.frombuffer(image_bytes, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+            if frame is None or frame.size == 0:
+                return jsonify({
+                    'status': 'error',
+                    'error': 'Invalid image data: failed to decode'
+                }), 400
+
+            logger.info(f"[TEST] 프레임 수신 성공: {camera_id} (shape: {frame.shape})")
+
+            # 뷰어를 위해 프레임 저장
+            with frame_lock:
+                latest_frames[camera_id] = frame.copy()
+
+        except Exception as decode_error:
+            return jsonify({
+                'status': 'error',
+                'error': f'Failed to decode image: {str(decode_error)}'
+            }), 400
+
+        # 3. 임시 추론 결과 (DB 저장 안 함)
+        defect_type = "정상"
+        confidence = 0.95
+        gpio_pin = get_gpio_pin(defect_type)
+
+        # 4. 추론 시간 계산
+        inference_time_ms = (time.time() - start_time) * 1000
+
+        # 5. 응답 생성 (DB 저장 생략)
+        response = {
+            'status': 'ok',
+            'camera_id': camera_id,
+            'defect_type': defect_type,
+            'confidence': confidence,
+            'gpio_pin': gpio_pin,
+            'inference_time_ms': round(inference_time_ms, 2),
+            'timestamp': datetime.now().isoformat(),
+            'note': '테스트 모드 (DB 저장 안 함)'
+        }
+
+        # 뷰어를 위해 결과 저장
+        with frame_lock:
+            latest_results[camera_id] = response.copy()
+
+        logger.info(f"[TEST] 추론 완료: {camera_id} → {defect_type} (time: {inference_time_ms:.1f}ms)")
+        return jsonify(response)
+
+    except Exception as e:
+        logger.error(f"[TEST] 추론 실패: {str(e)}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
 
 
 @app.route('/predict', methods=['POST'])
@@ -438,6 +551,214 @@ def get_box_status():
             'status': 'error',
             'error': str(e)
         }), 500
+
+
+@app.route('/viewer', methods=['GET'])
+def viewer():
+    """실시간 카메라 뷰어 페이지"""
+    html_template = """
+    <!DOCTYPE html>
+    <html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>PCB 검사 실시간 뷰어</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                color: #fff;
+                padding: 20px;
+            }
+            .container {
+                max-width: 1400px;
+                margin: 0 auto;
+            }
+            h1 {
+                text-align: center;
+                margin-bottom: 30px;
+                font-size: 2.5em;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            }
+            .cameras {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+                gap: 30px;
+                margin-bottom: 30px;
+            }
+            .camera-box {
+                background: rgba(255,255,255,0.1);
+                border-radius: 15px;
+                padding: 20px;
+                backdrop-filter: blur(10px);
+                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            }
+            .camera-title {
+                font-size: 1.5em;
+                margin-bottom: 15px;
+                text-align: center;
+                font-weight: bold;
+            }
+            .camera-stream {
+                width: 100%;
+                border-radius: 10px;
+                background: #000;
+                min-height: 400px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 1.2em;
+                color: #aaa;
+            }
+            .camera-stream img {
+                width: 100%;
+                border-radius: 10px;
+            }
+            .camera-info {
+                margin-top: 15px;
+                padding: 15px;
+                background: rgba(0,0,0,0.3);
+                border-radius: 10px;
+            }
+            .info-row {
+                display: flex;
+                justify-content: space-between;
+                margin: 8px 0;
+                font-size: 1.1em;
+            }
+            .info-label {
+                font-weight: bold;
+                color: #aaf;
+            }
+            .status-ok { color: #4f4; }
+            .status-defect { color: #f44; }
+            .footer {
+                text-align: center;
+                margin-top: 20px;
+                opacity: 0.7;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🔍 PCB 검사 실시간 뷰어</h1>
+
+            <div class="cameras">
+                <div class="camera-box">
+                    <div class="camera-title">📷 좌측 카메라 (Left)</div>
+                    <div class="camera-stream">
+                        <img id="left-stream" src="/video_feed/left" alt="좌측 카메라" onerror="this.style.display='none'; this.parentElement.innerText='카메라 연결 대기 중...'">
+                    </div>
+                    <div class="camera-info">
+                        <div class="info-row">
+                            <span class="info-label">판정:</span>
+                            <span id="left-defect" class="status-ok">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">신뢰도:</span>
+                            <span id="left-confidence">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">처리시간:</span>
+                            <span id="left-time">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="camera-box">
+                    <div class="camera-title">📷 우측 카메라 (Right)</div>
+                    <div class="camera-stream">
+                        <img id="right-stream" src="/video_feed/right" alt="우측 카메라" onerror="this.style.display='none'; this.parentElement.innerText='카메라 연결 대기 중...'">
+                    </div>
+                    <div class="camera-info">
+                        <div class="info-row">
+                            <span class="info-label">판정:</span>
+                            <span id="right-defect" class="status-ok">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">신뢰도:</span>
+                            <span id="right-confidence">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">처리시간:</span>
+                            <span id="right-time">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="footer">
+                ✨ PCB 불량 검사 시스템 v1.0 | Flask Server | Real-time Streaming
+            </div>
+        </div>
+
+        <script>
+            // 1초마다 결과 정보 업데이트
+            function updateResults() {
+                fetch('/api/latest_results')
+                    .then(res => res.json())
+                    .then(data => {
+                        // 좌측 카메라
+                        if (data.left && data.left.defect_type) {
+                            document.getElementById('left-defect').textContent = data.left.defect_type;
+                            document.getElementById('left-defect').className = data.left.defect_type === '정상' ? 'status-ok' : 'status-defect';
+                            document.getElementById('left-confidence').textContent = (data.left.confidence * 100).toFixed(1) + '%';
+                            document.getElementById('left-time').textContent = data.left.inference_time_ms.toFixed(1) + 'ms';
+                        }
+
+                        // 우측 카메라
+                        if (data.right && data.right.defect_type) {
+                            document.getElementById('right-defect').textContent = data.right.defect_type;
+                            document.getElementById('right-defect').className = data.right.defect_type === '정상' ? 'status-ok' : 'status-defect';
+                            document.getElementById('right-confidence').textContent = (data.right.confidence * 100).toFixed(1) + '%';
+                            document.getElementById('right-time').textContent = data.right.inference_time_ms.toFixed(1) + 'ms';
+                        }
+                    })
+                    .catch(err => console.error('결과 업데이트 실패:', err));
+            }
+
+            // 1초마다 업데이트
+            setInterval(updateResults, 1000);
+            updateResults();
+        </script>
+    </body>
+    </html>
+    """
+    return render_template_string(html_template)
+
+
+@app.route('/video_feed/<camera_id>', methods=['GET'])
+def video_feed(camera_id):
+    """MJPEG 스트림 제공"""
+    def generate():
+        while True:
+            with frame_lock:
+                frame = latest_frames.get(camera_id)
+
+            if frame is not None:
+                # JPEG 인코딩
+                ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                if ret:
+                    frame_bytes = buffer.tobytes()
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+            else:
+                # 프레임이 없으면 빈 프레임
+                time.sleep(0.1)
+
+    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+@app.route('/api/latest_results', methods=['GET'])
+def get_latest_results():
+    """최신 추론 결과 반환 (JSON)"""
+    with frame_lock:
+        results = {
+            'left': latest_results.get('left', {}),
+            'right': latest_results.get('right', {})
+        }
+    return jsonify(results)
 
 
 # 유틸리티 함수
