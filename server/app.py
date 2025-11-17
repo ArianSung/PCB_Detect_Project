@@ -57,10 +57,18 @@ DB_CONFIG = {
 
 db = DatabaseManager(**DB_CONFIG)
 
-# TODO: YOLO 모델 로드 (학습 완료 후)
-# from ultralytics import YOLO
-# yolo_model = YOLO('models/yolo/final/yolo_best.pt')
-yolo_model = None  # 임시
+# YOLO 모델 로드
+try:
+    from ultralytics import YOLO
+    model_path = 'runs/detect/roboflow_pcb_balanced/weights/best.pt'
+    yolo_model = YOLO(model_path)
+    logger.info(f"✅ YOLO 모델 로드 완료: {model_path}")
+    logger.info(f"   - 모델 타입: YOLOv11l")
+    logger.info(f"   - 클래스 수: 12개 (PCB 부품 검출)")
+except Exception as e:
+    logger.error(f"⚠️  YOLO 모델 로드 실패: {e}")
+    logger.warning("   - 추론 시 더미 결과 반환됨")
+    yolo_model = None
 
 # 실시간 뷰어를 위한 전역 변수
 latest_frames = {
@@ -251,20 +259,25 @@ def predict_single():
                 'error': f'Failed to decode image: {str(decode_error)}'
             }), 400
 
-        # 3. AI 추론 (YOLO 모델 학습 완료 후 구현)
-        # TODO: YOLO 모델 구현 후 활성화
-        # if yolo_model is not None:
-        #     results = yolo_model(frame)
-        #     defect_type, confidence, boxes = parse_yolo_results(results)
-        # else:
-        #     defect_type = "정상"
-        #     confidence = 0.95
-        #     boxes = []
-
-        # 임시 응답 (모델 미구현)
-        defect_type = "정상"
-        confidence = 0.95
-        boxes = []  # 바운딩 박스 리스트 (x, y, w, h, class, confidence)
+        # 3. AI 추론 (YOLO 모델)
+        if yolo_model is not None:
+            try:
+                # YOLO 추론 실행
+                results = yolo_model(frame, verbose=False)
+                defect_type, confidence, boxes = parse_yolo_results(results)
+                logger.info(f"YOLO 추론 완료: {len(boxes)}개 객체 검출")
+            except Exception as yolo_error:
+                logger.error(f"YOLO 추론 실패: {yolo_error}")
+                # 추론 실패 시 더미 값 사용
+                defect_type = "정상"
+                confidence = 0.0
+                boxes = []
+        else:
+            # 모델 미로드 시 더미 응답
+            logger.warning("YOLO 모델이 로드되지 않음 - 더미 결과 반환")
+            defect_type = "정상"
+            confidence = 0.95
+            boxes = []
 
         # 4. GPIO 핀 결정
         gpio_pin = get_gpio_pin(defect_type)
@@ -762,6 +775,60 @@ def get_latest_results():
 
 
 # 유틸리티 함수
+def parse_yolo_results(results):
+    """
+    YOLO 추론 결과 파싱
+
+    Returns:
+        defect_type (str): 불량 유형 ("정상" | "부품불량" | "납땜불량" | "폐기")
+        confidence (float): 평균 신뢰도 (0.0 ~ 1.0)
+        boxes (list): 바운딩 박스 정보 리스트
+    """
+    if results is None or len(results) == 0:
+        return "정상", 1.0, []
+
+    result = results[0]  # 첫 번째 결과 (단일 이미지)
+    boxes_data = []
+
+    # 검출된 객체가 없으면 정상
+    if result.boxes is None or len(result.boxes) == 0:
+        return "정상", 1.0, []
+
+    # 바운딩 박스 정보 추출
+    for box in result.boxes:
+        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+        conf = float(box.conf[0].cpu().numpy())
+        cls = int(box.cls[0].cpu().numpy())
+        class_name = result.names[cls]
+
+        boxes_data.append({
+            'x1': float(x1),
+            'y1': float(y1),
+            'x2': float(x2),
+            'y2': float(y2),
+            'confidence': conf,
+            'class_id': cls,
+            'class_name': class_name
+        })
+
+    # 평균 신뢰도 계산
+    if boxes_data:
+        avg_confidence = sum(b['confidence'] for b in boxes_data) / len(boxes_data)
+    else:
+        avg_confidence = 1.0
+
+    # 불량 판정 로직 (현재는 단순 버전)
+    # TODO: 더 정교한 판정 로직 필요 (누락된 부품, 잘못된 위치 등)
+    if len(boxes_data) > 0:
+        # 일단 검출된 객체가 있으면 정상으로 판정
+        # 향후 기준 PCB와 비교하여 누락/추가 부품 검출 필요
+        defect_type = "정상"
+    else:
+        defect_type = "정상"
+
+    return defect_type, avg_confidence, boxes_data
+
+
 def get_gpio_pin(defect_type):
     """불량 유형에 따른 GPIO 핀 번호 반환"""
     gpio_map = {
