@@ -63,6 +63,13 @@ csharp_winforms/**/obj/
 # Visual Studio temporary files
 .vs/
 
+# Claude Code 로컬 설정
+.claude/settings.local.json
+.claude/skills/
+
+# 로그 디렉토리
+logs/
+
 # 기타
 *.zip
 *.tar.gz
