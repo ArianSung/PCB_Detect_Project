@@ -1,0 +1,135 @@
+﻿using MySqlX.XDevAPI.Common;
+using pcb_monitoring_program.Views.Dashboard;
+using pcb_monitoring_program.Views.Monitoring;
+using pcb_monitoring_program.Views.Settings;
+using pcb_monitoring_program.Views.Statistics;
+using pcb_monitoring_program.Views.UserManagement;
+using pcb_monitoring_program;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+
+namespace pcb_monitoring_program
+{
+    public partial class MainForm : Form
+    {
+        private DashboardView _UcDashboard = new DashboardView();
+        private MainStatisticsView _UcStatistics = new MainStatisticsView();
+        private MonitoringMainView _UcMonitoring = new MonitoringMainView();
+        private UserManagementView _UcUserManagement = new UserManagementView();
+        private SettingView _UcSetting = new SettingView();
+        public MainForm()
+        {
+            InitializeComponent();
+        }
+        private void ShowInPanel(UserControl page) //콘텐츠 패널 전환 메서드
+        {
+            // 1) 기존 컨트롤 모두 제거
+            panelContent.Controls.Clear();
+
+            // 2) 패널에 추가
+            panelContent.Controls.Add(page);
+
+            page.Visible = true;
+            page.BringToFront();
+        }
+
+        private void btnDashboard_Click(object sender, EventArgs e)
+        {
+            labelTitle.Text = "Dashboard";
+            UiStyleHelper.HighlightButton((Button)sender);
+            ShowInPanel(_UcDashboard);
+        }
+
+        private void btnStatistics_Click(object sender, EventArgs e)
+        {
+            labelTitle.Text = "Statistics";
+            UiStyleHelper.HighlightButton((Button)sender);
+            ShowInPanel(_UcStatistics);
+        }
+
+        private void btnMonitoring_Click(object sender, EventArgs e)
+        {
+            labelTitle.Text = "Monitoring";
+            UiStyleHelper.HighlightButton((Button)sender);
+            ShowInPanel(_UcMonitoring);
+        }
+
+        private void btnUserManagement_Click(object sender, EventArgs e)
+        {
+            labelTitle.Text = "User Management";
+            UiStyleHelper.HighlightButton((Button)sender);
+            ShowInPanel(_UcUserManagement);
+        }
+
+        private void btnSetting_Click(object sender, EventArgs e)
+        {
+            labelTitle.Text = "Setting";
+            UiStyleHelper.HighlightButton((Button)sender);
+            ShowInPanel(_UcSetting);
+        }
+
+        private void btnLogout_Click(object sender, EventArgs e)
+        {
+            labelusername.Text = "이   름";
+            labeluserauthority.Text = "[ 권   한 ]";
+            //labelTitle.Text = "Login";
+
+            // 로그인 폼으로 돌아가기
+            LoginForm loginForm = new LoginForm();
+            loginForm.Show();
+            this.Hide();
+        }
+
+        private void MainForm_Load(object sender, EventArgs e)
+        {
+            UiStyleHelper.MakeRoundedPanel(cardLogout, radius: 16, back: Color.FromArgb(44, 44, 44));
+            UiStyleHelper.AddShadowRoundedPanel(cardLogout, 16);
+
+            labelTitle.Text = "Dashboard";
+            UiStyleHelper.MakeRoundedButton(btnDashboard);
+            UiStyleHelper.MakeRoundedButton(btnStatistics);
+            UiStyleHelper.MakeRoundedButton(btnMonitoring);
+            UiStyleHelper.MakeRoundedButton(btnUserManagement);
+            UiStyleHelper.MakeRoundedButton(btnSetting);
+            UiStyleHelper.MakeRoundedLogoutButton(btnLogout);
+
+            // 우하단 드롭섀도우 적용(버튼이 놓인 같은 부모 컨테이너 기준)
+            UiStyleHelper.AttachDropShadow(btnDashboard, radius: 20, offset: 6);
+            UiStyleHelper.AttachDropShadow(btnStatistics, 20, 6);
+            UiStyleHelper.AttachDropShadow(btnMonitoring, 20, 6);
+            UiStyleHelper.AttachDropShadow(btnUserManagement, 20, 6);
+            UiStyleHelper.AttachDropShadow(btnSetting, 20, 6);
+            UiStyleHelper.AttachDropShadow(btnLogout, 20, 5);
+
+            timerClock.Start();
+
+            foreach (Control ctrl in this.Controls)
+            {
+                if (ctrl is Button btn)
+                {
+                    btn.BackColor = Color.Gray;
+                    btn.ForeColor = Color.White;
+                    btn.FlatStyle = FlatStyle.Flat;
+                    btn.FlatAppearance.BorderSize = 0;  // 테두리 제거
+                    btn.Cursor = Cursors.Hand;                  // 마우스 포인터
+                }
+            }
+            UiStyleHelper.HighlightButton(btnDashboard);
+            ShowInPanel(_UcDashboard);
+        }
+
+        private void timerClock_Tick(object sender, EventArgs e)
+        {
+            labelTime.Text = DateTime.Now.ToString("yyyy '/' MM '/' dd\n HH : mm");
+        }
+    }
+}
