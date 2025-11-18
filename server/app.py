@@ -239,13 +239,15 @@ def predict_test():
                 # 결과가 없으면 한 번만 추론 실행 (초기화)
                 logger.info(f"⚠️  [{camera_id}] 정지 모드지만 기존 결과 없음 - 초기 추론 실행")
 
-        # 3. PCB ROI 감지 (초록색 PCB 자동 감지 및 내부 영역 추출) ⭐⭐⭐
-        roi_mask, pcb_bbox, roi_bbox = detect_pcb_roi(frame)
+        # 3. PCB ROI 감지 (비활성화 - 암막 준비 후 활성화 예정) ⭐⭐⭐
+        # roi_mask, pcb_bbox, roi_bbox = detect_pcb_roi(frame)
+        # if pcb_bbox is not None:
+        #     logger.info(f"[TEST] PCB 감지 성공: {camera_id} → PCB {pcb_bbox}, ROI {roi_bbox}")
+        # else:
+        #     logger.warning(f"[TEST] PCB 감지 실패: {camera_id} → 전체 프레임 사용")
 
-        if pcb_bbox is not None:
-            logger.info(f"[TEST] PCB 감지 성공: {camera_id} → PCB {pcb_bbox}, ROI {roi_bbox}")
-        else:
-            logger.warning(f"[TEST] PCB 감지 실패: {camera_id} → 전체 프레임 사용")
+        # ROI 비활성화 - 전체 프레임 사용
+        pcb_bbox, roi_bbox = None, None
 
         # 4. AI 추론 (YOLO 모델, DB 저장 안 함)
         boxes_data = []
@@ -259,19 +261,18 @@ def predict_test():
                 # 신뢰도 필터링 (낮은 신뢰도 제거)
                 filtered_boxes = [box for box in raw_boxes_data if box['confidence'] >= CONFIDENCE_THRESHOLD]
 
-                # ROI 필터링: ROI 영역 외부의 객체 제거 ⭐
-                if roi_bbox is not None:
-                    rx, ry, rw, rh = roi_bbox
-                    roi_filtered_boxes = []
-                    for box in filtered_boxes:
-                        # 바운딩 박스 중심점이 ROI 안에 있는지 확인
-                        cx = box['x1'] + (box['x2'] - box['x1']) / 2
-                        cy = box['y1'] + (box['y2'] - box['y1']) / 2
-                        if rx <= cx <= rx + rw and ry <= cy <= ry + rh:
-                            roi_filtered_boxes.append(box)
-
-                    logger.info(f"[TEST] ROI 필터링: {camera_id} → {len(filtered_boxes)}개 → {len(roi_filtered_boxes)}개")
-                    filtered_boxes = roi_filtered_boxes
+                # ROI 필터링 (비활성화 - 전체 프레임 사용) ⭐
+                # if roi_bbox is not None:
+                #     rx, ry, rw, rh = roi_bbox
+                #     roi_filtered_boxes = []
+                #     for box in filtered_boxes:
+                #         # 바운딩 박스 중심점이 ROI 안에 있는지 확인
+                #         cx = box['x1'] + (box['x2'] - box['x1']) / 2
+                #         cy = box['y1'] + (box['y2'] - box['y1']) / 2
+                #         if rx <= cx <= rx + rw and ry <= cy <= ry + rh:
+                #             roi_filtered_boxes.append(box)
+                #     logger.info(f"[TEST] ROI 필터링: {camera_id} → {len(filtered_boxes)}개 → {len(roi_filtered_boxes)}개")
+                #     filtered_boxes = roi_filtered_boxes
 
                 # 검출 결과 평활화 (Temporal Smoothing)
                 smoothed_boxes = smooth_detections(camera_id, filtered_boxes)
