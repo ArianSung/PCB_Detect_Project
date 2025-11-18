@@ -19,6 +19,7 @@ import time
 import os
 from pathlib import Path
 import threading
+from collections import deque
 
 # .env 파일 로드
 try:
@@ -80,6 +81,56 @@ latest_results = {
     'right': {}
 }
 frame_lock = threading.Lock()
+
+# Temporal Smoothing 설정 (깜빡거림 최소화)
+HISTORY_SIZE = 15         # 최근 15프레임 저장
+MIN_DETECTION_FRAMES = 5  # 최소 5프레임 검출 시 표시 (매우 안정적) ⭐
+MAX_MISSING_FRAMES = 20   # 사라진 후 20프레임까지 유지 (매우 오래 유지) ⭐
+IOU_THRESHOLD = 0.05      # 5% 이상만 겹쳐도 같은 객체로 판단 (극도로 관대) ⭐⭐
+CONFIDENCE_THRESHOLD = 0.3  # 신뢰도 30% 이상만 사용
+FREEZE_AFTER_FRAMES = 9999  # 프로즌 기능 비활성화 (사용자 요청) ⭐⭐⭐
+
+# ROI 설정 (PCB 자동 감지 및 내부 영역만 검출) ⭐⭐⭐
+PCB_COLOR_LOWER_HSV = np.array([35, 40, 40])    # 초록색 하한 (HSV)
+PCB_COLOR_UPPER_HSV = np.array([85, 255, 255])  # 초록색 상한 (HSV)
+PCB_INNER_MARGIN_PERCENT = 0.03  # PCB 테두리 3% 제외 (파란색 선에 가깝게) ⭐
+PCB_EDGE_THRESHOLD = 10  # PCB가 프레임 경계에서 최소 10픽셀 떨어져야 전체로 간주
+
+# 모션 감지 설정 (새 PCB 진입 감지) ⭐⭐⭐
+MOTION_THRESHOLD = 30.0    # 프레임 차이 임계값 (픽셀 평균 차이)
+STABLE_FRAMES_FOR_FREEZE = 10  # 10프레임 동안 안정 시 frozen 모드
+
+# 검출 히스토리 (카메라별)
+detection_history = {
+    'left': deque(maxlen=HISTORY_SIZE),
+    'right': deque(maxlen=HISTORY_SIZE)
+}
+
+# 추적 중인 객체 (카메라별)
+tracked_objects = {
+    'left': {},   # {object_id: {'box': {...}, 'class_id': int, 'class_name': str, 'confidence': float, 'count': int, 'missing': int}}
+    'right': {}
+}
+next_object_id = 0
+tracking_lock = threading.Lock()
+
+# 완전 정지 모드 (모든 객체가 frozen 상태가 되면 프레임 업데이트 중지) ⭐⭐⭐
+camera_frozen_state = {
+    'left': False,   # True가 되면 프레임 업데이트 중지
+    'right': False
+}
+
+# 모션 감지용 이전 프레임 저장 (새 PCB 진입 감지) ⭐⭐⭐
+previous_frames = {
+    'left': None,
+    'right': None
+}
+
+# 안정 프레임 카운터 (움직임 없는 프레임 수) ⭐⭐⭐
+stable_frame_count = {
+    'left': 0,
+    'right': 0
+}
 
 
 @app.route('/health', methods=['GET'])
@@ -149,20 +200,105 @@ def predict_test():
 
             logger.info(f"[TEST] 프레임 수신 성공: {camera_id} (shape: {frame.shape})")
 
-            # 뷰어를 위해 프레임 저장
-            with frame_lock:
-                latest_frames[camera_id] = frame.copy()
-
         except Exception as decode_error:
             return jsonify({
                 'status': 'error',
                 'error': f'Failed to decode image: {str(decode_error)}'
             }), 400
 
-        # 3. 임시 추론 결과 (DB 저장 안 함)
-        defect_type = "정상"
-        confidence = 0.95
+        # 2-1. 모션 감지 (새 PCB 진입 확인) ⭐⭐⭐
+        motion_detected, motion_value = detect_motion(frame, previous_frames.get(camera_id), camera_id)
+
+        if motion_detected:
+            # 큰 움직임 감지 → 새 PCB 진입!
+            logger.info(f"🚨 [{camera_id}] 모션 감지! (차이: {motion_value:.1f}) → 추론 재개")
+
+            # frozen 상태 리셋
+            with tracking_lock:
+                camera_frozen_state[camera_id] = False
+                stable_frame_count[camera_id] = 0
+                tracked_objects[camera_id].clear()  # 모든 추적 객체 초기화
+                logger.info(f"🔓 [{camera_id}] frozen 상태 리셋 완료")
+        else:
+            # 움직임 없음 → 안정 프레임 증가
+            stable_frame_count[camera_id] += 1
+
+        # 이전 프레임 업데이트
+        previous_frames[camera_id] = frame.copy()
+
+        # 2-2. 완전 정지 모드 확인 (모든 객체가 frozen 상태면 추론 건너뛰기) ⭐⭐⭐
+        if camera_frozen_state.get(camera_id, False):
+            # 이미 frozen 상태 - 추론하지 않고 기존 결과 반환
+            with frame_lock:
+                existing_result = latest_results.get(camera_id, {})
+
+            if existing_result:
+                logger.info(f"🔒 [{camera_id}] 정지 모드 - 기존 결과 반환 (추론 생략)")
+                return jsonify(existing_result)
+            else:
+                # 결과가 없으면 한 번만 추론 실행 (초기화)
+                logger.info(f"⚠️  [{camera_id}] 정지 모드지만 기존 결과 없음 - 초기 추론 실행")
+
+        # 3. PCB ROI 감지 (초록색 PCB 자동 감지 및 내부 영역 추출) ⭐⭐⭐
+        roi_mask, pcb_bbox, roi_bbox = detect_pcb_roi(frame)
+
+        if pcb_bbox is not None:
+            logger.info(f"[TEST] PCB 감지 성공: {camera_id} → PCB {pcb_bbox}, ROI {roi_bbox}")
+        else:
+            logger.warning(f"[TEST] PCB 감지 실패: {camera_id} → 전체 프레임 사용")
+
+        # 4. AI 추론 (YOLO 모델, DB 저장 안 함)
+        boxes_data = []
+        if yolo_model is not None:
+            try:
+                # YOLO 추론 실행 (ROI 영역만 사용)
+                # 참고: ROI 마스크를 직접 적용하지 않고, 추론 후 필터링으로 처리
+                results = yolo_model(frame, verbose=False)
+                defect_type, confidence, raw_boxes_data = parse_yolo_results(results)
+
+                # 신뢰도 필터링 (낮은 신뢰도 제거)
+                filtered_boxes = [box for box in raw_boxes_data if box['confidence'] >= CONFIDENCE_THRESHOLD]
+
+                # ROI 필터링: ROI 영역 외부의 객체 제거 ⭐
+                if roi_bbox is not None:
+                    rx, ry, rw, rh = roi_bbox
+                    roi_filtered_boxes = []
+                    for box in filtered_boxes:
+                        # 바운딩 박스 중심점이 ROI 안에 있는지 확인
+                        cx = box['x1'] + (box['x2'] - box['x1']) / 2
+                        cy = box['y1'] + (box['y2'] - box['y1']) / 2
+                        if rx <= cx <= rx + rw and ry <= cy <= ry + rh:
+                            roi_filtered_boxes.append(box)
+
+                    logger.info(f"[TEST] ROI 필터링: {camera_id} → {len(filtered_boxes)}개 → {len(roi_filtered_boxes)}개")
+                    filtered_boxes = roi_filtered_boxes
+
+                # 검출 결과 평활화 (Temporal Smoothing)
+                smoothed_boxes = smooth_detections(camera_id, filtered_boxes)
+
+                # 평활화된 결과로 바운딩 박스 그리기 (PCB, ROI 박스도 함께 표시)
+                annotated_frame = draw_bounding_boxes(frame.copy(), smoothed_boxes, pcb_bbox, roi_bbox)
+
+                logger.info(f"[TEST] YOLO 추론 완료: {camera_id} → 원본 {len(raw_boxes_data)}개 → 필터링 {len(filtered_boxes)}개 → 평활화 {len(smoothed_boxes)}개 객체")
+
+                # 최종 boxes_data는 평활화된 결과 사용
+                boxes_data = smoothed_boxes
+            except Exception as yolo_error:
+                logger.error(f"[TEST] YOLO 추론 실패: {yolo_error}")
+                defect_type = "정상"
+                confidence = 0.0
+                annotated_frame = frame.copy()
+        else:
+            logger.warning("[TEST] YOLO 모델이 로드되지 않음 - 더미 결과 반환")
+            defect_type = "정상"
+            confidence = 0.95
+            annotated_frame = frame.copy()
+
         gpio_pin = get_gpio_pin(defect_type)
+
+        # 뷰어를 위해 바운딩 박스가 그려진 프레임 저장
+        with frame_lock:
+            latest_frames[camera_id] = annotated_frame
 
         # 4. 추론 시간 계산
         inference_time_ms = (time.time() - start_time) * 1000
@@ -745,20 +881,28 @@ def viewer():
 def video_feed(camera_id):
     """MJPEG 스트림 제공"""
     def generate():
+        # 대기 화면용 더미 프레임 생성 (회색 배경 + 텍스트)
+        dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        dummy_frame[:] = (50, 50, 50)  # 어두운 회색
+        cv2.putText(dummy_frame, f"Waiting for {camera_id} camera...",
+                   (100, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+
         while True:
             with frame_lock:
                 frame = latest_frames.get(camera_id)
 
-            if frame is not None:
-                # JPEG 인코딩
-                ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-                if ret:
-                    frame_bytes = buffer.tobytes()
-                    yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-            else:
-                # 프레임이 없으면 빈 프레임
-                time.sleep(0.1)
+            # 프레임이 없으면 더미 프레임 사용
+            if frame is None:
+                frame = dummy_frame
+
+            # JPEG 인코딩
+            ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            if ret:
+                frame_bytes = buffer.tobytes()
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+            time.sleep(0.1)  # 10 FPS (깜빡거림 방지)
 
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
@@ -775,6 +919,347 @@ def get_latest_results():
 
 
 # 유틸리티 함수
+def detect_pcb_roi(frame):
+    """
+    초록색 PCB 자동 감지 및 내부 ROI 추출
+
+    Args:
+        frame: 원본 프레임 (BGR)
+
+    Returns:
+        roi_mask: ROI 마스크 (255=PCB 내부, 0=외부/테두리)
+        pcb_bbox: PCB 바운딩 박스 (x, y, w, h) 또는 None
+        roi_bbox: ROI 바운딩 박스 (x, y, w, h) 또는 None (테두리 제외)
+    """
+    h, w = frame.shape[:2]
+
+    # 1. HSV 변환
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+    # 2. 초록색 PCB 마스크 생성
+    pcb_mask = cv2.inRange(hsv, PCB_COLOR_LOWER_HSV, PCB_COLOR_UPPER_HSV)
+
+    # 3. 노이즈 제거 (모폴로지 연산)
+    kernel = np.ones((5, 5), np.uint8)
+    pcb_mask = cv2.morphologyEx(pcb_mask, cv2.MORPH_CLOSE, kernel)
+    pcb_mask = cv2.morphologyEx(pcb_mask, cv2.MORPH_OPEN, kernel)
+
+    # 4. 가장 큰 컨투어 찾기 (PCB)
+    contours, _ = cv2.findContours(pcb_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    if not contours:
+        # PCB 감지 실패 → 전체 프레임 사용
+        roi_mask = np.ones((h, w), dtype=np.uint8) * 255
+        return roi_mask, None, None
+
+    # 가장 큰 컨투어 = PCB
+    largest_contour = max(contours, key=cv2.contourArea)
+    pcb_x, pcb_y, pcb_w, pcb_h = cv2.boundingRect(largest_contour)
+
+    # 4-1. PCB가 프레임 경계에 붙어있는지 확인 ⭐⭐⭐
+    # PCB 전체가 프레임에 나와야만 ROI 적용
+    is_pcb_on_edge = (
+        pcb_x < PCB_EDGE_THRESHOLD or  # 왼쪽 경계
+        pcb_y < PCB_EDGE_THRESHOLD or  # 위쪽 경계
+        pcb_x + pcb_w > w - PCB_EDGE_THRESHOLD or  # 오른쪽 경계
+        pcb_y + pcb_h > h - PCB_EDGE_THRESHOLD  # 아래쪽 경계
+    )
+
+    if is_pcb_on_edge:
+        # PCB가 프레임 경계에 붙어있음 → 부분적으로만 보임 → 전체 프레임 사용
+        roi_mask = np.ones((h, w), dtype=np.uint8) * 255
+        return roi_mask, None, None
+
+    # 5. PCB 내부 영역만 ROI로 설정 (테두리 제외)
+    margin_w = int(pcb_w * PCB_INNER_MARGIN_PERCENT)
+    margin_h = int(pcb_h * PCB_INNER_MARGIN_PERCENT)
+
+    roi_x = pcb_x + margin_w
+    roi_y = pcb_y + margin_h
+    roi_w = pcb_w - 2 * margin_w
+    roi_h = pcb_h - 2 * margin_h
+
+    # 경계 체크
+    roi_x = max(0, roi_x)
+    roi_y = max(0, roi_y)
+    roi_w = min(roi_w, w - roi_x)
+    roi_h = min(roi_h, h - roi_y)
+
+    # 6. ROI 마스크 생성
+    roi_mask = np.zeros((h, w), dtype=np.uint8)
+    roi_mask[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w] = 255
+
+    return roi_mask, (pcb_x, pcb_y, pcb_w, pcb_h), (roi_x, roi_y, roi_w, roi_h)
+
+
+def detect_motion(current_frame, previous_frame, camera_id):
+    """
+    프레임 차이로 모션 감지 (새 PCB 진입 감지)
+
+    Args:
+        current_frame: 현재 프레임 (컬러)
+        previous_frame: 이전 프레임 (컬러)
+        camera_id: 카메라 ID
+
+    Returns:
+        motion_detected: 모션 감지 여부
+        motion_value: 평균 픽셀 차이
+    """
+    if previous_frame is None:
+        return False, 0.0
+
+    # 그레이스케일 변환
+    gray_current = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY)
+    gray_previous = cv2.cvtColor(previous_frame, cv2.COLOR_BGR2GRAY)
+
+    # 프레임 차이 계산
+    frame_diff = cv2.absdiff(gray_current, gray_previous)
+
+    # 평균 차이 계산
+    mean_diff = np.mean(frame_diff)
+
+    # 모션 감지
+    motion_detected = mean_diff > MOTION_THRESHOLD
+
+    return motion_detected, mean_diff
+
+
+def calculate_iou(box1, box2):
+    """
+    두 바운딩 박스의 IOU (Intersection over Union) 계산
+
+    Args:
+        box1, box2: {'x1': float, 'y1': float, 'x2': float, 'y2': float}
+
+    Returns:
+        iou (float): 0.0 ~ 1.0
+    """
+    # 교집합 영역 계산
+    x1_inter = max(box1['x1'], box2['x1'])
+    y1_inter = max(box1['y1'], box2['y1'])
+    x2_inter = min(box1['x2'], box2['x2'])
+    y2_inter = min(box1['y2'], box2['y2'])
+
+    # 교집합 면적
+    if x2_inter < x1_inter or y2_inter < y1_inter:
+        return 0.0
+
+    inter_area = (x2_inter - x1_inter) * (y2_inter - y1_inter)
+
+    # 각 박스의 면적
+    box1_area = (box1['x2'] - box1['x1']) * (box1['y2'] - box1['y1'])
+    box2_area = (box2['x2'] - box2['x1']) * (box2['y2'] - box2['y1'])
+
+    # 합집합 면적
+    union_area = box1_area + box2_area - inter_area
+
+    if union_area == 0:
+        return 0.0
+
+    return inter_area / union_area
+
+
+def smooth_detections(camera_id, current_detections):
+    """
+    검출 결과 평활화 (Temporal Smoothing)
+
+    이전 프레임의 검출 결과를 참고하여 안정적인 검출 유지:
+    - 최소 MIN_DETECTION_FRAMES 프레임 동안 검출된 객체만 표시
+    - 사라진 객체는 MAX_MISSING_FRAMES 프레임 동안 유지
+
+    Args:
+        camera_id (str): 'left' or 'right'
+        current_detections (list): 현재 프레임의 검출 결과 [{...}, {...}]
+
+    Returns:
+        smoothed_detections (list): 평활화된 검출 결과
+    """
+    global next_object_id
+
+    with tracking_lock:
+        tracked = tracked_objects[camera_id]
+
+        # 현재 검출 결과와 추적 중인 객체 매칭
+        matched_ids = set()
+        new_detections = []
+
+        for detection in current_detections:
+            best_match_id = None
+            best_iou = 0.0
+
+            # 추적 중인 객체와 매칭
+            for obj_id, tracked_obj in tracked.items():
+                iou = calculate_iou(detection, tracked_obj['box'])
+
+                # 같은 클래스이면서 IOU가 높으면 매칭
+                if (detection['class_id'] == tracked_obj['class_id'] and
+                    iou > IOU_THRESHOLD and
+                    iou > best_iou):
+                    best_iou = iou
+                    best_match_id = obj_id
+
+            if best_match_id is not None:
+                # 기존 객체 업데이트
+                tracked[best_match_id]['count'] += 1
+                tracked[best_match_id]['missing'] = 0
+
+                # 30프레임 검출 후 값 고정 (컨베이어 벨트용)
+                if not tracked[best_match_id]['frozen']:
+                    tracked[best_match_id]['box'] = detection
+                    tracked[best_match_id]['confidence'] = detection['confidence']
+
+                    # 30프레임 도달 시 고정
+                    if tracked[best_match_id]['count'] >= FREEZE_AFTER_FRAMES:
+                        tracked[best_match_id]['frozen'] = True
+                        logger.info(f"[FREEZE] 객체 {best_match_id} 고정 완료 (class: {tracked[best_match_id]['class_name']}, conf: {tracked[best_match_id]['confidence']:.2f})")
+
+                # 이미 고정된 객체는 box와 confidence 업데이트 안 함
+
+                matched_ids.add(best_match_id)
+            else:
+                # 새로운 객체 추가
+                new_id = next_object_id
+                next_object_id += 1
+
+                tracked[new_id] = {
+                    'box': detection,
+                    'class_id': detection['class_id'],
+                    'class_name': detection['class_name'],
+                    'confidence': detection['confidence'],
+                    'count': 1,        # 검출 횟수
+                    'missing': 0,      # 미검출 횟수
+                    'frozen': False    # 30프레임 후 고정 여부 ⭐
+                }
+                matched_ids.add(new_id)
+
+        # 매칭되지 않은 객체는 missing 카운트 증가
+        to_remove = []
+        for obj_id in list(tracked.keys()):
+            if obj_id not in matched_ids:
+                # frozen 객체는 절대 삭제하지 않음 (영구 보존)
+                if tracked[obj_id]['frozen']:
+                    continue  # missing 카운트도 증가 안 함
+
+                tracked[obj_id]['missing'] += 1
+
+                # MAX_MISSING_FRAMES 초과 시 제거 (frozen 아닌 객체만)
+                if tracked[obj_id]['missing'] > MAX_MISSING_FRAMES:
+                    to_remove.append(obj_id)
+
+        for obj_id in to_remove:
+            del tracked[obj_id]
+
+        # 평활화된 검출 결과 생성
+        # - Frozen 객체: 무조건 표시 (고정된 박스는 절대 사라지면 안 됨) ⭐⭐⭐
+        # - 일반 객체: MIN_DETECTION_FRAMES 이상 검출된 객체만 표시
+        smoothed = []
+
+        # obj_id로 정렬하여 항상 같은 순서로 그리기 (깜빡거림 방지)
+        for obj_id in sorted(tracked.keys()):
+            tracked_obj = tracked[obj_id]
+            # Frozen 객체는 count와 관계없이 무조건 표시 ⭐
+            if tracked_obj['frozen'] or tracked_obj['count'] >= MIN_DETECTION_FRAMES:
+                smoothed.append({
+                    'x1': tracked_obj['box']['x1'],
+                    'y1': tracked_obj['box']['y1'],
+                    'x2': tracked_obj['box']['x2'],
+                    'y2': tracked_obj['box']['y2'],
+                    'confidence': tracked_obj['confidence'],
+                    'class_id': tracked_obj['class_id'],
+                    'class_name': tracked_obj['class_name']
+                })
+
+        # 모든 객체가 frozen 상태인지 확인 (완전 정지 모드) ⭐⭐⭐
+        if len(tracked) > 0:
+            all_frozen = all(obj['frozen'] for obj in tracked.values())
+            # 모든 객체 frozen + 충분한 안정 프레임 → 완전 정지 모드
+            if all_frozen and stable_frame_count[camera_id] >= STABLE_FRAMES_FOR_FREEZE and not camera_frozen_state[camera_id]:
+                camera_frozen_state[camera_id] = True
+                logger.info(f"🔒 [{camera_id}] 완전 정지 모드 활성화 (객체: {len(tracked)}개, 안정 프레임: {stable_frame_count[camera_id]})")
+
+        return smoothed
+
+
+def draw_bounding_boxes(frame, boxes_data, pcb_bbox=None, roi_bbox=None):
+    """
+    프레임에 바운딩 박스 및 ROI 영역 그리기
+
+    Args:
+        frame: OpenCV 이미지 (numpy array)
+        boxes_data: 바운딩 박스 정보 리스트
+        pcb_bbox: PCB 바운딩 박스 (x, y, w, h) - 파란색 점선
+        roi_bbox: ROI 바운딩 박스 (x, y, w, h) - 노란색 실선
+
+    Returns:
+        annotated_frame: 바운딩 박스가 그려진 이미지
+    """
+    annotated_frame = frame.copy()
+
+    # ROI 영역 표시 (먼저 그려서 뒤에 있도록)
+    if pcb_bbox is not None:
+        px, py, pw, ph = pcb_bbox
+        # PCB 전체 영역 (파란색 점선)
+        cv2.rectangle(annotated_frame, (px, py), (px+pw, py+ph), (255, 0, 0), 2, cv2.LINE_AA)
+        cv2.putText(annotated_frame, "PCB", (px+5, py+20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+
+    if roi_bbox is not None:
+        rx, ry, rw, rh = roi_bbox
+        # ROI 내부 영역 (노란색 실선)
+        cv2.rectangle(annotated_frame, (rx, ry), (rx+rw, ry+rh), (0, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(annotated_frame, "ROI (Detection Area)", (rx+5, ry+20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+
+    # 클래스별 색상 (12개 클래스)
+    colors = [
+        (255, 0, 0),      # Electrolytic capacitor - 빨강
+        (0, 255, 0),      # IC - 초록
+        (0, 0, 255),      # cds - 파랑
+        (255, 255, 0),    # ceramic capacitor - 노랑
+        (255, 0, 255),    # diode - 자홍
+        (0, 255, 255),    # led - 청록
+        (128, 0, 0),      # pinheader - 어두운 빨강
+        (0, 128, 0),      # pinsocket - 어두운 초록
+        (0, 0, 128),      # resistor - 어두운 파랑
+        (128, 128, 0),    # switch - 올리브
+        (128, 0, 128),    # transistor - 보라
+        (0, 128, 128),    # zener diode - 청록
+    ]
+
+    for box in boxes_data:
+        x1 = int(box['x1'])
+        y1 = int(box['y1'])
+        x2 = int(box['x2'])
+        y2 = int(box['y2'])
+        conf = box['confidence']
+        class_id = box['class_id']
+        class_name = box['class_name']
+
+        # 색상 선택
+        color = colors[class_id % len(colors)]
+
+        # 바운딩 박스 그리기
+        cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
+
+        # 레이블 배경
+        label = f"{class_name} {conf:.2f}"
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.5
+        thickness = 1
+        (text_width, text_height), baseline = cv2.getTextSize(label, font, font_scale, thickness)
+
+        # 레이블 배경 그리기
+        cv2.rectangle(annotated_frame,
+                     (x1, y1 - text_height - 10),
+                     (x1 + text_width, y1),
+                     color, -1)
+
+        # 레이블 텍스트 그리기
+        cv2.putText(annotated_frame, label,
+                   (x1, y1 - 5),
+                   font, font_scale, (255, 255, 255), thickness)
+
+    return annotated_frame
+
+
 def parse_yolo_results(results):
     """
     YOLO 추론 결과 파싱
