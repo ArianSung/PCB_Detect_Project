@@ -58,16 +58,36 @@ class CameraClient:
         self.error_count = 0
 
     def setup_camera_v4l2(self):
-        """v4l2-ctl을 사용해 카메라 자동 노출 끄기"""
+        """v4l2-ctl을 사용해 카메라 노출 설정"""
         try:
             device = f"/dev/video{self.camera_index}"
+
             # 자동 노출 끄기 (1 = manual mode)
             subprocess.run(
                 ['v4l2-ctl', '-d', device, '-c', 'auto_exposure=1'],
                 capture_output=True,
                 timeout=2
             )
-            logger.info(f"✅ 카메라 자동 노출 OFF (device: {device})")
+
+            # 노출 값 수동 설정 (낮게 설정하여 밝기 감소)
+            # 값 범위: 보통 1-5000, 낮을수록 어둡게
+            subprocess.run(
+                ['v4l2-ctl', '-d', device, '-c', 'exposure_absolute=150'],
+                capture_output=True,
+                timeout=2
+            )
+
+            # 밝기 조정 (선택사항, 0-255 범위)
+            subprocess.run(
+                ['v4l2-ctl', '-d', device, '-c', 'brightness=128'],
+                capture_output=True,
+                timeout=2
+            )
+
+            logger.info(f"✅ 카메라 설정 완료 (device: {device})")
+            logger.info(f"   - 자동 노출: OFF")
+            logger.info(f"   - 노출 값: 150 (수동)")
+            logger.info(f"   - 밝기: 128")
         except Exception as e:
             logger.warning(f"⚠️  v4l2-ctl 설정 실패 (계속 진행): {e}")
 
