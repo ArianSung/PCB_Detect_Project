@@ -50,6 +50,7 @@
             label3 = new Label();
             DefectTypePieChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
             btn_Excel = new Button();
+            dtpMonth = new ComponentFactory.Krypton.Toolkit.KryptonDateTimePicker();
             cardMonthlyLine.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)MonthlyLineChart).BeginInit();
             cardMonthlyAccum.SuspendLayout();
@@ -117,7 +118,7 @@
             // 
             // panel1
             // 
-            panel1.Location = new Point(102, 250);
+            panel1.Location = new Point(113, 250);
             panel1.Name = "panel1";
             panel1.Size = new Size(44, 30);
             panel1.TabIndex = 4;
@@ -206,11 +207,28 @@
             btn_Excel.UseVisualStyleBackColor = true;
             btn_Excel.Click += btn_Excel_Click;
             // 
+            // dtpMonth
+            // 
+            dtpMonth.CustomFormat = "yyyy년 - MM월";
+            dtpMonth.Format = DateTimePickerFormat.Custom;
+            dtpMonth.Location = new Point(20, 55);
+            dtpMonth.Name = "dtpMonth";
+            dtpMonth.Size = new Size(158, 31);
+            dtpMonth.StateCommon.Back.Color1 = Color.FromArgb(44, 44, 44);
+            dtpMonth.StateCommon.Border.Color1 = Color.FromArgb(44, 44, 44);
+            dtpMonth.StateCommon.Border.Color2 = Color.FromArgb(44, 44, 44);
+            dtpMonth.StateCommon.Border.DrawBorders = ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Top | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Bottom | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Left | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Right;
+            dtpMonth.StateCommon.Content.Color1 = Color.White;
+            dtpMonth.StateCommon.Content.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            dtpMonth.TabIndex = 9;
+            dtpMonth.ValueChanged += dtpMonth_ValueChanged;
+            // 
             // StatisticsView
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(64, 64, 64);
+            Controls.Add(dtpMonth);
             Controls.Add(btn_Excel);
             Controls.Add(cardDefectPie);
             Controls.Add(cardMonthlyAccum);
@@ -245,5 +263,6 @@
         private Panel panel2;
         private Panel panel1;
         private Button btn_Excel;
+        private ComponentFactory.Krypton.Toolkit.KryptonDateTimePicker dtpMonth;
     }
 }
