@@ -8,11 +8,16 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
+using pcb_monitoring_program.DatabaseManager.Models;
+using pcb_monitoring_program.DatabaseManager;
 
 namespace pcb_monitoring_program.Views.Statistics
 {
     public partial class StatisticsView : UserControl
     {
+        private List<DailyStatistics> _yearDailyStats = new List<DailyStatistics>();
+        private int _currentYear = 2025;  // 일단 2025년 기준 (원하면 DateTime.Today.Year 쓰면 됨)
+        private int _currentMonth = 10;   // 일단 10월 기준으로 테스트
         public StatisticsView()
         {
             InitializeComponent();
@@ -20,6 +25,14 @@ namespace pcb_monitoring_program.Views.Statistics
 
         private void StatisticsView_Load(object sender, EventArgs e)
         {
+            // 🔹 기본 연/월 (지금은 오늘 기준)
+            _currentYear = DateTime.Today.Year;
+            _currentMonth = DateTime.Today.Month;
+
+            // 🔹 Krypton DateTimePicker 초기 설정 (디자이너에서 했으면 생략 가능, 그래도 안전하게)
+            dtpMonth.Format = DateTimePickerFormat.Custom;
+            dtpMonth.CustomFormat = "yyyy년 MM월";
+            dtpMonth.Value = new DateTime(_currentYear, _currentMonth, 1);
             UiStyleHelper.MakeRoundedPanel(cardMonthlyLine, radius: 16, back: Color.FromArgb(44, 44, 44));
             UiStyleHelper.MakeRoundedPanel(cardMonthlyAccum, radius: 16, back: Color.FromArgb(44, 44, 44));
             UiStyleHelper.MakeRoundedPanel(cardDefectPie, radius: 16, back: Color.FromArgb(44, 44, 44));
@@ -42,10 +55,47 @@ namespace pcb_monitoring_program.Views.Statistics
                     btn.Cursor = Cursors.Hand;
                 }
             }
+            try
+            {
+                string connectionString =
+                    "Server=100.80.24.53;Port=3306;Database=pcb_inspection;Uid=pcb_admin;Pwd=1234;CharSet=utf8mb4;";
+
+                using (var db = new DatabaseManager.DatabaseManager(connectionString))
+                {
+                    _yearDailyStats = db.GetDailyStatisticsForYear(_currentYear);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"통계 데이터 로드 중 오류: {ex.Message}", "오류");
+                _yearDailyStats = new List<DailyStatistics>();
+            }
+
+            // 👉 공용 데이터(_yearDailyStats)를 기반으로 세 개 차트 그리기
             SetupMonthlyLineChart();
             SetupMonthlyAccumChart();
             SetupDefectTypePieChart();
         }
+
+        private void LoadDailyStatisticsForYear(int year)
+        {
+            try
+            {
+                string connectionString =
+                    "Server=100.80.24.53;Port=3306;Database=pcb_inspection;Uid=pcb_admin;Pwd=1234;CharSet=utf8mb4;";
+
+                using (var db = new DatabaseManager.DatabaseManager(connectionString))
+                {
+                    _yearDailyStats = db.GetDailyStatisticsForYear(year);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"통계 데이터 로드 중 오류: {ex.Message}", "오류");
+                _yearDailyStats = new List<DailyStatistics>();
+            }
+        }
+
         private void SetupMonthlyLineChart()
         {
             var chart = MonthlyLineChart;
@@ -57,27 +107,29 @@ namespace pcb_monitoring_program.Views.Statistics
             var area = new ChartArea("Main");
             area.BackColor = Color.Transparent;
 
-            // X축: 1 ~ 31일
+            // 현재 월의 일수 계산 (예: 10월 → 31일)
+            int daysInMonth = DateTime.DaysInMonth(_currentYear, _currentMonth);
+
+            // X축: 1 ~ 해당 월 마지막 날
             area.AxisX.Minimum = 1;
-            area.AxisX.Maximum = 31;
+            area.AxisX.Maximum = daysInMonth;
             area.AxisX.Interval = 1;
             area.AxisX.MajorGrid.Enabled = false;
             area.AxisX.IsLabelAutoFit = false;
             area.AxisX.LabelStyle.ForeColor = Color.Gainsboro;
             area.AxisX.LabelStyle.Font = new Font("맑은 고딕", 10);
-            //area.AxisX.LabelStyle.Format = "0일";   // 1일, 2일, 3일 ... 이렇게 보이게
 
-            // Y축: 일일 생산량(임시)
+            // Y축: 일일 생산량
             area.AxisY.Minimum = 0;
-            area.AxisY.Maximum = 60;      // 데이터 보고 조정
-            area.AxisY.Interval = 10;
+            area.AxisY.Maximum = 1000;      // 10월에 하루 1000개 이하로 맞춰놨으니 1000으로
+            area.AxisY.Interval = 100;
             area.AxisY.MajorGrid.LineColor = Color.FromArgb(70, 70, 70);
             area.AxisY.LabelStyle.ForeColor = Color.Gainsboro;
             area.AxisY.LabelStyle.Font = new Font("맑은 고딕", 8);
 
             chart.ChartAreas.Add(area);
 
-            // 라인 시리즈 4개 (정상/부품불량/납땜불량/폐기)
+            // 라인 시리즈 4개
             Series sNormal = CreateLineSeries("정상", Color.FromArgb(100, 181, 246));
             Series sPartDefect = CreateLineSeries("부품불량", Color.Orange);
             Series sSolderDefect = CreateLineSeries("납땜불량", Color.FromArgb(158, 158, 158));
@@ -88,21 +140,25 @@ namespace pcb_monitoring_program.Views.Statistics
             chart.Series.Add(sSolderDefect);
             chart.Series.Add(sScrap);
 
-            // ✅ 1~31일 “일일 생산량” 느낌으로 더미 데이터
-            //    나중에 DB 붙이면 여기만 교체하면 됨
-            double[] normal = { 40, 38, 42, 39, 41, 43, 44, 42, 40, 39, 38, 37, 36, 38, 39, 41, 42, 44, 45, 43, 42, 40, 39, 38, 37, 39, 40, 42, 43, 41, 40 };
-            double[] partDefect = { 4, 3, 5, 4, 6, 5, 7, 6, 4, 5, 3, 4, 6, 5, 4, 7, 6, 5, 8, 4, 5, 4, 6, 5, 4, 7, 6, 5, 8, 5, 4 };
-            double[] solderDefect = { 2, 3, 2, 4, 3, 2, 5, 3, 2, 4, 2, 3, 4, 3, 2, 5, 3, 2, 4, 3, 2, 4, 3, 2, 5, 3, 2, 4, 3, 2, 3 };
-            double[] scrap = { 1, 2, 1, 3, 2, 1, 4, 2, 1, 3, 1, 2, 1, 4, 2, 1, 3, 2, 5, 1, 2, 1, 3, 2, 1, 4, 2, 1, 3, 2, 6 };
+            // 🔥 현재 월(예: 10월) 데이터만 필터
+            var monthData = _yearDailyStats
+                .Where(d => d.StatDate.Month == _currentMonth && d.StatDate.Year == _currentYear)
+                .ToList();
 
-            for (int day = 1; day <= 31; day++)
+            // 1일 ~ 마지막 날까지 돌면서, 없는 날짜는 0으로 처리
+            for (int day = 1; day <= daysInMonth; day++)
             {
-                int i = day - 1; // 배열 인덱스 0~30
+                var rec = monthData.FirstOrDefault(d => d.StatDate.Day == day);
 
-                sNormal.Points.AddXY(day, normal[i]);
-                sPartDefect.Points.AddXY(day, partDefect[i]);
-                sSolderDefect.Points.AddXY(day, solderDefect[i]);
-                sScrap.Points.AddXY(day, scrap[i]);
+                int normal = rec?.NormalCount ?? 0;
+                int partDefect = rec?.ComponentDefectCount ?? 0;
+                int solderDefect = rec?.SolderDefectCount ?? 0;
+                int scrap = rec?.DiscardCount ?? 0;
+
+                sNormal.Points.AddXY(day, normal);
+                sPartDefect.Points.AddXY(day, partDefect);
+                sSolderDefect.Points.AddXY(day, solderDefect);
+                sScrap.Points.AddXY(day, scrap);
             }
 
             var legend = new Legend
@@ -135,7 +191,6 @@ namespace pcb_monitoring_program.Views.Statistics
         {
             var chart = MonthlyAccumChart;
 
-            // 1) 초기화
             chart.DataSource = null;
             chart.Series.Clear();
             chart.ChartAreas.Clear();
@@ -144,7 +199,6 @@ namespace pcb_monitoring_program.Views.Statistics
             chart.BackColor = Color.Transparent;
             chart.BorderlineWidth = 0;
 
-            // 2) ChartArea
             var area = new ChartArea("Main");
             area.BackColor = Color.Transparent;
 
@@ -157,12 +211,10 @@ namespace pcb_monitoring_program.Views.Statistics
             area.AxisX.LabelStyle.Font = new Font("맑은 고딕", 8);
             area.AxisX.LabelStyle.Format = "0월";
 
-
-
-            // Y축: 검사 개수 (예시 0~60)
+            // Y축: 검사 개수
             area.AxisY.Minimum = 0;
-            area.AxisY.Maximum = 60; // 더미 기준, 나중에 데이터 보고 조정
-            area.AxisY.Interval = 10;
+            area.AxisY.Maximum = 50000;  // 연간 누적 기준, 필요하면 나중에 동적으로 조정
+            area.AxisY.Interval = 10000;
             area.AxisY.MajorGrid.Enabled = true;
             area.AxisY.MajorGrid.LineColor = Color.FromArgb(70, 70, 70);
             area.AxisY.LabelStyle.ForeColor = Color.Gainsboro;
@@ -170,11 +222,10 @@ namespace pcb_monitoring_program.Views.Statistics
 
             chart.ChartAreas.Add(area);
 
-            // 3) 시리즈 생성 (아래에서 위로 쌓이는 순서: 정상 → 부품불량 → 납땜불량 → 폐기)
-            Color normalColor = Color.FromArgb(100, 181, 246);   // 파랑
-            Color partDefectColor = Color.FromArgb(255, 167, 38);   // 주황
-            Color solderDefColor = Color.FromArgb(158, 158, 158);   // 회색
-            Color scrapColor = Color.Red;                      // 빨강(폐기)
+            Color normalColor = Color.FromArgb(100, 181, 246);
+            Color partDefectColor = Color.FromArgb(255, 167, 38);
+            Color solderDefColor = Color.FromArgb(158, 158, 158);
+            Color scrapColor = Color.Red;
 
             Series sNormal = new Series("정상")
             {
@@ -209,23 +260,24 @@ namespace pcb_monitoring_program.Views.Statistics
             chart.Series.Add(sSolderDefect);
             chart.Series.Add(sScrap);
 
-            // 4) 더미 데이터 (1~12월, 원하는 값으로 바꾸면 됨)
-            int[] normal = { 40, 38, 35, 37, 39, 42, 44, 43, 45, 47, 46, 48 };
-            int[] partDefect = { 3, 2, 3, 3, 4, 3, 2, 3, 4, 3, 2, 3 };
-            int[] solderDefect = { 2, 2, 1, 2, 1, 2, 1, 1, 2, 2, 1, 1 };
-            int[] scrap = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
-
-            for (int i = 0; i < 12; i++)
+            // 🔥 연도별 daily 데이터를 월별로 합산
+            for (int month = 1; month <= 12; month++)
             {
-                int month = i + 1; // 1~12
+                var monthGroup = _yearDailyStats
+                    .Where(d => d.StatDate.Year == _currentYear && d.StatDate.Month == month)
+                    .ToList();
 
-                sNormal.Points.AddXY(month, normal[i]);
-                sPartDefect.Points.AddXY(month, partDefect[i]);
-                sSolderDefect.Points.AddXY(month, solderDefect[i]);
-                sScrap.Points.AddXY(month, scrap[i]);
+                int sumNormal = monthGroup.Sum(d => d.NormalCount);
+                int sumPartDefect = monthGroup.Sum(d => d.ComponentDefectCount);
+                int sumSolderDefect = monthGroup.Sum(d => d.SolderDefectCount);
+                int sumScrap = monthGroup.Sum(d => d.DiscardCount);
+
+                sNormal.Points.AddXY(month, sumNormal);
+                sPartDefect.Points.AddXY(month, sumPartDefect);
+                sSolderDefect.Points.AddXY(month, sumSolderDefect);
+                sScrap.Points.AddXY(month, sumScrap);
             }
 
-            // 5) 레전드
             var legend = new Legend
             {
                 Docking = Docking.Top,
@@ -238,57 +290,67 @@ namespace pcb_monitoring_program.Views.Statistics
         }
         private void SetupDefectTypePieChart()
         {
-            Color normalColor = Color.FromArgb(100, 181, 246); // 파랑
-            Color partDefectColor = Color.FromArgb(255, 167, 38); // 주황
-            Color solderDefColor = Color.FromArgb(158, 158, 158); // 회색
-            Color scrapColor = Color.FromArgb(244, 67, 54); // 빨강
+            Color normalColor = Color.FromArgb(100, 181, 246);
+            Color partDefectColor = Color.FromArgb(255, 167, 38);
+            Color solderDefColor = Color.FromArgb(158, 158, 158);
+            Color scrapColor = Color.FromArgb(244, 67, 54);
+
+            // 🔥 현재 월 데이터만 집계
+            var monthData = _yearDailyStats
+                .Where(d => d.StatDate.Year == _currentYear && d.StatDate.Month == _currentMonth)
+                .ToList();
+
+            int sumNormal = monthData.Sum(d => d.NormalCount);
+            int sumPartDefect = monthData.Sum(d => d.ComponentDefectCount);
+            int sumSolderDefect = monthData.Sum(d => d.SolderDefectCount);
+            int sumScrap = monthData.Sum(d => d.DiscardCount);
+
             var categories = new (string name, int value, Color color)[]
             {
-                ("정상", 820, normalColor),
-                ("부품불량", 14, partDefectColor),
-                ("납땜불량", 28, solderDefColor),
-                ("폐기",     8, scrapColor),
+        ("정상",     sumNormal,       normalColor),
+        ("부품불량", sumPartDefect,   partDefectColor),
+        ("납땜불량", sumSolderDefect, solderDefColor),
+        ("폐기",     sumScrap,        scrapColor),
             };
 
-            // 2) 차트 초기화
             var chart = DefectTypePieChart;
             chart.Series.Clear();
-            chart.Legends.Clear();              // ✅ 기본 레전드 제거
+            chart.Legends.Clear();
             chart.ChartAreas.Clear();
 
             var area = new ChartArea("area");
             area.BackColor = Color.Transparent;
-            // 도넛 크기 동일하게 맞추고 싶으면 Position/InnerPlotPosition도 고정
             area.Position.Auto = false;
-            area.Position.X = 5; area.Position.Y = 5; area.Position.Width = 90; area.Position.Height = 90;
+            area.Position.X = 5; area.Position.Y = 5;
+            area.Position.Width = 90; area.Position.Height = 90;
             area.InnerPlotPosition.Auto = false;
-            area.InnerPlotPosition.X = 10; area.InnerPlotPosition.Y = 10; area.InnerPlotPosition.Width = 80; area.InnerPlotPosition.Height = 80;
+            area.InnerPlotPosition.X = 10; area.InnerPlotPosition.Y = 10;
+            area.InnerPlotPosition.Width = 80; area.InnerPlotPosition.Height = 80;
             chart.ChartAreas.Add(area);
 
             var s = new Series("불량 카테고리")
             {
                 ChartType = SeriesChartType.Doughnut
             };
-            s["DoughnutRadius"] = "50";         // 도넛 구멍 크기(작을수록 구멍 큼)
-            s["PieLabelStyle"] = "Disabled";   // ✅ 조각 라벨도 끔 (겹침 방지)
+            s["DoughnutRadius"] = "50";
+            s["PieLabelStyle"] = "Disabled";
             s.IsValueShownAsLabel = false;
 
             foreach (var item in categories)
             {
                 var pt = s.Points.AddXY(item.name, item.value);
-                s.Points[pt].Color = item.color;  // ✅ 차트 조각 색상
+                s.Points[pt].Color = item.color;
             }
             chart.Series.Add(s);
 
-            // 3) 커스텀 레전드(FlowLayoutPanel) 초기화
+            // 커스텀 레전드 (원래 코드 그대로 재사용)
             flowPie.SuspendLayout();
             flowPie.Controls.Clear();
             flowPie.FlowDirection = FlowDirection.TopDown;
             flowPie.WrapContents = false;
-            flowPie.AutoSize = false;    // Dock=Right라면 false가 깔끔
+            flowPie.AutoSize = false;
             flowPie.BackColor = Color.Transparent;
 
-            // 4) 커스텀 아이템(색상 네모 + 텍스트) 추가
             foreach (var item in categories)
             {
                 var row = new Panel
@@ -314,14 +376,12 @@ namespace pcb_monitoring_program.Views.Statistics
                     Left = 20,
                     Top = (row.Height - 16) / 2,
                     Text = $"{item.name}  {item.value}개",
-                    ForeColor = Color.Gainsboro // 밝은 테마면 Black
+                    ForeColor = Color.Gainsboro
                 };
 
-                // (선택) 클릭 시 해당 조각 강조 효과
                 EventHandler clickHandler = (_, __) =>
                 {
                     foreach (var p in s.Points) { p.BorderWidth = 0; }
-                    // 같은 이름의 포인트 찾아 강조
                     var target = s.Points.FirstOrDefault(p => p.AxisLabel == item.name);
                     if (target != null) { target.BorderColor = Color.White; target.BorderWidth = 3; }
                 };
@@ -460,6 +520,31 @@ namespace pcb_monitoring_program.Views.Statistics
         private void btn_Excel_Click(object sender, EventArgs e)
         {
 
+        }
+
+        private void dtpMonth_ValueChanged(object sender, EventArgs e)
+        {
+            DateTime selected = dtpMonth.Value;
+
+            int newYear = selected.Year;
+            int newMonth = selected.Month;
+
+            bool yearChanged = (newYear != _currentYear);
+
+            // 🔹 현재 선택 상태 갱신
+            _currentYear = newYear;
+            _currentMonth = newMonth;
+
+            // 🔹 연도가 바뀌면 DB에서 해당 연도 daily 다시 가져오기
+            if (yearChanged)
+            {
+                LoadDailyStatisticsForYear(_currentYear);
+            }
+
+            // 🔹 새 연/월 기준으로 3개 차트 모두 다시 그림
+            SetupMonthlyLineChart();
+            SetupMonthlyAccumChart();
+            SetupDefectTypePieChart();
         }
     }
 } 

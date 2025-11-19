@@ -294,6 +294,139 @@ namespace pcb_monitoring_program.DatabaseManager
         /// <param name="startDate">시작 날짜</param>
         /// <param name="endDate">종료 날짜</param>
         /// <returns>통계 객체</returns>
+        public List<DailyStatistics> GetDailyStatisticsForYear(int year)    //민준코드
+        {
+            List<DailyStatistics> list = new List<DailyStatistics>();
+
+            DateTime startDate = new DateTime(year, 1, 1);
+            DateTime endDate = new DateTime(year, 12, 31);
+
+            try
+            {
+                using (MySqlConnection conn = new MySqlConnection(_connectionString))
+                {
+                    conn.Open();
+
+                    string query = @"
+                SELECT
+                    stat_date,
+                    total_inspections,
+                    normal_count,
+                    component_defect_count,
+                    solder_defect_count,
+                    discard_count,
+                    defect_rate,
+                    created_at,
+                    updated_at
+                FROM statistics_daily
+                WHERE stat_date BETWEEN @startDate AND @endDate
+                ORDER BY stat_date ASC";
+
+                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@startDate", startDate);
+                        cmd.Parameters.AddWithValue("@endDate", endDate);
+
+                        using (MySqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                var d = new DailyStatistics
+                                {
+                                    StatDate = reader.GetDateTime("stat_date").Date,
+                                    TotalInspections = reader.GetInt32("total_inspections"),
+                                    NormalCount = reader.GetInt32("normal_count"),
+                                    ComponentDefectCount = reader.GetInt32("component_defect_count"),
+                                    SolderDefectCount = reader.GetInt32("solder_defect_count"),
+                                    DiscardCount = reader.GetInt32("discard_count"),
+                                    DefectRate = reader.IsDBNull(reader.GetOrdinal("defect_rate"))
+                                                            ? 0.0
+                                                            : (double)reader.GetDecimal("defect_rate"),
+                                    CreatedAt = reader.GetDateTime("created_at"),
+                                    UpdatedAt = reader.GetDateTime("updated_at"),
+                                };
+
+                                list.Add(d);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex)
+            {
+                Console.WriteLine($"[일별 통계 조회 실패] {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[일별 통계 조회 오류] {ex.Message}");
+            }
+
+            return list;
+        }
+        public List<HourlyStatistics> GetHourlyStatistics(DateTime start, DateTime end)    //민준코드
+        {
+            var list = new List<HourlyStatistics>();
+
+            try
+            {
+                using (MySqlConnection conn = new MySqlConnection(_connectionString))
+                {
+                    conn.Open();
+
+                    string query = @"
+                SELECT
+                    stat_datetime,
+                    total_inspections,
+                    normal_count,
+                    component_defect_count,
+                    solder_defect_count,
+                    discard_count,
+                    created_at,
+                    updated_at
+                FROM statistics_hourly
+                WHERE stat_datetime >= @start AND stat_datetime < @end
+                ORDER BY stat_datetime;
+            ";
+
+                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@start", start);
+                        cmd.Parameters.AddWithValue("@end", end);
+
+                        using (MySqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                var item = new HourlyStatistics
+                                {
+                                    StatDatetime = reader.GetDateTime("stat_datetime"),
+                                    TotalInspections = reader.GetInt32("total_inspections"),
+                                    NormalCount = reader.GetInt32("normal_count"),
+                                    ComponentDefectCount = reader.GetInt32("component_defect_count"),
+                                    SolderDefectCount = reader.GetInt32("solder_defect_count"),
+                                    DiscardCount = reader.GetInt32("discard_count"),
+                                    CreatedAt = reader.GetDateTime("created_at"),
+                                    UpdatedAt = reader.GetDateTime("updated_at")
+                                };
+
+                                list.Add(item);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex)
+            {
+                Console.WriteLine($"[시간별 통계 조회 실패] {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[시간별 통계 조회 오류] {ex.Message}");
+            }
+
+            return list;
+        }
+
         public Statistics GetStatistics(DateTime startDate, DateTime endDate)
         {
             Statistics stats = new Statistics
