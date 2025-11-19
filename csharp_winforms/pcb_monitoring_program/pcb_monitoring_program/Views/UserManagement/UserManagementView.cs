@@ -94,32 +94,6 @@ namespace pcb_monitoring_program.Views.UserManagement
             // 🔒 읽기 전용
             DGV_UserManagement.ReadOnly = true;
 
-            //// 🔄 자동 사이즈 끄고 직접 너비 지정
-            //DGV_UserManagement.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
-            //DGV_UserManagement.ScrollBars = ScrollBars.Both;
-
-            //// 📏 열 헤더 + 너비 설정
-            //DGV_UserManagement.Columns["id"].HeaderText = "번호";
-            //DGV_UserManagement.Columns["id"].Width = 60;
-
-            //DGV_UserManagement.Columns["username"].HeaderText = "아이디";
-            //DGV_UserManagement.Columns["username"].Width = 160;
-
-            //DGV_UserManagement.Columns["full_name"].HeaderText = "사용자 이름";
-            //DGV_UserManagement.Columns["full_name"].Width = 160;
-
-            //DGV_UserManagement.Columns["role"].HeaderText = "권한";
-            //DGV_UserManagement.Columns["role"].Width = 160;
-
-            //DGV_UserManagement.Columns["status_text"].HeaderText = "상태";
-            //DGV_UserManagement.Columns["status_text"].Width = 80;
-
-            //DGV_UserManagement.Columns["last_login"].HeaderText = "마지막 로그인";
-            //DGV_UserManagement.Columns["last_login"].Width = 220;
-
-            //DGV_UserManagement.Columns["created_at"].HeaderText = "생성일";
-            //DGV_UserManagement.Columns["created_at"].Width = 220;
-
             // 🔁 카드 안 폭에 맞춰서 열 자동으로 채우기
             DGV_UserManagement.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
             DGV_UserManagement.ScrollBars = ScrollBars.Vertical; // 가로 스크롤 안 쓰면 Vertical 만
@@ -177,10 +151,18 @@ namespace pcb_monitoring_program.Views.UserManagement
             if (sender is Button btn)
                 UiStyleHelper.HighlightButton(btn);
 
-            // 🔹 UserManagementForm_AddUser 열기
-            UserManagementForm_AddUser form = new UserManagementForm_AddUser();
-            form.StartPosition = FormStartPosition.CenterParent; // 부모 기준 중앙 정렬
-            form.Show();
+            // 🔹 UserManagementForm_AddUser 모달로 열기
+            using (var form = new UserManagementForm_AddUser())
+            {
+                form.StartPosition = FormStartPosition.CenterParent; // 부모 기준 중앙 정렬
+
+                // 저장 성공 시 AddUser 폼에서 DialogResult = OK 로 설정해 준다는 가정
+                if (form.ShowDialog() == DialogResult.OK)
+                {
+                    // ✅ 새로고침 (DB 다시 읽기)
+                    LoadUsersFromDB();
+                }
+            }
         }
 
         private void btn_UserManage_Refresh_Click(object sender, EventArgs e)
@@ -202,15 +184,35 @@ namespace pcb_monitoring_program.Views.UserManagement
 
         private void btn_UserManage_EditUser_Click(object sender, EventArgs e)
         {
-            OpenDetailsRequested?.Invoke(this, EventArgs.Empty);
+            var grid = DGV_UserManagement;
 
-            if (sender is Button btn)
-                UiStyleHelper.HighlightButton(btn);
+            if (grid.CurrentRow == null)
+            {
+                MessageBox.Show("수정할 사용자를 선택하세요.", "알림",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
 
-            // 🔹 UserManagementForm_EditUser 열기
-            UserManagementForm_EditUser form = new UserManagementForm_EditUser();
-            form.StartPosition = FormStartPosition.CenterParent; // 부모 기준 중앙 정렬
-            form.Show();
+            // ⚠ 컬럼 이름 "Id" → "id" 로 통일 (ApplyGridStyle에서 소문자 id 사용 중)
+            int id = Convert.ToInt32(grid.CurrentRow.Cells["id"].Value);
+            string username = grid.CurrentRow.Cells["username"].Value?.ToString();
+            string fullName = grid.CurrentRow.Cells["full_name"].Value?.ToString();
+            string role = grid.CurrentRow.Cells["role"].Value?.ToString();
+
+            // 상태값이 "활성"/"비활성" 같은 문자열이라면:
+            string stateStr = grid.CurrentRow.Cells["status_text"].Value?.ToString();
+            bool isActive = stateStr == "활성" || stateStr == "True" || stateStr == "1";
+
+            using (var form = new UserManagementForm_EditUser(id, username, fullName, role, isActive))
+            {
+                form.StartPosition = FormStartPosition.CenterParent;
+
+                // ✅ 수정 성공 & OK 일 때만 새로고침
+                if (form.ShowDialog() == DialogResult.OK && form.IsUpdated)
+                {
+                    LoadUsersFromDB();   // DB 다시 읽어서 표 새로고침
+                }
+            }
         }
 
         private void btn_UserManage_DeleteUser_Click(object sender, EventArgs e)
@@ -270,6 +272,14 @@ namespace pcb_monitoring_program.Views.UserManagement
             DGV_UserManagement.DataSource = dt;
             ApplyGridStyle();
             return SearchResultStatus.HasResult;
+        }
+
+        private void DGV_UserManagement_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0) return;   // 헤더 더블클릭 방지
+
+            // 그냥 수정 버튼 클릭 재사용
+            btn_UserManage_EditUser.PerformClick();
         }
     }
 }
