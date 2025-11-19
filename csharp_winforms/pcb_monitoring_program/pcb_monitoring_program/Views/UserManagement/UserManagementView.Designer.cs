@@ -337,6 +337,7 @@
             DGV_UserManagement.StateTracking.HeaderRow.Content.Color1 = Color.White;
             DGV_UserManagement.StateTracking.HeaderRow.Content.Color2 = Color.White;
             DGV_UserManagement.TabIndex = 1;
+            DGV_UserManagement.CellDoubleClick += DGV_UserManagement_CellDoubleClick;
             // 
             // label_UM_ID
             // 

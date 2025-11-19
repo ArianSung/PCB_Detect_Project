@@ -31,6 +31,7 @@
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(UserManagementForm_EditUser));
             cardEditUserBackground = new Panel();
             cardEditUser = new Panel();
+            btn_UM_Edit_PW = new Button();
             CB_UM_Edit_Active_True = new CheckBox();
             label_UM_ADD_Active = new Label();
             panel_UM_Edit_Active = new Panel();
@@ -53,6 +54,7 @@
             textbox_UM_Edit_Name = new TextBox();
             label_UM_Edit_ID = new Label();
             textbox_UM_Edit_ID = new TextBox();
+            button1 = new Button();
             cardEditUserBackground.SuspendLayout();
             cardEditUser.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox_UM_Edit_User).BeginInit();
@@ -72,6 +74,8 @@
             // cardEditUser
             // 
             cardEditUser.BackColor = Color.FromArgb(44, 44, 44);
+            cardEditUser.Controls.Add(button1);
+            cardEditUser.Controls.Add(btn_UM_Edit_PW);
             cardEditUser.Controls.Add(CB_UM_Edit_Active_True);
             cardEditUser.Controls.Add(label_UM_ADD_Active);
             cardEditUser.Controls.Add(panel_UM_Edit_Active);
@@ -98,6 +102,21 @@
             cardEditUser.Name = "cardEditUser";
             cardEditUser.Size = new Size(665, 740);
             cardEditUser.TabIndex = 5;
+            // 
+            // btn_UM_Edit_PW
+            // 
+            btn_UM_Edit_PW.BackColor = Color.FromArgb(44, 44, 44);
+            btn_UM_Edit_PW.BackgroundImage = (Image)resources.GetObject("btn_UM_Edit_PW.BackgroundImage");
+            btn_UM_Edit_PW.FlatAppearance.BorderSize = 0;
+            btn_UM_Edit_PW.FlatStyle = FlatStyle.Flat;
+            btn_UM_Edit_PW.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            btn_UM_Edit_PW.ForeColor = Color.White;
+            btn_UM_Edit_PW.Location = new Point(476, 342);
+            btn_UM_Edit_PW.Name = "btn_UM_Edit_PW";
+            btn_UM_Edit_PW.Size = new Size(100, 50);
+            btn_UM_Edit_PW.TabIndex = 35;
+            btn_UM_Edit_PW.UseVisualStyleBackColor = false;
+            btn_UM_Edit_PW.Click += btn_UM_Edit_PW_Click;
             // 
             // CB_UM_Edit_Active_True
             // 
@@ -272,7 +291,7 @@
             textbox_UM_Edit_VerifyPW.ForeColor = SystemColors.Window;
             textbox_UM_Edit_VerifyPW.Location = new Point(224, 444);
             textbox_UM_Edit_VerifyPW.Name = "textbox_UM_Edit_VerifyPW";
-            textbox_UM_Edit_VerifyPW.Size = new Size(340, 37);
+            textbox_UM_Edit_VerifyPW.Size = new Size(229, 37);
             textbox_UM_Edit_VerifyPW.TabIndex = 22;
             // 
             // label_UM_Edit_PW
@@ -294,7 +313,7 @@
             textbox_UM_Edit_PW.ForeColor = SystemColors.Window;
             textbox_UM_Edit_PW.Location = new Point(224, 362);
             textbox_UM_Edit_PW.Name = "textbox_UM_Edit_PW";
-            textbox_UM_Edit_PW.Size = new Size(340, 37);
+            textbox_UM_Edit_PW.Size = new Size(229, 37);
             textbox_UM_Edit_PW.TabIndex = 19;
             // 
             // label_UM_Edit_Name
@@ -341,6 +360,20 @@
             textbox_UM_Edit_ID.Size = new Size(340, 37);
             textbox_UM_Edit_ID.TabIndex = 13;
             // 
+            // button1
+            // 
+            button1.BackColor = Color.FromArgb(44, 44, 44);
+            button1.BackgroundImage = (Image)resources.GetObject("button1.BackgroundImage");
+            button1.FlatAppearance.BorderSize = 0;
+            button1.FlatStyle = FlatStyle.Flat;
+            button1.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            button1.ForeColor = Color.White;
+            button1.Location = new Point(476, 426);
+            button1.Name = "button1";
+            button1.Size = new Size(100, 50);
+            button1.TabIndex = 36;
+            button1.UseVisualStyleBackColor = false;
+            // 
             // UserManagementForm_EditUser
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -383,5 +416,7 @@
         private Panel panel_UM_Edit_Active;
         private CheckBox CB_UM_Edit_Active_True;
         private Label label_UM_ADD_Active;
+        private Button btn_UM_Edit_PW;
+        private Button button1;
     }
 }
