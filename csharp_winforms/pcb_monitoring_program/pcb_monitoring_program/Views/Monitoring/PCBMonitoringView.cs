@@ -17,6 +17,11 @@ namespace pcb_monitoring_program.Views.Monitoring
         private int _leftFrameCount = 0;  // 좌측 카메라 프레임 카운트
         private int _rightFrameCount = 0; // 우측 카메라 프레임 카운트
 
+        // 프레임 드롭을 위한 마지막 업데이트 시간
+        private DateTime _lastLeftUpdate = DateTime.MinValue;
+        private DateTime _lastRightUpdate = DateTime.MinValue;
+        private const int MIN_UPDATE_INTERVAL_MS = 100;  // 최소 100ms 간격 (10 FPS)
+
         // Flask 서버 URL (나중에 config에서 읽도록 변경 예정)
         private const string SERVER_URL = "http://100.123.23.111:5000";
 
@@ -27,6 +32,10 @@ namespace pcb_monitoring_program.Views.Monitoring
             // PictureBox 설정
             pb_LINE1PCBFRONT.SizeMode = PictureBoxSizeMode.Zoom;
             pb_LINE1PCBBACK.SizeMode = PictureBoxSizeMode.Zoom;
+
+            // 더블 버퍼링 활성화 (깜빡거림 방지)
+            EnableDoubleBuffering(pb_LINE1PCBFRONT);
+            EnableDoubleBuffering(pb_LINE1PCBBACK);
 
             // 컨트롤 파괴 시 스트림 정리
             this.HandleDestroyed += OnHandleDestroyed;
@@ -76,6 +85,14 @@ namespace pcb_monitoring_program.Views.Monitoring
 
         private void OnLeftFrameReceived(object sender, FrameReceivedEventArgs e)
         {
+            // 프레임 드롭: 마지막 업데이트 후 100ms 이내면 스킵 (UI 과부하 방지)
+            if ((DateTime.Now - _lastLeftUpdate).TotalMilliseconds < MIN_UPDATE_INTERVAL_MS)
+            {
+                e.Frame?.Dispose();  // 메모리 누수 방지
+                return;
+            }
+
+            _lastLeftUpdate = DateTime.Now;
             _leftFrameCount++;
 
             // 10프레임마다 로그 출력
@@ -96,6 +113,14 @@ namespace pcb_monitoring_program.Views.Monitoring
 
         private void OnRightFrameReceived(object sender, FrameReceivedEventArgs e)
         {
+            // 프레임 드롭: 마지막 업데이트 후 100ms 이내면 스킵 (UI 과부하 방지)
+            if ((DateTime.Now - _lastRightUpdate).TotalMilliseconds < MIN_UPDATE_INTERVAL_MS)
+            {
+                e.Frame?.Dispose();  // 메모리 누수 방지
+                return;
+            }
+
+            _lastRightUpdate = DateTime.Now;
             _rightFrameCount++;
 
             // 10프레임마다 로그 출력
@@ -165,6 +190,25 @@ namespace pcb_monitoring_program.Views.Monitoring
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"스트림 정리 실패: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// PictureBox에 더블 버퍼링을 활성화하여 깜빡거림 방지
+        /// </summary>
+        private void EnableDoubleBuffering(PictureBox pictureBox)
+        {
+            try
+            {
+                typeof(PictureBox).InvokeMember("DoubleBuffered",
+                    System.Reflection.BindingFlags.SetProperty |
+                    System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.NonPublic,
+                    null, pictureBox, new object[] { true });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"더블 버퍼링 설정 실패: {ex.Message}");
             }
         }
     }
