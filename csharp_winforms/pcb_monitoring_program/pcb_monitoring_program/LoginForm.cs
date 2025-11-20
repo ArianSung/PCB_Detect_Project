@@ -21,6 +21,7 @@ namespace pcb_monitoring_program
 
         private int _failedLoginCount = 0;
         private DateTime? _lockoutUntil = null;
+
         public LoginForm()
         {
             InitializeComponent();
@@ -29,8 +30,24 @@ namespace pcb_monitoring_program
             btn_login.Parent = cardLogin;
 
             // 카드 스타일/섀도우: Paint에서 하지 말고 한 번만
+            Color cardBgColor = Color.FromArgb(44, 44, 44);
             UiStyleHelper.MakeRoundedPanel(cardLogin, 16, Color.FromArgb(44, 44, 44));
             UiStyleHelper.AddShadowRoundedPanel(cardLogin, 16);
+
+            // --- 테두리 문제 해결을 위한 코드 추가 시작 ---
+            // 1. FlatStyle을 적용하여 버튼의 외관을 단순화합니다.
+            btn_login.FlatStyle = FlatStyle.Flat;
+
+            // 2. 기본 버튼의 테두리를 0으로 설정하여 충돌을 방지합니다.
+            btn_login.FlatAppearance.BorderSize = 0;
+
+            // 3. 마우스 상태 변화 시(Hover/Down) 발생할 수 있는 테두리나 배경 변화를 
+            //    버튼의 BackColor(44, 44, 44)와 동일하게 설정하여 완전히 마스킹합니다.
+            //    (Designer에서 BackColor가 44, 44, 44로 설정되어 있다고 가정합니다.)
+            btn_login.FlatAppearance.BorderColor = cardBgColor;
+            btn_login.FlatAppearance.MouseDownBackColor = cardBgColor;
+            btn_login.FlatAppearance.MouseOverBackColor = cardBgColor;
+            // --- 테두리 문제 해결을 위한 코드 추가 끝 ---
 
             // 버튼 둥글게 + 그림자 초기화 (한 번만)
             UiStyleHelper.MakeRoundedButton(btn_login, 24);
@@ -86,7 +103,7 @@ namespace pcb_monitoring_program
                         MessageBox.Show($"{user.Role} 권한으로 로그인 성공!", "로그인 성공");
 
                         // 여기서 user 정보를 MainForm에 넘기고 싶으면 생성자 수정해서 전달해도 됨
-                        MainForm nextForm = new MainForm(); // 필요하면 new MainForm(user)로 바꾸기
+                        MainForm nextForm = new MainForm(enteredUserId, user.Role.ToString());
                         nextForm.Show();
                         this.Hide();
                     }
@@ -116,7 +133,7 @@ namespace pcb_monitoring_program
                                 MessageBoxIcon.Warning);
                         }
                     }
-                }
+                }   
             }
             catch (Exception ex)
             {
