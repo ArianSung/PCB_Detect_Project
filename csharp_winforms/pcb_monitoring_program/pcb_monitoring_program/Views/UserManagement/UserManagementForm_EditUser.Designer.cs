@@ -31,6 +31,8 @@
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(UserManagementForm_EditUser));
             cardEditUserBackground = new Panel();
             cardEditUser = new Panel();
+            btn_UM_Edit_ID_Check = new Button();
+            btn_UM_Edit_PW = new Button();
             CB_UM_Edit_Active_True = new CheckBox();
             label_UM_ADD_Active = new Label();
             panel_UM_Edit_Active = new Panel();
@@ -72,6 +74,8 @@
             // cardEditUser
             // 
             cardEditUser.BackColor = Color.FromArgb(44, 44, 44);
+            cardEditUser.Controls.Add(btn_UM_Edit_ID_Check);
+            cardEditUser.Controls.Add(btn_UM_Edit_PW);
             cardEditUser.Controls.Add(CB_UM_Edit_Active_True);
             cardEditUser.Controls.Add(label_UM_ADD_Active);
             cardEditUser.Controls.Add(panel_UM_Edit_Active);
@@ -99,6 +103,35 @@
             cardEditUser.Size = new Size(665, 740);
             cardEditUser.TabIndex = 5;
             // 
+            // btn_UM_Edit_ID_Check
+            // 
+            btn_UM_Edit_ID_Check.BackColor = Color.FromArgb(44, 44, 44);
+            btn_UM_Edit_ID_Check.FlatAppearance.BorderSize = 0;
+            btn_UM_Edit_ID_Check.FlatStyle = FlatStyle.Flat;
+            btn_UM_Edit_ID_Check.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            btn_UM_Edit_ID_Check.ForeColor = Color.White;
+            btn_UM_Edit_ID_Check.Location = new Point(475, 185);
+            btn_UM_Edit_ID_Check.Name = "btn_UM_Edit_ID_Check";
+            btn_UM_Edit_ID_Check.Size = new Size(100, 50);
+            btn_UM_Edit_ID_Check.TabIndex = 1;
+            btn_UM_Edit_ID_Check.Text = "중복 확인";
+            btn_UM_Edit_ID_Check.UseVisualStyleBackColor = false;
+            btn_UM_Edit_ID_Check.Click += btn_UM_Edit_ID_Check_Click;
+            // 
+            // btn_UM_Edit_PW
+            // 
+            btn_UM_Edit_PW.BackColor = Color.FromArgb(44, 44, 44);
+            btn_UM_Edit_PW.BackgroundImage = (Image)resources.GetObject("btn_UM_Edit_PW.BackgroundImage");
+            btn_UM_Edit_PW.FlatAppearance.BorderSize = 0;
+            btn_UM_Edit_PW.FlatStyle = FlatStyle.Flat;
+            btn_UM_Edit_PW.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            btn_UM_Edit_PW.ForeColor = Color.White;
+            btn_UM_Edit_PW.Location = new Point(476, 342);
+            btn_UM_Edit_PW.Name = "btn_UM_Edit_PW";
+            btn_UM_Edit_PW.Size = new Size(100, 50);
+            btn_UM_Edit_PW.TabIndex = 7;
+            btn_UM_Edit_PW.UseVisualStyleBackColor = false;
+            // 
             // CB_UM_Edit_Active_True
             // 
             CB_UM_Edit_Active_True.AutoSize = true;
@@ -107,7 +140,7 @@
             CB_UM_Edit_Active_True.Location = new Point(223, 511);
             CB_UM_Edit_Active_True.Name = "CB_UM_Edit_Active_True";
             CB_UM_Edit_Active_True.Size = new Size(117, 41);
-            CB_UM_Edit_Active_True.TabIndex = 34;
+            CB_UM_Edit_Active_True.TabIndex = 5;
             CB_UM_Edit_Active_True.Text = "활성화";
             CB_UM_Edit_Active_True.UseVisualStyleBackColor = true;
             // 
@@ -190,7 +223,7 @@
             kComboBox_UM_Edit_Role.StateCommon.ComboBox.Border.DrawBorders = ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Top | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Bottom | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Left | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Right;
             kComboBox_UM_Edit_Role.StateCommon.ComboBox.Content.Color1 = Color.White;
             kComboBox_UM_Edit_Role.StateCommon.ComboBox.Content.Font = new Font("맑은 고딕", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
-            kComboBox_UM_Edit_Role.TabIndex = 30;
+            kComboBox_UM_Edit_Role.TabIndex = 6;
             // 
             // label_UM_Edit_AddUser
             // 
@@ -213,7 +246,7 @@
             btn_UM_Edit_cancel.Location = new Point(550, 671);
             btn_UM_Edit_cancel.Name = "btn_UM_Edit_cancel";
             btn_UM_Edit_cancel.Size = new Size(100, 50);
-            btn_UM_Edit_cancel.TabIndex = 29;
+            btn_UM_Edit_cancel.TabIndex = 9;
             btn_UM_Edit_cancel.Text = "취소";
             btn_UM_Edit_cancel.UseVisualStyleBackColor = false;
             btn_UM_Edit_cancel.Click += btn_UM_Edit_cancel_Click;
@@ -228,7 +261,7 @@
             btn_UM_Edit_EditUser.Location = new Point(433, 671);
             btn_UM_Edit_EditUser.Name = "btn_UM_Edit_EditUser";
             btn_UM_Edit_EditUser.Size = new Size(100, 50);
-            btn_UM_Edit_EditUser.TabIndex = 28;
+            btn_UM_Edit_EditUser.TabIndex = 8;
             btn_UM_Edit_EditUser.Text = "수정";
             btn_UM_Edit_EditUser.UseVisualStyleBackColor = false;
             btn_UM_Edit_EditUser.Click += btn_UM_Edit_EditUser_Click;
@@ -272,8 +305,8 @@
             textbox_UM_Edit_VerifyPW.ForeColor = SystemColors.Window;
             textbox_UM_Edit_VerifyPW.Location = new Point(224, 444);
             textbox_UM_Edit_VerifyPW.Name = "textbox_UM_Edit_VerifyPW";
-            textbox_UM_Edit_VerifyPW.Size = new Size(340, 37);
-            textbox_UM_Edit_VerifyPW.TabIndex = 22;
+            textbox_UM_Edit_VerifyPW.Size = new Size(229, 37);
+            textbox_UM_Edit_VerifyPW.TabIndex = 4;
             // 
             // label_UM_Edit_PW
             // 
@@ -294,8 +327,8 @@
             textbox_UM_Edit_PW.ForeColor = SystemColors.Window;
             textbox_UM_Edit_PW.Location = new Point(224, 362);
             textbox_UM_Edit_PW.Name = "textbox_UM_Edit_PW";
-            textbox_UM_Edit_PW.Size = new Size(340, 37);
-            textbox_UM_Edit_PW.TabIndex = 19;
+            textbox_UM_Edit_PW.Size = new Size(229, 37);
+            textbox_UM_Edit_PW.TabIndex = 3;
             // 
             // label_UM_Edit_Name
             // 
@@ -317,7 +350,7 @@
             textbox_UM_Edit_Name.Location = new Point(224, 280);
             textbox_UM_Edit_Name.Name = "textbox_UM_Edit_Name";
             textbox_UM_Edit_Name.Size = new Size(340, 37);
-            textbox_UM_Edit_Name.TabIndex = 16;
+            textbox_UM_Edit_Name.TabIndex = 2;
             // 
             // label_UM_Edit_ID
             // 
@@ -339,7 +372,7 @@
             textbox_UM_Edit_ID.Location = new Point(224, 198);
             textbox_UM_Edit_ID.Name = "textbox_UM_Edit_ID";
             textbox_UM_Edit_ID.Size = new Size(340, 37);
-            textbox_UM_Edit_ID.TabIndex = 13;
+            textbox_UM_Edit_ID.TabIndex = 0;
             // 
             // UserManagementForm_EditUser
             // 
@@ -383,5 +416,7 @@
         private Panel panel_UM_Edit_Active;
         private CheckBox CB_UM_Edit_Active_True;
         private Label label_UM_ADD_Active;
+        private Button btn_UM_Edit_PW;
+        private Button btn_UM_Edit_ID_Check;
     }
 }
