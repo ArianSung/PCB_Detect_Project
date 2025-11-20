@@ -729,5 +729,59 @@ namespace pcb_monitoring_program.DatabaseManager
         }
 
         #endregion
+
+        #region 박스 상태 (BoxStatus)
+
+        /// 모든 박스 상태 조회 (NORMAL / COMPONENT_DEFECT / SOLDER_DEFECT)
+        public List<BoxStatus> GetAllBoxStatus()
+        {
+            var list = new List<BoxStatus>();
+
+            try
+            {
+                using (var conn = new MySqlConnection(_connectionString))
+                {
+                    conn.Open();
+
+                    string sql = @"
+                SELECT
+                    id, box_id, category,
+                    current_slot, max_slots,
+                    is_full, total_pcb_count,
+                    created_at, last_updated
+                FROM box_status";
+
+                    using (var cmd = new MySqlCommand(sql, conn))
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            var item = new BoxStatus
+                            {
+                                Id = reader.GetInt32("id"),
+                                BoxId = reader.GetString("box_id"),
+                                Category = reader.GetString("category"),
+                                CurrentSlot = reader.GetInt32("current_slot"),
+                                MaxSlots = reader.GetInt32("max_slots"),
+                                IsFull = reader.GetBoolean("is_full"),
+                                TotalPcbCount = reader.GetInt32("total_pcb_count"),
+                                CreatedAt = reader.GetDateTime("created_at"),
+                                LastUpdated = reader.GetDateTime("last_updated")
+                            };
+
+                            list.Add(item);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[GetAllBoxStatus 실패] " + ex.Message);
+            }
+
+            return list;
+        }
+
+        #endregion
     }
 }

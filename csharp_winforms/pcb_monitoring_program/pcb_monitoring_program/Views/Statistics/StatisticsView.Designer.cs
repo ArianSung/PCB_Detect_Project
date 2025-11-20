@@ -38,16 +38,16 @@
             System.Windows.Forms.DataVisualization.Charting.Legend legend3 = new System.Windows.Forms.DataVisualization.Charting.Legend();
             System.Windows.Forms.DataVisualization.Charting.Series series3 = new System.Windows.Forms.DataVisualization.Charting.Series();
             cardMonthlyLine = new Panel();
-            label1 = new Label();
+            lblMonthlyLineTitle = new Label();
             MonthlyLineChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
             cardMonthlyAccum = new Panel();
+            lblMonthlyAccumTitle = new Label();
             panel2 = new Panel();
             panel1 = new Panel();
-            label2 = new Label();
             MonthlyAccumChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
             cardDefectPie = new Panel();
+            lblDefectPieTitle = new Label();
             flowPie = new FlowLayoutPanel();
-            label3 = new Label();
             DefectTypePieChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
             btn_Excel = new Button();
             dtpMonth = new ComponentFactory.Krypton.Toolkit.KryptonDateTimePicker();
@@ -61,23 +61,23 @@
             // 
             // cardMonthlyLine
             // 
-            cardMonthlyLine.Controls.Add(label1);
+            cardMonthlyLine.Controls.Add(lblMonthlyLineTitle);
             cardMonthlyLine.Controls.Add(MonthlyLineChart);
             cardMonthlyLine.Location = new Point(20, 105);
             cardMonthlyLine.Name = "cardMonthlyLine";
             cardMonthlyLine.Size = new Size(794, 600);
             cardMonthlyLine.TabIndex = 1;
             // 
-            // label1
+            // lblMonthlyLineTitle
             // 
-            label1.AutoSize = true;
-            label1.Font = new Font("맑은 고딕", 12F, FontStyle.Bold, GraphicsUnit.Point, 129);
-            label1.ForeColor = SystemColors.Window;
-            label1.Location = new Point(0, 0);
-            label1.Name = "label1";
-            label1.Size = new Size(140, 21);
-            label1.TabIndex = 2;
-            label1.Text = "날짜 범위 별 통계";
+            lblMonthlyLineTitle.AutoSize = true;
+            lblMonthlyLineTitle.Font = new Font("맑은 고딕", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            lblMonthlyLineTitle.ForeColor = SystemColors.Window;
+            lblMonthlyLineTitle.Location = new Point(0, -9);
+            lblMonthlyLineTitle.Name = "lblMonthlyLineTitle";
+            lblMonthlyLineTitle.Size = new Size(134, 30);
+            lblMonthlyLineTitle.TabIndex = 3;
+            lblMonthlyLineTitle.Text = "2000년 00월";
             // 
             // MonthlyLineChart
             // 
@@ -100,14 +100,25 @@
             // 
             // cardMonthlyAccum
             // 
+            cardMonthlyAccum.Controls.Add(lblMonthlyAccumTitle);
             cardMonthlyAccum.Controls.Add(panel2);
             cardMonthlyAccum.Controls.Add(panel1);
-            cardMonthlyAccum.Controls.Add(label2);
             cardMonthlyAccum.Controls.Add(MonthlyAccumChart);
             cardMonthlyAccum.Location = new Point(851, 105);
             cardMonthlyAccum.Name = "cardMonthlyAccum";
             cardMonthlyAccum.Size = new Size(746, 294);
             cardMonthlyAccum.TabIndex = 2;
+            // 
+            // lblMonthlyAccumTitle
+            // 
+            lblMonthlyAccumTitle.AutoSize = true;
+            lblMonthlyAccumTitle.Font = new Font("맑은 고딕", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            lblMonthlyAccumTitle.ForeColor = SystemColors.Window;
+            lblMonthlyAccumTitle.Location = new Point(0, -9);
+            lblMonthlyAccumTitle.Name = "lblMonthlyAccumTitle";
+            lblMonthlyAccumTitle.Size = new Size(82, 30);
+            lblMonthlyAccumTitle.TabIndex = 6;
+            lblMonthlyAccumTitle.Text = "2000년";
             // 
             // panel2
             // 
@@ -122,17 +133,6 @@
             panel1.Name = "panel1";
             panel1.Size = new Size(44, 30);
             panel1.TabIndex = 4;
-            // 
-            // label2
-            // 
-            label2.AutoSize = true;
-            label2.Font = new Font("맑은 고딕", 12F, FontStyle.Bold, GraphicsUnit.Point, 129);
-            label2.ForeColor = SystemColors.Window;
-            label2.Location = new Point(0, 0);
-            label2.Name = "label2";
-            label2.Size = new Size(162, 21);
-            label2.TabIndex = 3;
-            label2.Text = "월 별 불량 누적 추이";
             // 
             // MonthlyAccumChart
             // 
@@ -152,13 +152,24 @@
             // 
             // cardDefectPie
             // 
+            cardDefectPie.Controls.Add(lblDefectPieTitle);
             cardDefectPie.Controls.Add(flowPie);
-            cardDefectPie.Controls.Add(label3);
             cardDefectPie.Controls.Add(DefectTypePieChart);
             cardDefectPie.Location = new Point(851, 411);
             cardDefectPie.Name = "cardDefectPie";
             cardDefectPie.Size = new Size(746, 294);
             cardDefectPie.TabIndex = 3;
+            // 
+            // lblDefectPieTitle
+            // 
+            lblDefectPieTitle.AutoSize = true;
+            lblDefectPieTitle.Font = new Font("맑은 고딕", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            lblDefectPieTitle.ForeColor = SystemColors.Window;
+            lblDefectPieTitle.Location = new Point(0, -9);
+            lblDefectPieTitle.Name = "lblDefectPieTitle";
+            lblDefectPieTitle.Size = new Size(134, 30);
+            lblDefectPieTitle.TabIndex = 6;
+            lblDefectPieTitle.Text = "2000년 00월";
             // 
             // flowPie
             // 
@@ -166,17 +177,6 @@
             flowPie.Name = "flowPie";
             flowPie.Size = new Size(137, 230);
             flowPie.TabIndex = 5;
-            // 
-            // label3
-            // 
-            label3.AutoSize = true;
-            label3.Font = new Font("맑은 고딕", 12F, FontStyle.Bold, GraphicsUnit.Point, 129);
-            label3.ForeColor = SystemColors.Window;
-            label3.Location = new Point(0, 0);
-            label3.Name = "label3";
-            label3.Size = new Size(172, 21);
-            label3.TabIndex = 4;
-            label3.Text = "불량 유형별 파이 차트";
             // 
             // DefectTypePieChart
             // 
@@ -199,7 +199,7 @@
             // btn_Excel
             // 
             btn_Excel.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            btn_Excel.Location = new Point(1418, 33);
+            btn_Excel.Location = new Point(209, 46);
             btn_Excel.Name = "btn_Excel";
             btn_Excel.Size = new Size(179, 40);
             btn_Excel.TabIndex = 4;
@@ -256,13 +256,13 @@
         private Panel cardDefectPie;
         private System.Windows.Forms.DataVisualization.Charting.Chart MonthlyAccumChart;
         private System.Windows.Forms.DataVisualization.Charting.Chart DefectTypePieChart;
-        private Label label1;
-        private Label label2;
-        private Label label3;
         private FlowLayoutPanel flowPie;
         private Panel panel2;
         private Panel panel1;
         private Button btn_Excel;
         private ComponentFactory.Krypton.Toolkit.KryptonDateTimePicker dtpMonth;
+        private Label lblMonthlyLineTitle;
+        private Label lblMonthlyAccumTitle;
+        private Label lblDefectPieTitle;
     }
 }

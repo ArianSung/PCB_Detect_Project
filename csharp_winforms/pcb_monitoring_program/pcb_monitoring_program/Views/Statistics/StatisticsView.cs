@@ -10,6 +10,7 @@ using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 using pcb_monitoring_program.DatabaseManager.Models;
 using pcb_monitoring_program.DatabaseManager;
+using ClosedXML.Excel;
 
 namespace pcb_monitoring_program.Views.Statistics
 {
@@ -55,26 +56,13 @@ namespace pcb_monitoring_program.Views.Statistics
                     btn.Cursor = Cursors.Hand;
                 }
             }
-            try
-            {
-                string connectionString =
-                    "Server=100.80.24.53;Port=3306;Database=pcb_inspection;Uid=pcb_admin;Pwd=1234;CharSet=utf8mb4;";
-
-                using (var db = new DatabaseManager.DatabaseManager(connectionString))
-                {
-                    _yearDailyStats = db.GetDailyStatisticsForYear(_currentYear);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"통계 데이터 로드 중 오류: {ex.Message}", "오류");
-                _yearDailyStats = new List<DailyStatistics>();
-            }
+            LoadDailyStatisticsForYear(_currentYear);
 
             // 👉 공용 데이터(_yearDailyStats)를 기반으로 세 개 차트 그리기
             SetupMonthlyLineChart();
             SetupMonthlyAccumChart();
             SetupDefectTypePieChart();
+            UpdateMonthLabels();
         }
 
         private void LoadDailyStatisticsForYear(int year)
@@ -401,6 +389,22 @@ namespace pcb_monitoring_program.Views.Statistics
             flowPie.ResumeLayout();
         }
 
+        private void UpdateMonthLabels()
+        {
+            // 예: 2025년 11월
+            string ymText = $"{_currentYear}년 {_currentMonth:00}월";
+
+            // 각 카드별 제목 텍스트
+            if (lblMonthlyLineTitle != null)
+                lblMonthlyLineTitle.Text = $"{ymText} 일별 생산/불량 추이";
+
+            if (lblMonthlyAccumTitle != null)
+                lblMonthlyAccumTitle.Text = $"{_currentYear}년 월별 누적 현황";
+
+            if (lblDefectPieTitle != null)
+                lblDefectPieTitle.Text = $"{ymText} 불량 유형 비율";
+        }
+
         private void MonthlyLineChart_MouseClick(object sender, MouseEventArgs e)
         {
             var chart = (Chart)sender;
@@ -519,7 +523,104 @@ namespace pcb_monitoring_program.Views.Statistics
 
         private void btn_Excel_Click(object sender, EventArgs e)
         {
+            // 1) 현재 선택된 연/월 기준으로 데이터 필터
+            var monthData = _yearDailyStats
+                .Where(d => d.StatDate.Year == _currentYear && d.StatDate.Month == _currentMonth)
+                .OrderBy(d => d.StatDate)
+                .ToList();
 
+            if (monthData.Count == 0)
+            {
+                MessageBox.Show("선택한 월에 해당하는 통계 데이터가 없습니다.", "엑셀 내보내기");
+                return;
+            }
+
+            // 2) 저장 위치 선택
+            using (var sfd = new SaveFileDialog())
+            {
+                sfd.Filter = "Excel 파일 (*.xlsx)|*.xlsx";
+                sfd.FileName = $"통계_{_currentYear}_{_currentMonth:00}.xlsx";
+
+                if (sfd.ShowDialog() != DialogResult.OK)
+                    return;
+
+                try
+                {
+                    // 3) 엑셀 워크북/시트 생성
+                    using (var wb = new XLWorkbook())
+                    {
+                        var sheetName = $"{_currentYear}-{_currentMonth:00}";
+                        var ws = wb.Worksheets.Add(sheetName);
+
+                        // 3-1) 헤더 행
+                        ws.Cell(1, 1).Value = "날짜";
+                        ws.Cell(1, 2).Value = "총 검사 수";
+                        ws.Cell(1, 3).Value = "정상";
+                        ws.Cell(1, 4).Value = "부품불량";
+                        ws.Cell(1, 5).Value = "납땜불량";
+                        ws.Cell(1, 6).Value = "폐기";
+                        ws.Cell(1, 7).Value = "불량률";
+
+                        var headerRange = ws.Range(1, 1, 1, 7);
+                        headerRange.Style.Font.Bold = true;
+                        headerRange.Style.Fill.BackgroundColor = XLColor.LightGray;
+                        headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                        // 3-2) 데이터 행
+                        int row = 2;
+                        foreach (var d in monthData)
+                        {
+                            ws.Cell(row, 1).Value = d.StatDate;
+                            ws.Cell(row, 1).Style.DateFormat.Format = "yyyy-MM-dd";
+
+                            ws.Cell(row, 2).Value = d.TotalInspections;
+                            ws.Cell(row, 3).Value = d.NormalCount;
+                            ws.Cell(row, 4).Value = d.ComponentDefectCount;
+                            ws.Cell(row, 5).Value = d.SolderDefectCount;
+                            ws.Cell(row, 6).Value = d.DiscardCount;
+
+                            // 불량률 계산
+                            double defectRate = 0;
+                            int defectSum = d.ComponentDefectCount + d.SolderDefectCount + d.DiscardCount;
+                            if (d.TotalInspections > 0)
+                                defectRate = defectSum * 1.0 / d.TotalInspections;
+
+                            ws.Cell(row, 7).Value = defectRate;                  // 0.1234
+                            ws.Cell(row, 7).Style.NumberFormat.Format = "0.00%"; // 12.34%
+
+                            row++;
+                        }
+
+                        // 3-3) 숫자 컬럼(B~F) 형식/정렬/색 지정
+                        int lastRow = row - 1;
+                        var dataNumberRange = ws.Range(2, 2, lastRow, 6); // B2 ~ F(lastRow)
+                        dataNumberRange.Style.NumberFormat.Format = "0";  // 정수
+                        dataNumberRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+                        dataNumberRange.Style.Font.FontColor = XLColor.Black;
+
+                        // 불량률 컬럼 오른쪽 정렬
+                        ws.Column(7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+
+                        // 3-4) 컬럼 너비 자동 맞춤 + 최소 폭 보장
+                        ws.Columns().AdjustToContents();
+
+                        for (int col = 1; col <= 7; col++)
+                        {
+                            if (ws.Column(col).Width < 12)
+                                ws.Column(col).Width = 12;   // 너무 좁으면 최소 12
+                        }
+
+                        // 4) 저장
+                        wb.SaveAs(sfd.FileName);
+                    }
+
+                    MessageBox.Show("엑셀 파일로 내보내기가 완료되었습니다.", "엑셀 내보내기");
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("엑셀 저장 중 오류가 발생했습니다.\n" + ex.Message, "오류");
+                }
+            }
         }
 
         private void dtpMonth_ValueChanged(object sender, EventArgs e)
@@ -545,6 +646,7 @@ namespace pcb_monitoring_program.Views.Statistics
             SetupMonthlyLineChart();
             SetupMonthlyAccumChart();
             SetupDefectTypePieChart();
+            UpdateMonthLabels();
         }
     }
 } 
