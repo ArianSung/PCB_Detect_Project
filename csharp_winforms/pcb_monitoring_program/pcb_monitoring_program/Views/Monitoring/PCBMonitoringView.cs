@@ -23,8 +23,11 @@ namespace pcb_monitoring_program.Views.Monitoring
             InitializeComponent();
 
             // PictureBox 설정
-            pictureBox1.SizeMode = PictureBoxSizeMode.Zoom;
-            pictureBox2.SizeMode = PictureBoxSizeMode.Zoom;
+            pb_LINE1PCBFRONT.SizeMode = PictureBoxSizeMode.Zoom;
+            pb_LINE1PCBBACK.SizeMode = PictureBoxSizeMode.Zoom;
+
+            // 컨트롤 파괴 시 스트림 정리
+            this.HandleDestroyed += OnHandleDestroyed;
         }
 
         private void PCBMonitoringView_Load(object sender, EventArgs e)
@@ -66,11 +69,11 @@ namespace pcb_monitoring_program.Views.Monitoring
         {
             if (InvokeRequired)
             {
-                BeginInvoke(new Action(() => UpdatePictureBox(pictureBox1, e.Frame)));
+                BeginInvoke(new Action(() => UpdatePictureBox(pb_LINE1PCBFRONT, e.Frame)));
             }
             else
             {
-                UpdatePictureBox(pictureBox1, e.Frame);
+                UpdatePictureBox(pb_LINE1PCBFRONT, e.Frame);
             }
         }
 
@@ -78,11 +81,11 @@ namespace pcb_monitoring_program.Views.Monitoring
         {
             if (InvokeRequired)
             {
-                BeginInvoke(new Action(() => UpdatePictureBox(pictureBox2, e.Frame)));
+                BeginInvoke(new Action(() => UpdatePictureBox(pb_LINE1PCBBACK, e.Frame)));
             }
             else
             {
-                UpdatePictureBox(pictureBox2, e.Frame);
+                UpdatePictureBox(pb_LINE1PCBBACK, e.Frame);
             }
         }
 
@@ -106,11 +109,16 @@ namespace pcb_monitoring_program.Views.Monitoring
             System.Diagnostics.Debug.WriteLine($"스트림 에러: {e.GetException()?.Message}");
         }
 
-        protected override void Dispose(bool disposing)
+        private void OnHandleDestroyed(object sender, EventArgs e)
         {
-            if (disposing)
+            // 스트림 정리
+            CleanupStreams();
+        }
+
+        private void CleanupStreams()
+        {
+            try
             {
-                // 스트림 정리
                 _leftCameraStream?.Stop();
                 _leftCameraStream?.Dispose();
                 _leftCameraStream = null;
@@ -118,10 +126,11 @@ namespace pcb_monitoring_program.Views.Monitoring
                 _rightCameraStream?.Stop();
                 _rightCameraStream?.Dispose();
                 _rightCameraStream = null;
-
-                components?.Dispose();
             }
-            base.Dispose(disposing);
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"스트림 정리 실패: {ex.Message}");
+            }
         }
     }
 }
