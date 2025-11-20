@@ -26,10 +26,22 @@ namespace pcb_monitoring_program
         private MonitoringMainView _UcMonitoring = new MonitoringMainView();
         private UserManagementView _UcUserManagement = new UserManagementView();
         private SettingView _UcSetting = new SettingView();
+        
         public MainForm()
         {
             InitializeComponent();
         }
+
+        // ⭐ 새로 추가된 생성자: 로그인 폼에서 호출될 예정
+        public MainForm(string username, string role) : this() // 기존 기본 생성자(InitializeComponent)를 호출
+        {
+            // labelusername에 username 설정
+            labelusername.Text = username;
+
+            // labeluserauthority에 role 설정 및 요청하신 "[ Role ]" 형식으로 포맷
+            labeluserauthority.Text = $"[ {role} ]";
+        }
+
         private void ShowInPanel(UserControl page) //콘텐츠 패널 전환 메서드
         {
             // 1) 기존 컨트롤 모두 제거
