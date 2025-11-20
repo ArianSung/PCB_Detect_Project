@@ -138,6 +138,7 @@
             textBox_pw.Name = "textBox_pw";
             textBox_pw.Size = new Size(254, 25);
             textBox_pw.TabIndex = 68;
+            textBox_pw.Text = "1234";
             // 
             // textBox_username
             // 
@@ -149,6 +150,7 @@
             textBox_username.Name = "textBox_username";
             textBox_username.Size = new Size(254, 25);
             textBox_username.TabIndex = 67;
+            textBox_username.Text = "pcb_admin";
             // 
             // textBox_DB
             // 
@@ -160,6 +162,7 @@
             textBox_DB.Name = "textBox_DB";
             textBox_DB.Size = new Size(254, 25);
             textBox_DB.TabIndex = 66;
+            textBox_DB.Text = "pcb_project";
             // 
             // textBox_port
             // 
@@ -171,6 +174,7 @@
             textBox_port.Name = "textBox_port";
             textBox_port.Size = new Size(254, 25);
             textBox_port.TabIndex = 65;
+            textBox_port.Text = "3306";
             // 
             // textBox_host
             // 
@@ -182,6 +186,7 @@
             textBox_host.Name = "textBox_host";
             textBox_host.Size = new Size(254, 25);
             textBox_host.TabIndex = 64;
+            textBox_host.Text = "100.80.24.53";
             // 
             // btn_Setting_Connectiontest
             // 
@@ -335,6 +340,7 @@
             // kComboBox_Loglevel
             // 
             kComboBox_Loglevel.DropDownWidth = 200;
+            kComboBox_Loglevel.Items.AddRange(new object[] { "Debug 모든 로그", "Info 시스템 동작 흐름", "Waring 경고 상황", "Error 당장 해결해야하는 오류", "Fatal 복구 불가능한 오류" });
             kComboBox_Loglevel.Location = new Point(173, 59);
             kComboBox_Loglevel.Name = "kComboBox_Loglevel";
             kComboBox_Loglevel.Size = new Size(336, 33);
@@ -345,7 +351,6 @@
             kComboBox_Loglevel.StateCommon.ComboBox.Content.Color1 = Color.White;
             kComboBox_Loglevel.StateCommon.ComboBox.Content.Font = new Font("맑은 고딕", 15.75F, FontStyle.Regular, GraphicsUnit.Point, 129);
             kComboBox_Loglevel.TabIndex = 44;
-            kComboBox_Loglevel.Text = "Debug";
             // 
             // label_LogLevel
             // 
@@ -405,10 +410,12 @@
             textBox_timeout.BorderStyle = BorderStyle.None;
             textBox_timeout.Font = new Font("Arial", 15.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
             textBox_timeout.ForeColor = SystemColors.Window;
-            textBox_timeout.Location = new Point(161, 64);
+            textBox_timeout.Location = new Point(154, 65);
             textBox_timeout.Name = "textBox_timeout";
-            textBox_timeout.Size = new Size(65, 25);
+            textBox_timeout.Size = new Size(37, 25);
             textBox_timeout.TabIndex = 22;
+            textBox_timeout.Text = "30";
+            textBox_timeout.TextAlign = HorizontalAlignment.Center;
             // 
             // label_TimeOut_Minute
             // 
@@ -417,9 +424,9 @@
             label_TimeOut_Minute.ForeColor = SystemColors.Window;
             label_TimeOut_Minute.Location = new Point(17, 48);
             label_TimeOut_Minute.Name = "label_TimeOut_Minute";
-            label_TimeOut_Minute.Size = new Size(246, 30);
+            label_TimeOut_Minute.Size = new Size(197, 30);
             label_TimeOut_Minute.TabIndex = 43;
-            label_TimeOut_Minute.Text = "- 타임 아웃               분";
+            label_TimeOut_Minute.Text = "- 타임 아웃        분";
             // 
             // cardAlarm
             // 
@@ -482,6 +489,7 @@
             textBox_defectrate.Name = "textBox_defectrate";
             textBox_defectrate.Size = new Size(262, 25);
             textBox_defectrate.TabIndex = 40;
+            textBox_defectrate.Text = "5";
             // 
             // label_Alarm_Alarmmethod
             // 
@@ -556,6 +564,7 @@
             TextBox_flaskserver.Name = "TextBox_flaskserver";
             TextBox_flaskserver.Size = new Size(405, 25);
             TextBox_flaskserver.TabIndex = 13;
+            TextBox_flaskserver.Text = "http://192.168.0.100:5000";
             // 
             // label_flaskServer
             // 

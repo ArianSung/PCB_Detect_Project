@@ -96,6 +96,7 @@
             kComboBox_UM_Role.StateCommon.ComboBox.Content.Font = new Font("맑은 고딕", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
             kComboBox_UM_Role.TabIndex = 20;
             kComboBox_UM_Role.Text = "전체";
+            kComboBox_UM_Role.SelectedIndexChanged += kComboBox_UM_Role_SelectedIndexChanged;
             // 
             // label_UM_Role
             // 
@@ -301,13 +302,13 @@
             DGV_UserManagement.StatePressed.HeaderRow.Border.DrawBorders = ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Top | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Bottom | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Left | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Right;
             DGV_UserManagement.StatePressed.HeaderRow.Content.Color1 = Color.White;
             DGV_UserManagement.StatePressed.HeaderRow.Content.Color2 = Color.White;
-            DGV_UserManagement.StateSelected.DataCell.Back.Color1 = Color.FromArgb(44, 44, 44);
-            DGV_UserManagement.StateSelected.DataCell.Back.Color2 = Color.FromArgb(44, 44, 44);
+            DGV_UserManagement.StateSelected.DataCell.Back.Color1 = Color.White;
+            DGV_UserManagement.StateSelected.DataCell.Back.Color2 = Color.White;
             DGV_UserManagement.StateSelected.DataCell.Border.Color1 = Color.White;
             DGV_UserManagement.StateSelected.DataCell.Border.Color2 = Color.White;
             DGV_UserManagement.StateSelected.DataCell.Border.DrawBorders = ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Top | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Bottom | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Left | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Right;
-            DGV_UserManagement.StateSelected.DataCell.Content.Color1 = Color.White;
-            DGV_UserManagement.StateSelected.DataCell.Content.Color2 = Color.White;
+            DGV_UserManagement.StateSelected.DataCell.Content.Color1 = Color.Black;
+            DGV_UserManagement.StateSelected.DataCell.Content.Color2 = Color.Black;
             DGV_UserManagement.StateSelected.HeaderColumn.Back.Color1 = Color.FromArgb(44, 44, 44);
             DGV_UserManagement.StateSelected.HeaderColumn.Back.Color2 = Color.FromArgb(44, 44, 44);
             DGV_UserManagement.StateSelected.HeaderColumn.Border.Color1 = Color.White;
