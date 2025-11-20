@@ -16,7 +16,7 @@ namespace pcb_monitoring_program.Views.Monitoring
         private MJPEGStreamReader _rightCameraStream;
 
         // Flask 서버 URL (나중에 config에서 읽도록 변경 예정)
-        private const string SERVER_URL = "http://100.96.79.71:5000";
+        private const string SERVER_URL = "http://100.123.23.111:5000";
 
         public PCBMonitoringView()
         {
