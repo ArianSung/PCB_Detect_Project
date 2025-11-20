@@ -17,6 +17,8 @@ namespace pcb_monitoring_program
         private CancellationTokenSource _cancellationTokenSource;
         private Task _readTask;
         private bool _isRunning;
+        private string _streamUrl; // 디버깅을 위한 스트림 URL 저장
+        private int _frameCount; // 수신된 프레임 카운트
 
         /// <summary>
         /// 새로운 프레임을 받았을 때 발생하는 이벤트
@@ -32,6 +34,7 @@ namespace pcb_monitoring_program
         {
             _httpClient = new HttpClient();
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
+            _frameCount = 0;
         }
 
         /// <summary>
@@ -44,6 +47,10 @@ namespace pcb_monitoring_program
             {
                 Stop();
             }
+
+            _streamUrl = streamUrl;
+            _frameCount = 0;
+            System.Diagnostics.Debug.WriteLine($"[MJPEGStreamReader] 스트림 시작: {_streamUrl}");
 
             _cancellationTokenSource = new CancellationTokenSource();
             _isRunning = true;
@@ -69,12 +76,15 @@ namespace pcb_monitoring_program
         {
             try
             {
+                System.Diagnostics.Debug.WriteLine($"[MJPEGStreamReader] HTTP 연결 시작: {_streamUrl}");
                 using (var response = await _httpClient.GetAsync(streamUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
                 {
                     response.EnsureSuccessStatusCode();
+                    System.Diagnostics.Debug.WriteLine($"[MJPEGStreamReader] HTTP 연결 성공: {_streamUrl} (Status: {response.StatusCode})");
 
                     using (var stream = await response.Content.ReadAsStreamAsync())
                     {
+                        System.Diagnostics.Debug.WriteLine($"[MJPEGStreamReader] 스트림 파싱 시작: {_streamUrl}");
                         await ParseMJPEGStream(stream, cancellationToken);
                     }
                 }
@@ -82,9 +92,11 @@ namespace pcb_monitoring_program
             catch (OperationCanceledException)
             {
                 // 정상적인 취소
+                System.Diagnostics.Debug.WriteLine($"[MJPEGStreamReader] 스트림 취소됨: {_streamUrl}");
             }
             catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[MJPEGStreamReader] 스트림 에러: {_streamUrl} - {ex.Message}");
                 OnErrorOccurred(new ErrorEventArgs(ex));
             }
         }
@@ -133,15 +145,37 @@ namespace pcb_monitoring_program
                         // JPEG → Image 변환
                         try
                         {
+                            // MemoryStream을 닫지 않고 Bitmap으로 복사
                             using (var ms = new MemoryStream(jpegData))
                             {
-                                Image frame = Image.FromStream(ms);
-                                OnFrameReceived(new FrameReceivedEventArgs(frame));
+                                using (var tempImage = Image.FromStream(ms))
+                                {
+                                    // Bitmap으로 복사하여 MemoryStream 종속성 제거
+                                    var frame = new Bitmap(tempImage);
+                                    _frameCount++;
+
+                                    // 10프레임마다 로그 출력 (너무 많은 로그 방지)
+                                    if (_frameCount % 10 == 0)
+                                    {
+                                        System.Diagnostics.Debug.WriteLine($"[MJPEGStreamReader] 프레임 수신 성공: {_streamUrl} (총 {_frameCount}개, JPEG 크기: {jpegLength} bytes)");
+                                    }
+
+                                    OnFrameReceived(new FrameReceivedEventArgs(frame));
+                                }
                             }
                         }
                         catch (Exception ex)
                         {
+                            System.Diagnostics.Debug.WriteLine($"[MJPEGStreamReader] JPEG 변환 실패: {_streamUrl} - {ex.Message}");
                             OnErrorOccurred(new ErrorEventArgs(ex));
+                        }
+                    }
+                    else
+                    {
+                        // JPEG 시작 마커를 찾지 못한 경우 (가끔 발생 가능)
+                        if (_frameCount == 0) // 첫 프레임에서만 경고
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[MJPEGStreamReader] JPEG 시작점을 찾을 수 없음: {_streamUrl}");
                         }
                     }
 
