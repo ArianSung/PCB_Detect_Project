@@ -896,8 +896,13 @@ def video_feed(camera_id):
             if frame is None:
                 frame = dummy_frame
 
-            # JPEG 인코딩
-            ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            # JPEG 인코딩 - Baseline 형식 강제 (C# Image.FromStream() 호환성)
+            encode_params = [
+                cv2.IMWRITE_JPEG_QUALITY, 85,        # 화질 85%
+                cv2.IMWRITE_JPEG_PROGRESSIVE, 0,     # Progressive JPEG 비활성화 (Baseline 강제)
+                cv2.IMWRITE_JPEG_OPTIMIZE, 1         # 허프만 테이블 최적화
+            ]
+            ret, buffer = cv2.imencode('.jpg', frame, encode_params)
             if ret:
                 frame_bytes = buffer.tobytes()
                 yield (b'--frame\r\n'

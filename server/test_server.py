@@ -38,7 +38,13 @@ def create_test_image(width=640, height=480, text="TEST"):
 
 def image_to_base64(image):
     """OpenCV 이미지를 Base64 문자열로 변환"""
-    _, buffer = cv2.imencode('.jpg', image)
+    # Baseline JPEG 형식 강제 (C# 호환성)
+    encode_params = [
+        cv2.IMWRITE_JPEG_QUALITY, 85,
+        cv2.IMWRITE_JPEG_PROGRESSIVE, 0,  # Baseline JPEG 강제
+        cv2.IMWRITE_JPEG_OPTIMIZE, 1
+    ]
+    _, buffer = cv2.imencode('.jpg', image, encode_params)
     img_base64 = base64.b64encode(buffer).decode('utf-8')
     return img_base64
 
