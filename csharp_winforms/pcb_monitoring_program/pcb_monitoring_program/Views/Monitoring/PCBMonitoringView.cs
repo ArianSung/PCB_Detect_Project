@@ -16,7 +16,7 @@ namespace pcb_monitoring_program.Views.Monitoring
     public class FrameData
     {
         public string camera_id { get; set; }
-        public string frame { get; set; }
+        public string frameData { get; set; }  // Flask 서버와 필드명 일치 (frame → frameData)
         public double timestamp { get; set; }
         public int size { get; set; }
     }
@@ -124,7 +124,7 @@ namespace pcb_monitoring_program.Views.Monitoring
                         // DTO 객체로 데이터 수신
                         var data = response.GetValue<FrameData>();
                         string cameraId = data.camera_id;
-                        string frameBase64 = data.frame;
+                        string frameBase64 = data.frameData;  // 필드명 변경: frame → frameData
 
                         // Base64 디코딩
                         byte[] frameBytes = Convert.FromBase64String(frameBase64);
