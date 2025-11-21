@@ -193,13 +193,28 @@ namespace pcb_monitoring_program.Views.Monitoring
                 });
 
                 // WebSocket 연결
+                System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] ConnectAsync() 호출 직전...");
                 await _socket.ConnectAsync();
+                System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] ConnectAsync() 완료");
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] WebSocket 초기화 실패: {ex.Message}");
-                MessageBox.Show($"WebSocket 연결 실패: {ex.Message}", "오류",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] 스택 트레이스: {ex.StackTrace}");
+
+                // UI 스레드에서 MessageBox 표시
+                if (InvokeRequired)
+                {
+                    Invoke(new Action(() =>
+                        MessageBox.Show($"WebSocket 연결 실패:\n{ex.Message}\n\n{ex.StackTrace}",
+                            "오류", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                    ));
+                }
+                else
+                {
+                    MessageBox.Show($"WebSocket 연결 실패:\n{ex.Message}\n\n{ex.StackTrace}",
+                        "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
         }
 
