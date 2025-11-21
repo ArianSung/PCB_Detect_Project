@@ -18,7 +18,7 @@ namespace pcb_monitoring_program.Views.Monitoring
         private SocketIO _socket;
 
         // 프레임 요청 타이머 (100ms 간격 = 10 FPS)
-        private Timer _frameRequestTimer;
+        private System.Windows.Forms.Timer _frameRequestTimer;
 
         // 프레임 카운트
         private int _leftFrameCount = 0;
@@ -183,7 +183,7 @@ namespace pcb_monitoring_program.Views.Monitoring
         {
             if (_frameRequestTimer == null)
             {
-                _frameRequestTimer = new Timer();
+                _frameRequestTimer = new System.Windows.Forms.Timer();
                 _frameRequestTimer.Interval = 100;  // 100ms = 10 FPS
                 _frameRequestTimer.Tick += OnFrameRequestTimerTick;
             }
