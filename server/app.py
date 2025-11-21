@@ -1416,11 +1416,13 @@ def handle_frame_request(data):
             emit('error', {'message': 'JPEG encoding failed'})
             return
 
-        # JPEG 바이너리를 클라이언트로 전송
+        # JPEG 바이너리를 Base64로 인코딩하여 전송 (C# 호환성)
         frame_bytes = buffer.tobytes()
+        frame_base64 = base64.b64encode(frame_bytes).decode('utf-8')
+
         emit('frame_data', {
             'camera_id': camera_id,
-            'frame': frame_bytes,
+            'frame': frame_base64,  # Base64 인코딩된 문자열
             'timestamp': time.time(),
             'size': len(frame_bytes)
         })
