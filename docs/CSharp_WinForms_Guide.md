@@ -921,7 +921,10 @@ namespace pcb_monitoring_program.Views.Monitoring
                     try
                     {
                         string cameraId = response.GetValue<string>("camera_id");
-                        byte[] frameBytes = response.GetValue<byte[]>("frame");
+                        string frameBase64 = response.GetValue<string>("frame");  // Base64 인코딩된 문자열
+
+                        // Base64 디코딩
+                        byte[] frameBytes = Convert.FromBase64String(frameBase64);
 
                         // JPEG 바이트를 Image로 변환
                         using (MemoryStream ms = new MemoryStream(frameBytes))
