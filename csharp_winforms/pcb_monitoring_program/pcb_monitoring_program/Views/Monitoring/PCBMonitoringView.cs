@@ -44,6 +44,11 @@ namespace pcb_monitoring_program.Views.Monitoring
         private int _leftFrameCount = 0;
         private int _rightFrameCount = 0;
 
+        // 프레임 드롭을 위한 마지막 업데이트 시간 (UI 과부하 방지)
+        private DateTime _lastLeftUpdate = DateTime.MinValue;
+        private DateTime _lastRightUpdate = DateTime.MinValue;
+        private const int MIN_UPDATE_INTERVAL_MS = 100;  // 최소 100ms 간격 (10 FPS 제한)
+
         // Flask 서버 URL (나중에 config에서 읽도록 변경 예정)
         private const string SERVER_URL = "http://100.123.23.111:5000";
 
@@ -121,20 +126,29 @@ namespace pcb_monitoring_program.Views.Monitoring
                 {
                     try
                     {
-                        // 원본 JSON 출력 (디버깅용)
-                        System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] 원본 응답: {response}");
-
                         // DTO 객체로 데이터 수신
                         var data = response.GetValue<FrameData>();
 
-                        // 각 필드 값 확인
-                        System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] camera_id: {data.camera_id ?? "NULL"}");
-                        System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] frameData: {(data.frameData == null ? "NULL" : $"{data.frameData.Substring(0, Math.Min(50, data.frameData.Length))}...")}");
-                        System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] timestamp: {data.timestamp}");
-                        System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] size: {data.size}");
-
                         string cameraId = data.camera_id;
-                        string frameBase64 = data.frameData;  // 필드명 변경: frame → frameData
+                        string frameBase64 = data.frameData;
+
+                        // 프레임 드롭: 마지막 업데이트 후 100ms 이내면 스킵 (UI 과부하 방지)
+                        if (cameraId == "left")
+                        {
+                            if ((DateTime.Now - _lastLeftUpdate).TotalMilliseconds < MIN_UPDATE_INTERVAL_MS)
+                            {
+                                return;  // 프레임 스킵
+                            }
+                            _lastLeftUpdate = DateTime.Now;
+                        }
+                        else if (cameraId == "right")
+                        {
+                            if ((DateTime.Now - _lastRightUpdate).TotalMilliseconds < MIN_UPDATE_INTERVAL_MS)
+                            {
+                                return;  // 프레임 스킵
+                            }
+                            _lastRightUpdate = DateTime.Now;
+                        }
 
                         // Base64 디코딩
                         byte[] frameBytes = Convert.FromBase64String(frameBase64);
