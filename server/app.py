@@ -10,6 +10,7 @@ PCB 불량 검사 Flask 추론 서버
 
 from flask import Flask, request, jsonify, Response, render_template_string
 from flask_cors import CORS
+from flask_socketio import SocketIO, emit  # WebSocket 지원
 import base64
 import cv2
 import numpy as np
@@ -38,6 +39,17 @@ from db_manager import DatabaseManager
 # Flask 앱 초기화
 app = Flask(__name__)
 CORS(app)  # C# WinForms 연동을 위한 CORS 활성화
+
+# SocketIO 초기화 (WebSocket 실시간 프레임 스트리밍)
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",  # 모든 Origin 허용 (프로덕션에서는 제한 필요)
+    async_mode='threading',     # 스레딩 모드 (gevent나 eventlet 대신)
+    logger=True,                # 디버깅용 로그
+    engineio_logger=True        # Engine.IO 디버깅 로그
+)
+logger_socketio = logging.getLogger('socketio')
+logger_socketio.setLevel(logging.INFO)
 
 # 로깅 설정
 logging.basicConfig(
@@ -913,6 +925,8 @@ def video_feed(camera_id):
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
+
+
 @app.route('/api/latest_results', methods=['GET'])
 def get_latest_results():
     """최신 추론 결과 반환 (JSON)"""
@@ -1342,14 +1356,93 @@ def defect_type_to_category(defect_type):
     return category_map.get(defect_type, 'NORMAL')
 
 
+# ===================================
+# SocketIO 이벤트 핸들러 (WebSocket)
+# ===================================
+
+@socketio.on('connect')
+def handle_connect():
+    """클라이언트 연결 이벤트"""
+    logger.info(f"[WebSocket] 클라이언트 연결: {request.sid}")
+    emit('connection_response', {'status': 'connected', 'message': 'Flask SocketIO 서버에 연결되었습니다'})
+
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """클라이언트 연결 종료 이벤트"""
+    logger.info(f"[WebSocket] 클라이언트 연결 종료: {request.sid}")
+
+
+@socketio.on('request_frame')
+def handle_frame_request(data):
+    """
+    프레임 요청 이벤트
+    클라이언트가 100ms 간격으로 요청
+
+    Args:
+        data (dict): {'camera_id': 'left' or 'right'}
+    """
+    try:
+        camera_id = data.get('camera_id')
+
+        if camera_id not in ['left', 'right']:
+            logger.warning(f"[WebSocket] 잘못된 camera_id: {camera_id}")
+            emit('error', {'message': 'Invalid camera_id. Use "left" or "right"'})
+            return
+
+        # 최신 프레임 가져오기
+        with frame_lock:
+            frame = latest_frames.get(camera_id)
+
+        # 프레임이 없으면 더미 프레임 생성
+        if frame is None:
+            dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            dummy_frame[:] = (50, 50, 50)  # 어두운 회색
+            cv2.putText(dummy_frame, f"Waiting for {camera_id} camera...",
+                       (100, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+            frame = dummy_frame
+            logger.debug(f"[WebSocket] {camera_id} 프레임 없음 → 더미 프레임 전송")
+
+        # JPEG 인코딩 - Baseline 형식 강제 (C# 호환성)
+        encode_params = [
+            cv2.IMWRITE_JPEG_QUALITY, 85,        # 화질 85%
+            cv2.IMWRITE_JPEG_PROGRESSIVE, 0,     # Progressive JPEG 비활성화 (Baseline 강제)
+            cv2.IMWRITE_JPEG_OPTIMIZE, 1         # 허프만 테이블 최적화
+        ]
+        ret, buffer = cv2.imencode('.jpg', frame, encode_params)
+
+        if not ret:
+            logger.error(f"[WebSocket] JPEG 인코딩 실패: {camera_id}")
+            emit('error', {'message': 'JPEG encoding failed'})
+            return
+
+        # JPEG 바이너리를 클라이언트로 전송
+        frame_bytes = buffer.tobytes()
+        emit('frame_data', {
+            'camera_id': camera_id,
+            'frame': frame_bytes,
+            'timestamp': time.time(),
+            'size': len(frame_bytes)
+        })
+
+        logger.debug(f"[WebSocket] 프레임 전송 완료: {camera_id} ({len(frame_bytes)} bytes)")
+
+    except Exception as e:
+        logger.error(f"[WebSocket] 프레임 요청 처리 실패: {str(e)}", exc_info=True)
+        emit('error', {'message': f'Frame request failed: {str(e)}'})
+
+
 if __name__ == '__main__':
-    logger.info("Flask 추론 서버 시작...")
+    logger.info("Flask 추론 서버 시작 (SocketIO 활성화)...")
     logger.info("포트: 5000")
     logger.info("호스트: 0.0.0.0 (모든 인터페이스)")
+    logger.info("WebSocket 엔드포인트: ws://0.0.0.0:5000/socket.io/")
 
-    app.run(
+    # SocketIO로 실행 (app.run() 대신)
+    socketio.run(
+        app,
         host='0.0.0.0',  # 외부 접근 허용
         port=5000,
         debug=False,     # 프로덕션에서는 False
-        threaded=True    # 멀티스레딩 활성화
+        allow_unsafe_werkzeug=True  # 개발 서버 경고 무시
     )
