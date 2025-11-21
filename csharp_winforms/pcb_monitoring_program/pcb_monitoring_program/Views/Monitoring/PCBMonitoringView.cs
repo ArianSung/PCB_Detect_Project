@@ -1,26 +1,28 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using SocketIOClient;
 
 namespace pcb_monitoring_program.Views.Monitoring
 {
     public partial class PCBMonitoringView : UserControl
     {
-        private MJPEGStreamReader _leftCameraStream;
-        private MJPEGStreamReader _rightCameraStream;
-        private int _leftFrameCount = 0;  // 좌측 카메라 프레임 카운트
-        private int _rightFrameCount = 0; // 우측 카메라 프레임 카운트
+        // SocketIO 클라이언트
+        private SocketIO _socket;
 
-        // 프레임 드롭을 위한 마지막 업데이트 시간
-        private DateTime _lastLeftUpdate = DateTime.MinValue;
-        private DateTime _lastRightUpdate = DateTime.MinValue;
-        private const int MIN_UPDATE_INTERVAL_MS = 100;  // 최소 100ms 간격 (10 FPS)
+        // 프레임 요청 타이머 (100ms 간격 = 10 FPS)
+        private Timer _frameRequestTimer;
+
+        // 프레임 카운트
+        private int _leftFrameCount = 0;
+        private int _rightFrameCount = 0;
 
         // Flask 서버 URL (나중에 config에서 읽도록 변경 예정)
         private const string SERVER_URL = "http://100.123.23.111:5000";
@@ -41,7 +43,7 @@ namespace pcb_monitoring_program.Views.Monitoring
             this.HandleDestroyed += OnHandleDestroyed;
         }
 
-        private void PCBMonitoringView_Load(object sender, EventArgs e)
+        private async void PCBMonitoringView_Load(object sender, EventArgs e)
         {
             UiStyleHelper.MakeRoundedPanel(cardPCBFrontMonitoring, radius: 16, back: Color.FromArgb(44, 44, 44));
             UiStyleHelper.MakeRoundedPanel(cardPCBBackMonitoring, radius: 16, back: Color.FromArgb(44, 44, 44));
@@ -49,93 +51,170 @@ namespace pcb_monitoring_program.Views.Monitoring
             UiStyleHelper.AddShadowRoundedPanel(cardPCBFrontMonitoring, 16);
             UiStyleHelper.AddShadowRoundedPanel(cardPCBBackMonitoring, 16);
 
-            // MJPEG 스트림 시작
-            StartVideoStreams();
+            // WebSocket 연결 시작
+            await InitializeWebSocket();
         }
 
-        private void StartVideoStreams()
+        private async Task InitializeWebSocket()
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine("[PCBMonitoringView] 비디오 스트림 시작...");
+                System.Diagnostics.Debug.WriteLine("[PCBMonitoringView] WebSocket 연결 시작...");
 
-                // 좌측 카메라 스트림 (LINE 1 PCB Front)
-                _leftCameraStream = new MJPEGStreamReader();
-                _leftCameraStream.FrameReceived += OnLeftFrameReceived;
-                _leftCameraStream.ErrorOccurred += OnStreamError;
-                System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] 좌측 카메라 스트림 시작: {SERVER_URL}/video_feed/left");
-                _leftCameraStream.Start($"{SERVER_URL}/video_feed/left");
+                // SocketIO 클라이언트 생성
+                _socket = new SocketIO(SERVER_URL);
 
-                // 우측 카메라 스트림 (LINE 1 PCB Back)
-                _rightCameraStream = new MJPEGStreamReader();
-                _rightCameraStream.FrameReceived += OnRightFrameReceived;
-                _rightCameraStream.ErrorOccurred += OnStreamError;
-                System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] 우측 카메라 스트림 시작: {SERVER_URL}/video_feed/right");
-                _rightCameraStream.Start($"{SERVER_URL}/video_feed/right");
+                // 연결 이벤트 핸들러
+                _socket.OnConnected += async (sender, e) =>
+                {
+                    System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] WebSocket 연결 성공: {SERVER_URL}");
 
-                System.Diagnostics.Debug.WriteLine("[PCBMonitoringView] 양측 스트림 시작 완료");
+                    // 연결 성공 시 프레임 요청 타이머 시작
+                    if (InvokeRequired)
+                    {
+                        Invoke(new Action(StartFrameRequestTimer));
+                    }
+                    else
+                    {
+                        StartFrameRequestTimer();
+                    }
+                };
+
+                // 연결 해제 이벤트 핸들러
+                _socket.OnDisconnected += (sender, e) =>
+                {
+                    System.Diagnostics.Debug.WriteLine("[PCBMonitoringView] WebSocket 연결 해제");
+
+                    // 연결 해제 시 타이머 중지
+                    if (InvokeRequired)
+                    {
+                        Invoke(new Action(StopFrameRequestTimer));
+                    }
+                    else
+                    {
+                        StopFrameRequestTimer();
+                    }
+                };
+
+                // frame_data 이벤트 핸들러 (프레임 수신)
+                _socket.On("frame_data", response =>
+                {
+                    try
+                    {
+                        string cameraId = response.GetValue<string>("camera_id");
+                        byte[] frameBytes = response.GetValue<byte[]>("frame");
+
+                        // JPEG 바이트를 Image로 변환
+                        using (MemoryStream ms = new MemoryStream(frameBytes))
+                        {
+                            using (Image tempImage = Image.FromStream(ms))
+                            {
+                                // 복사본 생성 (원본은 스트림과 함께 해제되므로)
+                                Bitmap bitmap = new Bitmap(tempImage);
+
+                                // UI 스레드에서 PictureBox 업데이트
+                                if (cameraId == "left")
+                                {
+                                    _leftFrameCount++;
+                                    if (InvokeRequired)
+                                    {
+                                        BeginInvoke(new Action(() => UpdatePictureBox(pb_LINE1PCBFRONT, bitmap, "좌측")));
+                                    }
+                                    else
+                                    {
+                                        UpdatePictureBox(pb_LINE1PCBFRONT, bitmap, "좌측");
+                                    }
+                                }
+                                else if (cameraId == "right")
+                                {
+                                    _rightFrameCount++;
+                                    if (InvokeRequired)
+                                    {
+                                        BeginInvoke(new Action(() => UpdatePictureBox(pb_LINE1PCBBACK, bitmap, "우측")));
+                                    }
+                                    else
+                                    {
+                                        UpdatePictureBox(pb_LINE1PCBBACK, bitmap, "우측");
+                                    }
+                                }
+
+                                // 10프레임마다 로그 출력
+                                int frameCount = (cameraId == "left") ? _leftFrameCount : _rightFrameCount;
+                                if (frameCount % 10 == 0)
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] {cameraId} 프레임 수신: {frameCount}개 (크기: {frameBytes.Length} bytes)");
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] frame_data 처리 실패: {ex.Message}");
+                    }
+                });
+
+                // connection_response 이벤트 핸들러 (선택적)
+                _socket.On("connection_response", response =>
+                {
+                    string status = response.GetValue<string>("status");
+                    string message = response.GetValue<string>("message");
+                    System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] 연결 응답: {status} - {message}");
+                });
+
+                // error 이벤트 핸들러 (선택적)
+                _socket.On("error", response =>
+                {
+                    string errorMessage = response.GetValue<string>("message");
+                    System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] 서버 에러: {errorMessage}");
+                });
+
+                // WebSocket 연결
+                await _socket.ConnectAsync();
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] 스트림 시작 실패: {ex.Message}");
-                MessageBox.Show($"비디오 스트림 시작 실패: {ex.Message}", "오류",
+                System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] WebSocket 초기화 실패: {ex.Message}");
+                MessageBox.Show($"WebSocket 연결 실패: {ex.Message}", "오류",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
-        private void OnLeftFrameReceived(object sender, FrameReceivedEventArgs e)
+        private void StartFrameRequestTimer()
         {
-            // 프레임 드롭: 마지막 업데이트 후 100ms 이내면 스킵 (UI 과부하 방지)
-            if ((DateTime.Now - _lastLeftUpdate).TotalMilliseconds < MIN_UPDATE_INTERVAL_MS)
+            if (_frameRequestTimer == null)
             {
-                e.Frame?.Dispose();  // 메모리 누수 방지
-                return;
+                _frameRequestTimer = new Timer();
+                _frameRequestTimer.Interval = 100;  // 100ms = 10 FPS
+                _frameRequestTimer.Tick += OnFrameRequestTimerTick;
             }
 
-            _lastLeftUpdate = DateTime.Now;
-            _leftFrameCount++;
+            _frameRequestTimer.Start();
+            System.Diagnostics.Debug.WriteLine("[PCBMonitoringView] 프레임 요청 타이머 시작 (100ms 간격)");
+        }
 
-            // 10프레임마다 로그 출력
-            if (_leftFrameCount % 10 == 0)
+        private void StopFrameRequestTimer()
+        {
+            if (_frameRequestTimer != null)
             {
-                System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] 좌측 프레임 수신: {_leftFrameCount}개 (크기: {e.Frame.Width}x{e.Frame.Height})");
-            }
-
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action(() => UpdatePictureBox(pb_LINE1PCBFRONT, e.Frame, "좌측")));
-            }
-            else
-            {
-                UpdatePictureBox(pb_LINE1PCBFRONT, e.Frame, "좌측");
+                _frameRequestTimer.Stop();
+                System.Diagnostics.Debug.WriteLine("[PCBMonitoringView] 프레임 요청 타이머 중지");
             }
         }
 
-        private void OnRightFrameReceived(object sender, FrameReceivedEventArgs e)
+        private async void OnFrameRequestTimerTick(object sender, EventArgs e)
         {
-            // 프레임 드롭: 마지막 업데이트 후 100ms 이내면 스킵 (UI 과부하 방지)
-            if ((DateTime.Now - _lastRightUpdate).TotalMilliseconds < MIN_UPDATE_INTERVAL_MS)
+            try
             {
-                e.Frame?.Dispose();  // 메모리 누수 방지
-                return;
+                if (_socket != null && _socket.Connected)
+                {
+                    // 양쪽 카메라에 대해 프레임 요청
+                    await _socket.EmitAsync("request_frame", new { camera_id = "left" });
+                    await _socket.EmitAsync("request_frame", new { camera_id = "right" });
+                }
             }
-
-            _lastRightUpdate = DateTime.Now;
-            _rightFrameCount++;
-
-            // 10프레임마다 로그 출력
-            if (_rightFrameCount % 10 == 0)
+            catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] 우측 프레임 수신: {_rightFrameCount}개 (크기: {e.Frame.Width}x{e.Frame.Height})");
-            }
-
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action(() => UpdatePictureBox(pb_LINE1PCBBACK, e.Frame, "우측")));
-            }
-            else
-            {
-                UpdatePictureBox(pb_LINE1PCBBACK, e.Frame, "우측");
+                System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] 프레임 요청 실패: {ex.Message}");
             }
         }
 
@@ -161,35 +240,34 @@ namespace pcb_monitoring_program.Views.Monitoring
             }
         }
 
-        private void OnStreamError(object sender, System.IO.ErrorEventArgs e)
-        {
-            var ex = e.GetException();
-            System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] 스트림 에러 발생:");
-            System.Diagnostics.Debug.WriteLine($"  메시지: {ex?.Message}");
-            System.Diagnostics.Debug.WriteLine($"  스택 트레이스: {ex?.StackTrace}");
-        }
-
         private void OnHandleDestroyed(object sender, EventArgs e)
         {
-            // 스트림 정리
-            CleanupStreams();
+            // WebSocket 정리
+            CleanupWebSocket();
         }
 
-        private void CleanupStreams()
+        private async void CleanupWebSocket()
         {
             try
             {
-                _leftCameraStream?.Stop();
-                _leftCameraStream?.Dispose();
-                _leftCameraStream = null;
+                // 타이머 중지
+                StopFrameRequestTimer();
+                _frameRequestTimer?.Dispose();
+                _frameRequestTimer = null;
 
-                _rightCameraStream?.Stop();
-                _rightCameraStream?.Dispose();
-                _rightCameraStream = null;
+                // WebSocket 연결 해제
+                if (_socket != null)
+                {
+                    await _socket.DisconnectAsync();
+                    _socket.Dispose();
+                    _socket = null;
+                }
+
+                System.Diagnostics.Debug.WriteLine("[PCBMonitoringView] WebSocket 정리 완료");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"스트림 정리 실패: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] WebSocket 정리 실패: {ex.Message}");
             }
         }
 
