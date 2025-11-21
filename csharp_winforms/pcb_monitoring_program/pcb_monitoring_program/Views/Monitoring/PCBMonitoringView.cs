@@ -12,26 +12,7 @@ using SocketIOClient;
 
 namespace pcb_monitoring_program.Views.Monitoring
 {
-    // SocketIO 데이터 전송 객체 (DTO)
-    public class FrameData
-    {
-        public string camera_id { get; set; }
-        public string frame { get; set; }
-        public double timestamp { get; set; }
-        public int size { get; set; }
-    }
-
-    public class ConnectionResponse
-    {
-        public string status { get; set; }
-        public string message { get; set; }
-    }
-
-    public class ErrorResponse
-    {
-        public string message { get; set; }
-    }
-
+    
     public partial class PCBMonitoringView : UserControl
     {
         // SocketIO 클라이언트
@@ -312,6 +293,26 @@ namespace pcb_monitoring_program.Views.Monitoring
             {
                 System.Diagnostics.Debug.WriteLine($"더블 버퍼링 설정 실패: {ex.Message}");
             }
+        }
+
+        // SocketIO 데이터 전송 객체 (DTO)
+        public class FrameData
+        {
+            public string camera_id { get; set; }
+            public string frame { get; set; }
+            public double timestamp { get; set; }
+            public int size { get; set; }
+        }
+
+        public class ConnectionResponse
+        {
+            public string status { get; set; }
+            public string message { get; set; }
+        }
+
+        public class ErrorResponse
+        {
+            public string message { get; set; }
         }
     }
 }
