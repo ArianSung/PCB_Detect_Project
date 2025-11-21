@@ -121,8 +121,18 @@ namespace pcb_monitoring_program.Views.Monitoring
                 {
                     try
                     {
+                        // 원본 JSON 출력 (디버깅용)
+                        System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] 원본 응답: {response}");
+
                         // DTO 객체로 데이터 수신
                         var data = response.GetValue<FrameData>();
+
+                        // 각 필드 값 확인
+                        System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] camera_id: {data.camera_id ?? "NULL"}");
+                        System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] frameData: {(data.frameData == null ? "NULL" : $"{data.frameData.Substring(0, Math.Min(50, data.frameData.Length))}...")}");
+                        System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] timestamp: {data.timestamp}");
+                        System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] size: {data.size}");
+
                         string cameraId = data.camera_id;
                         string frameBase64 = data.frameData;  // 필드명 변경: frame → frameData
 
