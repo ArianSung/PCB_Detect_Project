@@ -1420,9 +1420,10 @@ def handle_frame_request(data):
         frame_bytes = buffer.tobytes()
         frame_base64 = base64.b64encode(frame_bytes).decode('utf-8')
 
+        # NOTE: 'frame' 필드명을 'frameData'로 변경하여 Flask-SocketIO의 binary 자동 변환 방지
         emit('frame_data', {
             'camera_id': camera_id,
-            'frame': frame_base64,  # Base64 인코딩된 문자열
+            'frameData': frame_base64,  # 필드명 변경: frame → frameData
             'timestamp': time.time(),
             'size': len(frame_bytes)
         })
