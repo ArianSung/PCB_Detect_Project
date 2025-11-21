@@ -848,7 +848,7 @@ namespace pcb_monitoring_program.Views.Monitoring
     public partial class PCBMonitoringView : UserControl
     {
         // SocketIO 클라이언트
-        private SocketIO _socket;
+        private SocketIOClient.SocketIO _socket;
 
         // 프레임 요청 타이머 (100ms 간격 = 10 FPS)
         private Timer _frameRequestTimer;
@@ -889,7 +889,7 @@ namespace pcb_monitoring_program.Views.Monitoring
                 System.Diagnostics.Debug.WriteLine("[PCBMonitoringView] WebSocket 연결 시작...");
 
                 // SocketIO 클라이언트 생성
-                _socket = new SocketIO(SERVER_URL);
+                _socket = new SocketIOClient.SocketIO(SERVER_URL);
 
                 // 연결 성공 이벤트
                 _socket.OnConnected += async (sender, e) =>
@@ -1061,7 +1061,7 @@ namespace pcb_monitoring_program.Views.Monitoring
 
 ### 핵심 포인트
 
-1. **SocketIO 클라이언트 초기화**: `new SocketIO(SERVER_URL)`
+1. **SocketIO 클라이언트 초기화**: `new SocketIOClient.SocketIO(SERVER_URL)`
 2. **연결 이벤트**: `OnConnected` → 타이머 시작
 3. **프레임 요청**: 100ms마다 `request_frame` 이벤트 발송
 4. **프레임 수신**: `frame_data` 이벤트 수신 → JPEG 디코딩 → PictureBox 업데이트
