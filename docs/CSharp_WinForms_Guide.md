@@ -845,6 +845,26 @@ using SocketIOClient;
 
 namespace pcb_monitoring_program.Views.Monitoring
 {
+    // SocketIO 데이터 전송 객체 (DTO)
+    public class FrameData
+    {
+        public string camera_id { get; set; }
+        public string frame { get; set; }
+        public double timestamp { get; set; }
+        public int size { get; set; }
+    }
+
+    public class ConnectionResponse
+    {
+        public string status { get; set; }
+        public string message { get; set; }
+    }
+
+    public class ErrorResponse
+    {
+        public string message { get; set; }
+    }
+
     public partial class PCBMonitoringView : UserControl
     {
         // SocketIO 클라이언트
@@ -920,8 +940,10 @@ namespace pcb_monitoring_program.Views.Monitoring
                 {
                     try
                     {
-                        string cameraId = response.GetValue<string>("camera_id");
-                        string frameBase64 = response.GetValue<string>("frame");  // Base64 인코딩된 문자열
+                        // DTO 객체로 데이터 수신
+                        var data = response.GetValue<FrameData>();
+                        string cameraId = data.camera_id;
+                        string frameBase64 = data.frame;
 
                         // Base64 디코딩
                         byte[] frameBytes = Convert.FromBase64String(frameBase64);

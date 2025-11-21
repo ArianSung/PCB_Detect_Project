@@ -12,6 +12,26 @@ using SocketIOClient;
 
 namespace pcb_monitoring_program.Views.Monitoring
 {
+    // SocketIO 데이터 전송 객체 (DTO)
+    public class FrameData
+    {
+        public string camera_id { get; set; }
+        public string frame { get; set; }
+        public double timestamp { get; set; }
+        public int size { get; set; }
+    }
+
+    public class ConnectionResponse
+    {
+        public string status { get; set; }
+        public string message { get; set; }
+    }
+
+    public class ErrorResponse
+    {
+        public string message { get; set; }
+    }
+
     public partial class PCBMonitoringView : UserControl
     {
         // SocketIO 클라이언트
@@ -101,8 +121,10 @@ namespace pcb_monitoring_program.Views.Monitoring
                 {
                     try
                     {
-                        string cameraId = response.GetValue<string>("camera_id");
-                        string frameBase64 = response.GetValue<string>("frame");  // Base64 인코딩된 문자열
+                        // DTO 객체로 데이터 수신
+                        var data = response.GetValue<FrameData>();
+                        string cameraId = data.camera_id;
+                        string frameBase64 = data.frame;
 
                         // Base64 디코딩
                         byte[] frameBytes = Convert.FromBase64String(frameBase64);
@@ -159,16 +181,15 @@ namespace pcb_monitoring_program.Views.Monitoring
                 // connection_response 이벤트 핸들러 (선택적)
                 _socket.On("connection_response", response =>
                 {
-                    string status = response.GetValue<string>("status");
-                    string message = response.GetValue<string>("message");
-                    System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] 연결 응답: {status} - {message}");
+                    var data = response.GetValue<ConnectionResponse>();
+                    System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] 연결 응답: {data.status} - {data.message}");
                 });
 
                 // error 이벤트 핸들러 (선택적)
                 _socket.On("error", response =>
                 {
-                    string errorMessage = response.GetValue<string>("message");
-                    System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] 서버 에러: {errorMessage}");
+                    var data = response.GetValue<ErrorResponse>();
+                    System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] 서버 에러: {data.message}");
                 });
 
                 // WebSocket 연결
