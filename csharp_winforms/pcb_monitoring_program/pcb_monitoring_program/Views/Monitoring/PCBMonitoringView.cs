@@ -56,9 +56,9 @@ namespace pcb_monitoring_program.Views.Monitoring
         {
             InitializeComponent();
 
-            // PictureBox 설정
-            pb_LINE1PCBFRONT.SizeMode = PictureBoxSizeMode.Zoom;
-            pb_LINE1PCBBACK.SizeMode = PictureBoxSizeMode.Zoom;
+            // PictureBox 설정 (StretchImage: 고품질 스무딩 비활성화로 성능 향상)
+            pb_LINE1PCBFRONT.SizeMode = PictureBoxSizeMode.StretchImage;
+            pb_LINE1PCBBACK.SizeMode = PictureBoxSizeMode.StretchImage;
 
             // 더블 버퍼링 활성화 (깜빡거림 방지)
             EnableDoubleBuffering(pb_LINE1PCBFRONT);
