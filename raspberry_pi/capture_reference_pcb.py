@@ -39,6 +39,7 @@
 """
 
 import cv2
+import numpy as np
 import argparse
 import os
 import sys
@@ -71,7 +72,7 @@ def nothing(x):
 
 def setup_camera_controls(window_name, cap):
     """
-    카메라 파라미터 조정 트랙바 설정
+    이미지 조정 트랙바 설정
 
     Args:
         window_name (str): OpenCV 창 이름
@@ -89,50 +90,50 @@ def setup_camera_controls(window_name, cap):
     cv2.createTrackbar('Saturation', window_name,
                        DEFAULT_CAMERA_PARAMS['saturation'], 100, nothing)
 
-    # 노출 트랙바 (0=자동, 1-13=수동)
-    cv2.createTrackbar('Exposure (0=Auto)', window_name, 0, 13, nothing)
-
-    # 게인 트랙바
-    cv2.createTrackbar('Gain', window_name,
-                       DEFAULT_CAMERA_PARAMS['gain'], 100, nothing)
-
-    print("[INFO] 카메라 파라미터 조정 가이드:")
-    print("  - Brightness: 밝기 조절")
-    print("  - Contrast: 대비 조절")
-    print("  - Saturation: 채도 조절")
-    print("  - Exposure: 노출 (0=자동, 1-13=수동)")
-    print("  - Gain: 게인 (감도)")
+    print("[INFO] 이미지 조정 가이드:")
+    print("  - Brightness: 밝기 조절 (50=원본)")
+    print("  - Contrast: 대비 조절 (50=원본)")
+    print("  - Saturation: 채도 조절 (50=원본)")
+    print("  - 트랙바를 움직이면 실시간으로 반영됩니다!")
 
 
-def apply_camera_params(cap, window_name):
+def apply_image_adjustments(frame, window_name):
     """
-    트랙바 값을 읽어 카메라 파라미터 적용
+    트랙바 값을 읽어 이미지 후처리 적용 (실시간 반영)
 
     Args:
-        cap (cv2.VideoCapture): 카메라 객체
+        frame (np.ndarray): 입력 프레임
         window_name (str): OpenCV 창 이름
+
+    Returns:
+        np.ndarray: 조정된 프레임
     """
     # 트랙바 값 읽기
     brightness = cv2.getTrackbarPos('Brightness', window_name)
     contrast = cv2.getTrackbarPos('Contrast', window_name)
     saturation = cv2.getTrackbarPos('Saturation', window_name)
-    exposure_mode = cv2.getTrackbarPos('Exposure (0=Auto)', window_name)
-    gain = cv2.getTrackbarPos('Gain', window_name)
 
-    # 카메라 파라미터 적용
-    cap.set(cv2.CAP_PROP_BRIGHTNESS, brightness)
-    cap.set(cv2.CAP_PROP_CONTRAST, contrast)
-    cap.set(cv2.CAP_PROP_SATURATION, saturation)
-    cap.set(cv2.CAP_PROP_GAIN, gain)
+    # 1. 밝기/대비 조정 (convertScaleAbs)
+    # alpha: 대비 (1.0 = 원본, 0.5-3.0 범위)
+    # beta: 밝기 (-100 ~ 100)
+    alpha = contrast / 50.0  # 0-2.0 범위
+    beta = (brightness - 50) * 2  # -100 ~ 100
+    adjusted = cv2.convertScaleAbs(frame, alpha=alpha, beta=beta)
 
-    # 노출 설정 (0=자동, 1-13=수동)
-    if exposure_mode == 0:
-        # 자동 노출
-        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.75)  # 자동 모드
-    else:
-        # 수동 노출
-        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # 수동 모드
-        cap.set(cv2.CAP_PROP_EXPOSURE, -exposure_mode)
+    # 2. 채도 조정 (HSV 색공간)
+    if saturation != 50:  # 기본값이 아닐 때만
+        hsv = cv2.cvtColor(adjusted, cv2.COLOR_BGR2HSV).astype("float32")
+        h, s, v = cv2.split(hsv)
+
+        # 채도 스케일 (0.5 ~ 2.0)
+        saturation_scale = saturation / 50.0
+        s = s * saturation_scale
+        s = np.clip(s, 0, 255)
+
+        hsv = cv2.merge([h, s, v])
+        adjusted = cv2.cvtColor(hsv.astype("uint8"), cv2.COLOR_HSV2BGR)
+
+    return adjusted
 
 
 def capture_reference_images(side, camera_id, output_dir, num_images=5, headless=False, interval=2):
@@ -220,17 +221,17 @@ def capture_reference_images(side, camera_id, output_dir, num_images=5, headless
 
             # 프리뷰 루프
             while True:
-                # 트랙바 값을 카메라에 적용
-                apply_camera_params(cap, window_name)
-
                 ret, frame = cap.read()
                 if not ret:
                     print("[ERROR] 프레임을 읽을 수 없습니다.")
                     time.sleep(0.1)
                     continue
 
+                # 트랙바 값을 읽어 이미지 조정 (실시간 반영!)
+                adjusted_frame = apply_image_adjustments(frame, window_name)
+
                 # 화면에 가이드 표시
-                display_frame = frame.copy()
+                display_frame = adjusted_frame.copy()
 
                 # 상단 텍스트
                 cv2.putText(
@@ -277,13 +278,11 @@ def capture_reference_images(side, camera_id, output_dir, num_images=5, headless
                     return saved_files
                 elif key == ord(' '):  # 스페이스바
                     print("  촬영!")
+                    # 조정된 프레임을 저장용으로 사용
+                    frame = adjusted_frame
                     break
 
-            # 촬영
-            ret, frame = cap.read()
-            if not ret:
-                print("[ERROR] 프레임 캡처 실패")
-                continue
+            # 프레임은 이미 위에서 조정됨 (adjusted_frame → frame)
 
         # 파일명 생성 (타임스탬프 포함)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
