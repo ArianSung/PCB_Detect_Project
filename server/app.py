@@ -8,10 +8,10 @@ PCB 불량 검사 Flask 추론 서버
     flask --app server/app run --host=0.0.0.0 --port=5000
 """
 
-# eventlet monkey patching (SocketIO 소켓 누수 방지) ⭐⭐⭐
-# 반드시 다른 import보다 먼저 실행되어야 함
-import eventlet
-eventlet.monkey_patch()
+# eventlet monkey patching 제거 (YOLO + OpenCV와 충돌) ⚠️
+# threading 모드로 변경하여 안정성 확보
+# import eventlet
+# eventlet.monkey_patch()
 
 from flask import Flask, request, jsonify, Response, render_template_string
 from flask_cors import CORS
@@ -40,6 +40,9 @@ except ImportError:
 
 # 로컬 모듈 임포트
 from db_manager import DatabaseManager
+from pcb_alignment import PCBAligner
+from component_verification import ComponentVerifier
+import json
 
 # Flask 앱 초기화
 app = Flask(__name__)
@@ -49,7 +52,7 @@ CORS(app)  # C# WinForms 연동을 위한 CORS 활성화
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",  # 모든 Origin 허용 (프로덕션에서는 제한 필요)
-    async_mode='eventlet',      # eventlet 모드 (프로덕션 권장, 소켓 누수 방지) ⭐⭐⭐
+    async_mode='threading',     # threading 모드 (YOLO/OpenCV 안정성 우선) ⭐⭐⭐
     logger=True,                # 디버깅용 로그
     engineio_logger=True,       # Engine.IO 디버깅 로그
     # 소켓 타임아웃 설정 (좀비 연결 방지) ⭐
@@ -93,6 +96,66 @@ except Exception as e:
     logger.error(f"⚠️  YOLO 모델 로드 실패: {e}")
     logger.warning("   - 추론 시 더미 결과 반환됨")
     yolo_model = None
+
+# PCB 정렬 및 컴포넌트 검증 모듈 초기화
+pcb_aligner_left = None
+pcb_aligner_right = None
+component_verifier_left = None
+component_verifier_right = None
+
+try:
+    # 기준 데이터 로드 (좌측)
+    left_ref_path = Path(__file__).parent / 'reference_data' / 'reference_left.json'
+    if left_ref_path.exists():
+        with open(left_ref_path, 'r', encoding='utf-8') as f:
+            left_reference_data = json.load(f)
+
+        # PCBAligner 초기화 (좌측)
+        pcb_aligner_left = PCBAligner(left_reference_data)
+
+        # ComponentVerifier 초기화 (좌측)
+        component_verifier_left = ComponentVerifier(
+            reference_components=left_reference_data['components'],
+            position_threshold=20.0,  # 20픽셀 이내
+            confidence_threshold=0.25
+        )
+
+        logger.info(f"✅ 좌측 PCB 기준 데이터 로드 완료: {left_ref_path}")
+        logger.info(f"   - 나사 구멍: {len(left_reference_data['mounting_holes'])}개")
+        logger.info(f"   - 기준 컴포넌트: {len(left_reference_data['components'])}개")
+    else:
+        logger.warning(f"⚠️  좌측 기준 데이터 파일이 없습니다: {left_ref_path}")
+        logger.warning("   - PCB 정렬 및 컴포넌트 검증 비활성화 (좌측)")
+except Exception as e:
+    logger.error(f"⚠️  좌측 기준 데이터 로드 실패: {e}")
+    logger.warning("   - PCB 정렬 및 컴포넌트 검증 비활성화 (좌측)")
+
+try:
+    # 기준 데이터 로드 (우측)
+    right_ref_path = Path(__file__).parent / 'reference_data' / 'reference_right.json'
+    if right_ref_path.exists():
+        with open(right_ref_path, 'r', encoding='utf-8') as f:
+            right_reference_data = json.load(f)
+
+        # PCBAligner 초기화 (우측)
+        pcb_aligner_right = PCBAligner(right_reference_data)
+
+        # ComponentVerifier 초기화 (우측)
+        component_verifier_right = ComponentVerifier(
+            reference_components=right_reference_data['components'],
+            position_threshold=20.0,  # 20픽셀 이내
+            confidence_threshold=0.25
+        )
+
+        logger.info(f"✅ 우측 PCB 기준 데이터 로드 완료: {right_ref_path}")
+        logger.info(f"   - 나사 구멍: {len(right_reference_data['mounting_holes'])}개")
+        logger.info(f"   - 기준 컴포넌트: {len(right_reference_data['components'])}개")
+    else:
+        logger.warning(f"⚠️  우측 기준 데이터 파일이 없습니다: {right_ref_path}")
+        logger.warning("   - PCB 정렬 및 컴포넌트 검증 비활성화 (우측)")
+except Exception as e:
+    logger.error(f"⚠️  우측 기준 데이터 로드 실패: {e}")
+    logger.warning("   - PCB 정렬 및 컴포넌트 검증 비활성화 (우측)")
 
 # 실시간 뷰어를 위한 전역 변수
 latest_frames = {
@@ -587,27 +650,150 @@ def predict_dual():
                 'error': f'Failed to process right image: {str(e)}'
             }), 400
 
-        # 4. AI 추론 (YOLO 모델 학습 완료 후 구현)
-        # TODO: 양면 추론 및 결과 융합
-        # left_result = yolo_model(left_frame)
-        # right_result = yolo_model(right_frame)
-        # final_defect_type, final_confidence = merge_dual_results(left_result, right_result)
+        # 4. PCB 정렬 및 AI 추론
+        alignment_time_start = time.time()
 
-        # 임시 응답 (모델 미구현)
-        left_result = {
-            'defect_type': '정상',
-            'confidence': 0.95,
-            'boxes': []
-        }
-        right_result = {
-            'defect_type': '정상',
-            'confidence': 0.95,
-            'boxes': []
-        }
+        # 4-1. 좌측 PCB 정렬
+        left_aligned_frame = left_frame
+        left_alignment_info = {'method': 'none', 'success': False}
 
-        # 결과 융합 (임시 로직: 둘 중 하나라도 불량이면 불량)
+        if pcb_aligner_left is not None:
+            left_align_result = pcb_aligner_left.process_frame(left_frame, debug=False)
+
+            if left_align_result['success']:
+                left_aligned_frame = left_align_result['aligned_frame']
+                left_alignment_info = {
+                    'method': left_align_result['method'],
+                    'success': True
+                }
+                logger.info(f"좌측 PCB 정렬 성공 (방법: {left_align_result['method']})")
+            else:
+                logger.warning(f"좌측 PCB 정렬 실패: {left_align_result.get('error', 'Unknown')}")
+                left_alignment_info['error'] = left_align_result.get('error')
+
+        # 4-2. 우측 PCB 정렬
+        right_aligned_frame = right_frame
+        right_alignment_info = {'method': 'none', 'success': False}
+
+        if pcb_aligner_right is not None:
+            right_align_result = pcb_aligner_right.process_frame(right_frame, debug=False)
+
+            if right_align_result['success']:
+                right_aligned_frame = right_align_result['aligned_frame']
+                right_alignment_info = {
+                    'method': right_align_result['method'],
+                    'success': True
+                }
+                logger.info(f"우측 PCB 정렬 성공 (방법: {right_align_result['method']})")
+            else:
+                logger.warning(f"우측 PCB 정렬 실패: {right_align_result.get('error', 'Unknown')}")
+                right_alignment_info['error'] = right_align_result.get('error')
+
+        alignment_time = (time.time() - alignment_time_start) * 1000  # ms
+        logger.info(f"PCB 정렬 완료 (소요 시간: {alignment_time:.2f}ms)")
+
+        # 4-3. YOLO 추론 (정렬된 프레임)
+        inference_time_start = time.time()
+
+        left_detections = []
+        right_detections = []
+
+        if yolo_model is not None:
+            # 좌측 YOLO 추론
+            left_yolo_results = yolo_model.predict(left_aligned_frame, conf=0.25, verbose=False)
+            if len(left_yolo_results) > 0 and len(left_yolo_results[0].boxes) > 0:
+                boxes = left_yolo_results[0].boxes
+                for box in boxes:
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+                    class_id = int(box.cls[0])
+                    class_name = yolo_model.names[class_id]
+                    confidence = float(box.conf[0])
+
+                    left_detections.append({
+                        'class_name': class_name,
+                        'bbox': [float(x1), float(y1), float(x2), float(y2)],
+                        'center': [float(cx), float(cy)],
+                        'confidence': confidence
+                    })
+
+            # 우측 YOLO 추론
+            right_yolo_results = yolo_model.predict(right_aligned_frame, conf=0.25, verbose=False)
+            if len(right_yolo_results) > 0 and len(right_yolo_results[0].boxes) > 0:
+                boxes = right_yolo_results[0].boxes
+                for box in boxes:
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+                    class_id = int(box.cls[0])
+                    class_name = yolo_model.names[class_id]
+                    confidence = float(box.conf[0])
+
+                    right_detections.append({
+                        'class_name': class_name,
+                        'bbox': [float(x1), float(y1), float(x2), float(y2)],
+                        'center': [float(cx), float(cy)],
+                        'confidence': confidence
+                    })
+
+        inference_time = (time.time() - inference_time_start) * 1000  # ms
+        logger.info(f"YOLO 추론 완료 (좌: {len(left_detections)}개, 우: {len(right_detections)}개, 소요 시간: {inference_time:.2f}ms)")
+
+        # 4-4. 컴포넌트 위치 검증
+        verification_time_start = time.time()
+
+        left_verification = None
+        right_verification = None
+
+        if component_verifier_left is not None and left_alignment_info['success']:
+            left_verification = component_verifier_left.verify_components(left_detections, debug=False)
+            logger.info(f"좌측 컴포넌트 검증 완료: 정상 {left_verification['summary']['correct_count']}개, "
+                       f"위치오류 {left_verification['summary']['misplaced_count']}개, "
+                       f"누락 {left_verification['summary']['missing_count']}개")
+
+        if component_verifier_right is not None and right_alignment_info['success']:
+            right_verification = component_verifier_right.verify_components(right_detections, debug=False)
+            logger.info(f"우측 컴포넌트 검증 완료: 정상 {right_verification['summary']['correct_count']}개, "
+                       f"위치오류 {right_verification['summary']['misplaced_count']}개, "
+                       f"누락 {right_verification['summary']['missing_count']}개")
+
+        verification_time = (time.time() - verification_time_start) * 1000  # ms
+        logger.info(f"컴포넌트 검증 완료 (소요 시간: {verification_time:.2f}ms)")
+
+        # 4-5. 최종 불량 판정
         final_defect_type = "정상"
-        final_confidence = min(left_result['confidence'], right_result['confidence'])
+        final_confidence = 0.95
+
+        # 치명적 불량 체크
+        if left_verification is not None:
+            is_critical, reason = component_verifier_left.is_critical_defect(left_verification)
+            if is_critical:
+                final_defect_type = "부품불량"
+                final_confidence = 0.85
+                logger.warning(f"좌측 치명적 불량: {reason}")
+
+        if right_verification is not None:
+            is_critical, reason = component_verifier_right.is_critical_defect(right_verification)
+            if is_critical:
+                final_defect_type = "부품불량"
+                final_confidence = 0.85
+                logger.warning(f"우측 치명적 불량: {reason}")
+
+        # 결과 구조화
+        left_result = {
+            'defect_type': final_defect_type if left_verification and component_verifier_left.is_critical_defect(left_verification)[0] else '정상',
+            'confidence': final_confidence,
+            'boxes': left_detections,
+            'alignment': left_alignment_info,
+            'verification': left_verification
+        }
+
+        right_result = {
+            'defect_type': final_defect_type if right_verification and component_verifier_right.is_critical_defect(right_verification)[0] else '정상',
+            'confidence': final_confidence,
+            'boxes': right_detections,
+            'alignment': right_alignment_info,
+            'verification': right_verification
+        }
 
         # 5. GPIO 핀 결정
         gpio_pin = get_gpio_pin(final_defect_type)
@@ -1455,8 +1641,8 @@ def handle_disconnect():
         # 1. 세션 관련 리소스 정리
         # (필요시 세션별 추적 데이터 삭제)
 
-        # 2. eventlet 소켓 정리 강제 실행
-        eventlet.sleep(0)  # greenlet 스위칭으로 정리 작업 완료 보장
+        # 2. threading 모드에서는 소켓 정리 자동 처리
+        # eventlet.sleep(0)  # (eventlet 모드 전용, threading에서는 불필요)
 
         logger.info(f"[WebSocket] 세션 {session_id} 리소스 정리 완료")
     except Exception as e:
@@ -1525,18 +1711,19 @@ def handle_frame_request(data):
 
 
 if __name__ == '__main__':
-    logger.info("Flask 추론 서버 시작 (SocketIO + eventlet 활성화)...")
+    logger.info("Flask 추론 서버 시작 (SocketIO + threading 활성화)...")
     logger.info("포트: 5000")
     logger.info("호스트: 0.0.0.0 (모든 인터페이스)")
     logger.info("WebSocket 엔드포인트: ws://0.0.0.0:5000/socket.io/")
-    logger.info("비동기 모드: eventlet (프로덕션 모드, 소켓 누수 방지) ⭐")
+    logger.info("비동기 모드: threading (YOLO/OpenCV 안정성 우선) ⭐")
 
-    # SocketIO로 실행 (eventlet 서버 사용)
+    # SocketIO로 실행 (threading 서버 사용)
     socketio.run(
         app,
         host='0.0.0.0',  # 외부 접근 허용
         port=5000,
         debug=False,     # 프로덕션 모드
         use_reloader=False,  # 자동 재시작 비활성화 (프로덕션)
-        log_output=True   # 로그 출력 활성화
+        log_output=True,  # 로그 출력 활성화
+        allow_unsafe_werkzeug=True  # Werkzeug 프로덕션 경고 무시 (threading 모드)
     )
