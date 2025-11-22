@@ -45,7 +45,7 @@
             pb_LINE1PCBFRONT.BackColor = Color.FromArgb(128, 128, 255);
             pb_LINE1PCBFRONT.Location = new Point(52, 40);
             pb_LINE1PCBFRONT.Name = "pb_LINE1PCBFRONT";
-            pb_LINE1PCBFRONT.Size = new Size(640, 616);
+            pb_LINE1PCBFRONT.Size = new Size(640, 640);
             pb_LINE1PCBFRONT.TabIndex = 0;
             pb_LINE1PCBFRONT.TabStop = false;
             // 
@@ -94,7 +94,7 @@
             pb_LINE1PCBBACK.BackColor = Color.FromArgb(128, 128, 255);
             pb_LINE1PCBBACK.Location = new Point(52, 40);
             pb_LINE1PCBBACK.Name = "pb_LINE1PCBBACK";
-            pb_LINE1PCBBACK.Size = new Size(640, 616);
+            pb_LINE1PCBBACK.Size = new Size(640, 640);
             pb_LINE1PCBBACK.TabIndex = 0;
             pb_LINE1PCBBACK.TabStop = false;
             // 
