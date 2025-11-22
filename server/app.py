@@ -221,7 +221,11 @@ def predict_test():
                     'error': 'Invalid image data: failed to decode'
                 }), 400
 
-            logger.info(f"[TEST] 프레임 수신 성공: {camera_id} (shape: {frame.shape})")
+            logger.info(f"[TEST] 프레임 수신 성공: {camera_id} (원본 shape: {frame.shape})")
+
+            # 중앙 크롭 (640x480 → 640x640) ⭐⭐⭐
+            frame = crop_to_square(frame, target_size=640)
+            logger.info(f"[TEST] 중앙 크롭 완료: {camera_id} (크롭 후 shape: {frame.shape})")
 
         except Exception as decode_error:
             return jsonify({
@@ -950,6 +954,49 @@ def get_latest_results():
 
 
 # 유틸리티 함수
+def crop_to_square(frame, target_size=640):
+    """
+    프레임을 정사각형으로 중앙 크롭 후 리사이즈
+
+    대부분의 웹캠은 640x480 (4:3) 해상도를 사용하므로,
+    중앙 480x480을 크롭한 후 640x640으로 리사이즈합니다.
+
+    Args:
+        frame: 입력 프레임 (예: 640x480)
+        target_size: 목표 크기 (기본값: 640)
+
+    Returns:
+        정사각형 프레임 (target_size x target_size)
+
+    Example:
+        640x480 입력 → 중앙 480x480 크롭 → 640x640 리사이즈
+        (좌우 80픽셀씩 제거)
+    """
+    height, width = frame.shape[:2]
+
+    # 이미 정사각형이면 그대로 리사이즈
+    if height == width:
+        if height != target_size:
+            return cv2.resize(frame, (target_size, target_size), interpolation=cv2.INTER_LINEAR)
+        return frame
+
+    # 중앙 크롭 (짧은 쪽 기준)
+    crop_size = min(height, width)
+
+    # 중앙 시작 위치 계산
+    start_x = (width - crop_size) // 2
+    start_y = (height - crop_size) // 2
+
+    # 크롭
+    cropped = frame[start_y:start_y + crop_size, start_x:start_x + crop_size]
+
+    # 리사이즈
+    if crop_size != target_size:
+        cropped = cv2.resize(cropped, (target_size, target_size), interpolation=cv2.INTER_LINEAR)
+
+    return cropped
+
+
 def detect_pcb_roi(frame):
     """
     초록색 PCB 자동 감지 및 내부 ROI 추출
@@ -1420,14 +1467,14 @@ def handle_frame_request(data):
         with frame_lock:
             frame = latest_frames.get(camera_id)
 
-        # 프레임이 없으면 더미 프레임 생성
+        # 프레임이 없으면 더미 프레임 생성 (640x640 정사각형)
         if frame is None:
-            dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            dummy_frame = np.zeros((640, 640, 3), dtype=np.uint8)
             dummy_frame[:] = (50, 50, 50)  # 어두운 회색
             cv2.putText(dummy_frame, f"Waiting for {camera_id} camera...",
-                       (100, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                       (100, 320), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
             frame = dummy_frame
-            logger.debug(f"[WebSocket] {camera_id} 프레임 없음 → 더미 프레임 전송")
+            logger.debug(f"[WebSocket] {camera_id} 프레임 없음 → 더미 프레임 전송 (640x640)")
 
         # JPEG 인코딩 - Baseline 형식 강제 (C# 호환성)
         encode_params = [
