@@ -8,10 +8,10 @@ PCB 불량 검사 Flask 추론 서버
     flask --app server/app run --host=0.0.0.0 --port=5000
 """
 
-# eventlet monkey patching (SocketIO 소켓 누수 방지) ⭐⭐⭐
-# 반드시 다른 import보다 먼저 실행되어야 함
-import eventlet
-eventlet.monkey_patch()
+# eventlet monkey patching 제거 (YOLO + OpenCV와 충돌) ⚠️
+# threading 모드로 변경하여 안정성 확보
+# import eventlet
+# eventlet.monkey_patch()
 
 from flask import Flask, request, jsonify, Response, render_template_string
 from flask_cors import CORS
@@ -49,7 +49,7 @@ CORS(app)  # C# WinForms 연동을 위한 CORS 활성화
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",  # 모든 Origin 허용 (프로덕션에서는 제한 필요)
-    async_mode='eventlet',      # eventlet 모드 (프로덕션 권장, 소켓 누수 방지) ⭐⭐⭐
+    async_mode='threading',     # threading 모드 (YOLO/OpenCV 안정성 우선) ⭐⭐⭐
     logger=True,                # 디버깅용 로그
     engineio_logger=True,       # Engine.IO 디버깅 로그
     # 소켓 타임아웃 설정 (좀비 연결 방지) ⭐
@@ -1455,8 +1455,8 @@ def handle_disconnect():
         # 1. 세션 관련 리소스 정리
         # (필요시 세션별 추적 데이터 삭제)
 
-        # 2. eventlet 소켓 정리 강제 실행
-        eventlet.sleep(0)  # greenlet 스위칭으로 정리 작업 완료 보장
+        # 2. threading 모드에서는 소켓 정리 자동 처리
+        # eventlet.sleep(0)  # (eventlet 모드 전용, threading에서는 불필요)
 
         logger.info(f"[WebSocket] 세션 {session_id} 리소스 정리 완료")
     except Exception as e:
@@ -1525,18 +1525,19 @@ def handle_frame_request(data):
 
 
 if __name__ == '__main__':
-    logger.info("Flask 추론 서버 시작 (SocketIO + eventlet 활성화)...")
+    logger.info("Flask 추론 서버 시작 (SocketIO + threading 활성화)...")
     logger.info("포트: 5000")
     logger.info("호스트: 0.0.0.0 (모든 인터페이스)")
     logger.info("WebSocket 엔드포인트: ws://0.0.0.0:5000/socket.io/")
-    logger.info("비동기 모드: eventlet (프로덕션 모드, 소켓 누수 방지) ⭐")
+    logger.info("비동기 모드: threading (YOLO/OpenCV 안정성 우선) ⭐")
 
-    # SocketIO로 실행 (eventlet 서버 사용)
+    # SocketIO로 실행 (threading 서버 사용)
     socketio.run(
         app,
         host='0.0.0.0',  # 외부 접근 허용
         port=5000,
         debug=False,     # 프로덕션 모드
         use_reloader=False,  # 자동 재시작 비활성화 (프로덕션)
-        log_output=True   # 로그 출력 활성화
+        log_output=True,  # 로그 출력 활성화
+        allow_unsafe_werkzeug=True  # Werkzeug 프로덕션 경고 무시 (threading 모드)
     )
