@@ -6,11 +6,20 @@
 좌측/우측 카메라로 각각 촬영하여 저장합니다.
 
 사용법:
-    # Interactive 모드 (GUI 프리뷰) - 권장!
+    # Interactive 모드 (GUI 프리뷰 + 파라미터 조정) - 권장!
     python3 capture_reference_pcb.py --side left --camera-id 0 --output ./reference_images
 
     # Headless 모드 (자동 촬영, GUI 없음)
     python3 capture_reference_pcb.py --side left --camera-id 0 --output ./reference_images --headless
+
+카메라 파라미터 조정 (Interactive 모드):
+    - GUI 창 우측에 트랙바가 나타남
+    - Brightness: 밝기 조절 (0-100)
+    - Contrast: 대비 조절 (0-100)
+    - Saturation: 채도 조절 (0-100)
+    - Exposure: 노출 (0=자동, 1-13=수동)
+    - Gain: 게인/감도 (0-100)
+    - 트랙바를 조정하면 실시간으로 카메라에 반영됨
 
 원격 접속 방법:
     1. VNC (권장):
@@ -43,6 +52,87 @@ try:
     cv2.destroyWindow("test")
 except:
     pass  # 백엔드 자동 선택
+
+
+# 카메라 파라미터 기본값
+DEFAULT_CAMERA_PARAMS = {
+    'brightness': 50,    # 밝기 (0-100)
+    'contrast': 50,      # 대비 (0-100)
+    'saturation': 50,    # 채도 (0-100)
+    'exposure': -1,      # 노출 (-13 ~ -1, -1=자동)
+    'gain': 0,           # 게인 (0-100)
+}
+
+
+def nothing(x):
+    """트랙바 콜백 (더미 함수)"""
+    pass
+
+
+def setup_camera_controls(window_name, cap):
+    """
+    카메라 파라미터 조정 트랙바 설정
+
+    Args:
+        window_name (str): OpenCV 창 이름
+        cap (cv2.VideoCapture): 카메라 객체
+    """
+    # 밝기 트랙바
+    cv2.createTrackbar('Brightness', window_name,
+                       DEFAULT_CAMERA_PARAMS['brightness'], 100, nothing)
+
+    # 대비 트랙바
+    cv2.createTrackbar('Contrast', window_name,
+                       DEFAULT_CAMERA_PARAMS['contrast'], 100, nothing)
+
+    # 채도 트랙바
+    cv2.createTrackbar('Saturation', window_name,
+                       DEFAULT_CAMERA_PARAMS['saturation'], 100, nothing)
+
+    # 노출 트랙바 (0=자동, 1-13=수동)
+    cv2.createTrackbar('Exposure (0=Auto)', window_name, 0, 13, nothing)
+
+    # 게인 트랙바
+    cv2.createTrackbar('Gain', window_name,
+                       DEFAULT_CAMERA_PARAMS['gain'], 100, nothing)
+
+    print("[INFO] 카메라 파라미터 조정 가이드:")
+    print("  - Brightness: 밝기 조절")
+    print("  - Contrast: 대비 조절")
+    print("  - Saturation: 채도 조절")
+    print("  - Exposure: 노출 (0=자동, 1-13=수동)")
+    print("  - Gain: 게인 (감도)")
+
+
+def apply_camera_params(cap, window_name):
+    """
+    트랙바 값을 읽어 카메라 파라미터 적용
+
+    Args:
+        cap (cv2.VideoCapture): 카메라 객체
+        window_name (str): OpenCV 창 이름
+    """
+    # 트랙바 값 읽기
+    brightness = cv2.getTrackbarPos('Brightness', window_name)
+    contrast = cv2.getTrackbarPos('Contrast', window_name)
+    saturation = cv2.getTrackbarPos('Saturation', window_name)
+    exposure_mode = cv2.getTrackbarPos('Exposure (0=Auto)', window_name)
+    gain = cv2.getTrackbarPos('Gain', window_name)
+
+    # 카메라 파라미터 적용
+    cap.set(cv2.CAP_PROP_BRIGHTNESS, brightness)
+    cap.set(cv2.CAP_PROP_CONTRAST, contrast)
+    cap.set(cv2.CAP_PROP_SATURATION, saturation)
+    cap.set(cv2.CAP_PROP_GAIN, gain)
+
+    # 노출 설정 (0=자동, 1-13=수동)
+    if exposure_mode == 0:
+        # 자동 노출
+        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.75)  # 자동 모드
+    else:
+        # 수동 노출
+        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # 수동 모드
+        cap.set(cv2.CAP_PROP_EXPOSURE, -exposure_mode)
 
 
 def capture_reference_images(side, camera_id, output_dir, num_images=5, headless=False, interval=2):
@@ -121,8 +211,18 @@ def capture_reference_images(side, camera_id, output_dir, num_images=5, headless
 
             window_name = f'Reference PCB Capture - {side.upper()}'
 
+            # 첫 번째 이미지일 때만 트랙바 설정
+            if i == 0:
+                # OpenCV 창 생성
+                cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+                # 카메라 파라미터 조정 트랙바 설정
+                setup_camera_controls(window_name, cap)
+
             # 프리뷰 루프
             while True:
+                # 트랙바 값을 카메라에 적용
+                apply_camera_params(cap, window_name)
+
                 ret, frame = cap.read()
                 if not ret:
                     print("[ERROR] 프레임을 읽을 수 없습니다.")
