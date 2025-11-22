@@ -99,6 +99,11 @@ latest_frames = {
     'left': None,
     'right': None
 }
+# JPEG 캐싱 (WebSocket 성능 최적화) ⭐
+latest_frames_jpeg = {
+    'left': None,  # Base64 encoded JPEG 문자열
+    'right': None
+}
 latest_results = {
     'left': {},
     'right': {}
@@ -327,6 +332,18 @@ def predict_test():
         # 뷰어를 위해 바운딩 박스가 그려진 프레임 저장
         with frame_lock:
             latest_frames[camera_id] = annotated_frame
+
+            # JPEG 인코딩 및 캐싱 (WebSocket 성능 최적화) ⭐
+            encode_params = [
+                cv2.IMWRITE_JPEG_QUALITY, 85,
+                cv2.IMWRITE_JPEG_PROGRESSIVE, 0,
+                cv2.IMWRITE_JPEG_OPTIMIZE, 1
+            ]
+            ret, buffer = cv2.imencode('.jpg', annotated_frame, encode_params)
+            if ret:
+                frame_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
+                latest_frames_jpeg[camera_id] = frame_base64
+                logger.debug(f"[TEST] JPEG 캐싱 완료: {camera_id} ({len(frame_base64)} bytes)")
 
         # 4. 추론 시간 계산
         inference_time_ms = (time.time() - start_time) * 1000
@@ -1463,45 +1480,44 @@ def handle_frame_request(data):
             emit('error', {'message': 'Invalid camera_id. Use "left" or "right"'})
             return
 
-        # 최신 프레임 가져오기
+        # 캐시된 JPEG 가져오기 (WebSocket 성능 최적화) ⭐
         with frame_lock:
-            frame = latest_frames.get(camera_id)
+            frame_base64 = latest_frames_jpeg.get(camera_id)
 
-        # 프레임이 없으면 더미 프레임 생성 (640x640 정사각형)
-        if frame is None:
+        # 캐시가 없으면 더미 프레임 생성 및 인코딩
+        if frame_base64 is None:
             dummy_frame = np.zeros((640, 640, 3), dtype=np.uint8)
             dummy_frame[:] = (50, 50, 50)  # 어두운 회색
             cv2.putText(dummy_frame, f"Waiting for {camera_id} camera...",
                        (100, 320), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-            frame = dummy_frame
+
+            # 더미 프레임 JPEG 인코딩
+            encode_params = [
+                cv2.IMWRITE_JPEG_QUALITY, 85,
+                cv2.IMWRITE_JPEG_PROGRESSIVE, 0,
+                cv2.IMWRITE_JPEG_OPTIMIZE, 1
+            ]
+            ret, buffer = cv2.imencode('.jpg', dummy_frame, encode_params)
+
+            if not ret:
+                logger.error(f"[WebSocket] JPEG 인코딩 실패: {camera_id}")
+                emit('error', {'message': 'JPEG encoding failed'})
+                return
+
+            frame_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
             logger.debug(f"[WebSocket] {camera_id} 프레임 없음 → 더미 프레임 전송 (640x640)")
-
-        # JPEG 인코딩 - Baseline 형식 강제 (C# 호환성)
-        encode_params = [
-            cv2.IMWRITE_JPEG_QUALITY, 85,        # 화질 85%
-            cv2.IMWRITE_JPEG_PROGRESSIVE, 0,     # Progressive JPEG 비활성화 (Baseline 강제)
-            cv2.IMWRITE_JPEG_OPTIMIZE, 1         # 허프만 테이블 최적화
-        ]
-        ret, buffer = cv2.imencode('.jpg', frame, encode_params)
-
-        if not ret:
-            logger.error(f"[WebSocket] JPEG 인코딩 실패: {camera_id}")
-            emit('error', {'message': 'JPEG encoding failed'})
-            return
-
-        # JPEG 바이너리를 Base64로 인코딩하여 전송 (C# 호환성)
-        frame_bytes = buffer.tobytes()
-        frame_base64 = base64.b64encode(frame_bytes).decode('utf-8')
+        else:
+            logger.debug(f"[WebSocket] {camera_id} 캐시된 JPEG 전송 (인코딩 생략)")
 
         # NOTE: 'frame' 필드명을 'frameData'로 변경하여 Flask-SocketIO의 binary 자동 변환 방지
         emit('frame_data', {
             'camera_id': camera_id,
             'frameData': frame_base64,  # 필드명 변경: frame → frameData
             'timestamp': time.time(),
-            'size': len(frame_bytes)
+            'size': len(frame_base64)  # Base64 문자열 길이
         })
 
-        logger.debug(f"[WebSocket] 프레임 전송 완료: {camera_id} ({len(frame_bytes)} bytes)")
+        logger.debug(f"[WebSocket] 프레임 전송 완료: {camera_id} ({len(frame_base64)} bytes)")
 
     except Exception as e:
         logger.error(f"[WebSocket] 프레임 요청 처리 실패: {str(e)}", exc_info=True)
