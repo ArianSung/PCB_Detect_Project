@@ -19,7 +19,7 @@ namespace pcb_monitoring_program.Views.Monitoring
         // SocketIO 클라이언트
         private SocketIOClient.SocketIO _socket;
 
-        // 프레임 요청 타이머 (100ms 간격 = 10 FPS)
+        // 프레임 요청 타이머 (33ms 간격 = 30 FPS)
         private System.Windows.Forms.Timer _frameRequestTimer;
 
         // 프레임 카운트
@@ -29,7 +29,7 @@ namespace pcb_monitoring_program.Views.Monitoring
         // 프레임 드롭을 위한 마지막 업데이트 시간 (UI 과부하 방지)
         private DateTime _lastLeftUpdate = DateTime.MinValue;
         private DateTime _lastRightUpdate = DateTime.MinValue;
-        private const int MIN_UPDATE_INTERVAL_MS = 200;  // 최소 200ms 간격 (요청 간격과 동일)
+        private const int MIN_UPDATE_INTERVAL_MS = 33;  // 최소 33ms 간격 (30 FPS)
 
         // Flask 서버 URL (나중에 config에서 읽도록 변경 예정)
         private const string SERVER_URL = "http://100.123.23.111:5000";
@@ -114,7 +114,7 @@ namespace pcb_monitoring_program.Views.Monitoring
                         string cameraId = data.camera_id;
                         string frameBase64 = data.frameData;
 
-                        // 프레임 드롭: 마지막 업데이트 후 100ms 이내면 스킵 (UI 과부하 방지)
+                        // 프레임 드롭: 마지막 업데이트 후 33ms 이내면 스킵 (UI 과부하 방지)
                         if (cameraId == "left")
                         {
                             if ((DateTime.Now - _lastLeftUpdate).TotalMilliseconds < MIN_UPDATE_INTERVAL_MS)
@@ -231,12 +231,12 @@ namespace pcb_monitoring_program.Views.Monitoring
             if (_frameRequestTimer == null)
             {
                 _frameRequestTimer = new System.Windows.Forms.Timer();
-                _frameRequestTimer.Interval = 200;  // 200ms (양쪽 카메라 요청 시 초당 10 FPS 총합)
+                _frameRequestTimer.Interval = 33;  // 33ms (양쪽 카메라 요청 시 초당 30 FPS)
                 _frameRequestTimer.Tick += OnFrameRequestTimerTick;
             }
 
             _frameRequestTimer.Start();
-            System.Diagnostics.Debug.WriteLine("[PCBMonitoringView] 프레임 요청 타이머 시작 (200ms 간격)");
+            System.Diagnostics.Debug.WriteLine("[PCBMonitoringView] 프레임 요청 타이머 시작 (33ms 간격, 30 FPS)");
         }
 
         private void StopFrameRequestTimer()
