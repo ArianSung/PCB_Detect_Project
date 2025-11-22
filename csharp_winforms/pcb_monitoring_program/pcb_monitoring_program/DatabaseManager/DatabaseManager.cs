@@ -7,10 +7,9 @@ using pcb_monitoring_program.DatabaseManager.Filters;
 
 namespace pcb_monitoring_program.DatabaseManager
 {
-    /// <summary>
     /// PCB 검사 시스템 데이터베이스 관리자
     /// MySQL 데이터베이스와의 모든 상호작용을 담당
-    /// </summary>
+    
     public class DatabaseManager : IDisposable
     {
         private readonly string _connectionString;
@@ -18,9 +17,7 @@ namespace pcb_monitoring_program.DatabaseManager
 
         #region 생성자 및 연결 관리
 
-        /// <summary>
         /// DatabaseManager 생성자
-        /// </summary>
         /// <param name="server">MySQL 서버 주소</param>
         /// <param name="database">데이터베이스 이름</param>
         /// <param name="user">사용자명</param>
@@ -30,17 +27,13 @@ namespace pcb_monitoring_program.DatabaseManager
             _connectionString = $"Server={server};Database={database};Uid={user};Pwd={password};CharSet=utf8mb4;";
         }
 
-        /// <summary>
         /// ConnectionString을 직접 사용하는 생성자
-        /// </summary>
         public DatabaseManager(string connectionString)
         {
             _connectionString = connectionString;
         }
 
-        /// <summary>
         /// 데이터베이스 연결 테스트
-        /// </summary>
         /// <returns>연결 성공 여부</returns>
         public bool TestConnection()
         {
@@ -68,9 +61,7 @@ namespace pcb_monitoring_program.DatabaseManager
 
         #region 검사 이력 (Inspections)
 
-        /// <summary>
         /// 검사 이력 조회 (페이징 및 필터 지원)
-        /// </summary>
         /// <param name="page">페이지 번호 (1부터 시작)</param>
         /// <param name="pageSize">페이지 크기</param>
         /// <param name="filter">필터 조건</param>
@@ -172,9 +163,7 @@ namespace pcb_monitoring_program.DatabaseManager
             return inspections;
         }
 
-        /// <summary>
         /// 특정 검사 ID로 검사 이력 조회
-        /// </summary>
         /// <param name="id">검사 ID</param>
         /// <returns>검사 이력 객체 (없으면 null)</returns>
         public Inspection GetInspectionById(int id)
@@ -230,9 +219,7 @@ namespace pcb_monitoring_program.DatabaseManager
             return null;
         }
 
-        /// <summary>
         /// 검사 이력 총 개수 조회 (필터 지원)
-        /// </summary>
         /// <param name="filter">필터 조건</param>
         /// <returns>총 개수</returns>
         public int GetTotalInspectionCount(InspectionFilter filter = null)
@@ -303,12 +290,143 @@ namespace pcb_monitoring_program.DatabaseManager
 
         #region 통계 (Statistics)
 
-        /// <summary>
         /// 기간별 통계 조회
-        /// </summary>
         /// <param name="startDate">시작 날짜</param>
         /// <param name="endDate">종료 날짜</param>
         /// <returns>통계 객체</returns>
+        public List<DailyStatistics> GetDailyStatisticsForYear(int year)    //민준코드
+        {
+            List<DailyStatistics> list = new List<DailyStatistics>();
+
+            DateTime startDate = new DateTime(year, 1, 1);
+            DateTime endDate = new DateTime(year, 12, 31);
+
+            try
+            {
+                using (MySqlConnection conn = new MySqlConnection(_connectionString))
+                {
+                    conn.Open();
+
+                    string query = @"
+                SELECT
+                    stat_date,
+                    total_inspections,
+                    normal_count,
+                    component_defect_count,
+                    solder_defect_count,
+                    discard_count,
+                    defect_rate,
+                    created_at,
+                    updated_at
+                FROM statistics_daily
+                WHERE stat_date BETWEEN @startDate AND @endDate
+                ORDER BY stat_date ASC";
+
+                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@startDate", startDate);
+                        cmd.Parameters.AddWithValue("@endDate", endDate);
+
+                        using (MySqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                var d = new DailyStatistics
+                                {
+                                    StatDate = reader.GetDateTime("stat_date").Date,
+                                    TotalInspections = reader.GetInt32("total_inspections"),
+                                    NormalCount = reader.GetInt32("normal_count"),
+                                    ComponentDefectCount = reader.GetInt32("component_defect_count"),
+                                    SolderDefectCount = reader.GetInt32("solder_defect_count"),
+                                    DiscardCount = reader.GetInt32("discard_count"),
+                                    DefectRate = reader.IsDBNull(reader.GetOrdinal("defect_rate"))
+                                                            ? 0.0
+                                                            : (double)reader.GetDecimal("defect_rate"),
+                                    CreatedAt = reader.GetDateTime("created_at"),
+                                    UpdatedAt = reader.GetDateTime("updated_at"),
+                                };
+
+                                list.Add(d);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex)
+            {
+                Console.WriteLine($"[일별 통계 조회 실패] {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[일별 통계 조회 오류] {ex.Message}");
+            }
+
+            return list;
+        }
+        public List<HourlyStatistics> GetHourlyStatistics(DateTime start, DateTime end)    //민준코드
+        {
+            var list = new List<HourlyStatistics>();
+
+            try
+            {
+                using (MySqlConnection conn = new MySqlConnection(_connectionString))
+                {
+                    conn.Open();
+
+                    string query = @"
+                SELECT
+                    stat_datetime,
+                    total_inspections,
+                    normal_count,
+                    component_defect_count,
+                    solder_defect_count,
+                    discard_count,
+                    created_at,
+                    updated_at
+                FROM statistics_hourly
+                WHERE stat_datetime >= @start AND stat_datetime < @end
+                ORDER BY stat_datetime;
+            ";
+
+                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@start", start);
+                        cmd.Parameters.AddWithValue("@end", end);
+
+                        using (MySqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                var item = new HourlyStatistics
+                                {
+                                    StatDatetime = reader.GetDateTime("stat_datetime"),
+                                    TotalInspections = reader.GetInt32("total_inspections"),
+                                    NormalCount = reader.GetInt32("normal_count"),
+                                    ComponentDefectCount = reader.GetInt32("component_defect_count"),
+                                    SolderDefectCount = reader.GetInt32("solder_defect_count"),
+                                    DiscardCount = reader.GetInt32("discard_count"),
+                                    CreatedAt = reader.GetDateTime("created_at"),
+                                    UpdatedAt = reader.GetDateTime("updated_at")
+                                };
+
+                                list.Add(item);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex)
+            {
+                Console.WriteLine($"[시간별 통계 조회 실패] {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[시간별 통계 조회 오류] {ex.Message}");
+            }
+
+            return list;
+        }
+
         public Statistics GetStatistics(DateTime startDate, DateTime endDate)
         {
             Statistics stats = new Statistics
@@ -370,9 +488,7 @@ namespace pcb_monitoring_program.DatabaseManager
 
         #region 사용자 관리 (Users)
 
-        /// <summary>
         /// 사용자 로그인 검증 (BCrypt 해싱)
-        /// </summary>
         /// <param name="username">사용자명</param>
         /// <param name="password">비밀번호 (평문)</param>
         /// <returns>로그인 성공 시 User 객체, 실패 시 null</returns>
@@ -436,9 +552,7 @@ namespace pcb_monitoring_program.DatabaseManager
             return null;
         }
 
-        /// <summary>
         /// 마지막 로그인 시간 업데이트
-        /// </summary>
         private void UpdateLastLogin(int userId)
         {
             try
@@ -467,9 +581,7 @@ namespace pcb_monitoring_program.DatabaseManager
 
         #region 상세 불량 통계 (Defect Details)
 
-        /// <summary>
         /// 상세 불량 유형별 통계 조회 (TOP N)
-        /// </summary>
         /// <param name="startDate">시작 날짜</param>
         /// <param name="endDate">종료 날짜</param>
         /// <param name="topN">상위 N개 (기본값: 7)</param>
@@ -537,9 +649,7 @@ namespace pcb_monitoring_program.DatabaseManager
 
         #region 불량률 추이 이력 (Defect Rate History)
 
-        /// <summary>
         /// 불량률 추이 이력 조회 (시간대별)
-        /// </summary>
         /// <param name="startDate">시작 날짜</param>
         /// <param name="endDate">종료 날짜</param>
         /// <returns>불량률 추이 이력 리스트</returns>
@@ -616,6 +726,60 @@ namespace pcb_monitoring_program.DatabaseManager
 
                 _disposed = true;
             }
+        }
+
+        #endregion
+
+        #region 박스 상태 (BoxStatus)
+
+        /// 모든 박스 상태 조회 (NORMAL / COMPONENT_DEFECT / SOLDER_DEFECT)
+        public List<BoxStatus> GetAllBoxStatus()
+        {
+            var list = new List<BoxStatus>();
+
+            try
+            {
+                using (var conn = new MySqlConnection(_connectionString))
+                {
+                    conn.Open();
+
+                    string sql = @"
+                SELECT
+                    id, box_id, category,
+                    current_slot, max_slots,
+                    is_full, total_pcb_count,
+                    created_at, last_updated
+                FROM box_status";
+
+                    using (var cmd = new MySqlCommand(sql, conn))
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            var item = new BoxStatus
+                            {
+                                Id = reader.GetInt32("id"),
+                                BoxId = reader.GetString("box_id"),
+                                Category = reader.GetString("category"),
+                                CurrentSlot = reader.GetInt32("current_slot"),
+                                MaxSlots = reader.GetInt32("max_slots"),
+                                IsFull = reader.GetBoolean("is_full"),
+                                TotalPcbCount = reader.GetInt32("total_pcb_count"),
+                                CreatedAt = reader.GetDateTime("created_at"),
+                                LastUpdated = reader.GetDateTime("last_updated")
+                            };
+
+                            list.Add(item);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[GetAllBoxStatus 실패] " + ex.Message);
+            }
+
+            return list;
         }
 
         #endregion

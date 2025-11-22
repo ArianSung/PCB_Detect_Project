@@ -28,31 +28,31 @@
         /// </summary>
         private void InitializeComponent()
         {
-            pictureBox1 = new PictureBox();
+            pb_LINE1PCBFRONT = new PictureBox();
             cardPCBFrontMonitoring = new Panel();
             label2 = new Label();
             cardPCBBackMonitoring = new Panel();
             label1 = new Label();
-            pictureBox2 = new PictureBox();
-            ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
+            pb_LINE1PCBBACK = new PictureBox();
+            ((System.ComponentModel.ISupportInitialize)pb_LINE1PCBFRONT).BeginInit();
             cardPCBFrontMonitoring.SuspendLayout();
             cardPCBBackMonitoring.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox2).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)pb_LINE1PCBBACK).BeginInit();
             SuspendLayout();
             // 
-            // pictureBox1
+            // pb_LINE1PCBFRONT
             // 
-            pictureBox1.BackColor = Color.FromArgb(128, 128, 255);
-            pictureBox1.Location = new Point(52, 40);
-            pictureBox1.Name = "pictureBox1";
-            pictureBox1.Size = new Size(640, 616);
-            pictureBox1.TabIndex = 0;
-            pictureBox1.TabStop = false;
+            pb_LINE1PCBFRONT.BackColor = Color.FromArgb(128, 128, 255);
+            pb_LINE1PCBFRONT.Location = new Point(52, 40);
+            pb_LINE1PCBFRONT.Name = "pb_LINE1PCBFRONT";
+            pb_LINE1PCBFRONT.Size = new Size(640, 616);
+            pb_LINE1PCBFRONT.TabIndex = 0;
+            pb_LINE1PCBFRONT.TabStop = false;
             // 
             // cardPCBFrontMonitoring
             // 
             cardPCBFrontMonitoring.Controls.Add(label2);
-            cardPCBFrontMonitoring.Controls.Add(pictureBox1);
+            cardPCBFrontMonitoring.Controls.Add(pb_LINE1PCBFRONT);
             cardPCBFrontMonitoring.Location = new Point(3, 3);
             cardPCBFrontMonitoring.Name = "cardPCBFrontMonitoring";
             cardPCBFrontMonitoring.Size = new Size(752, 682);
@@ -72,7 +72,7 @@
             // cardPCBBackMonitoring
             // 
             cardPCBBackMonitoring.Controls.Add(label1);
-            cardPCBBackMonitoring.Controls.Add(pictureBox2);
+            cardPCBBackMonitoring.Controls.Add(pb_LINE1PCBBACK);
             cardPCBBackMonitoring.Location = new Point(847, 3);
             cardPCBBackMonitoring.Name = "cardPCBBackMonitoring";
             cardPCBBackMonitoring.Size = new Size(752, 682);
@@ -89,14 +89,14 @@
             label1.TabIndex = 4;
             label1.Text = "LINE 1 PCB Back";
             // 
-            // pictureBox2
+            // pb_LINE1PCBBACK
             // 
-            pictureBox2.BackColor = Color.FromArgb(128, 128, 255);
-            pictureBox2.Location = new Point(52, 40);
-            pictureBox2.Name = "pictureBox2";
-            pictureBox2.Size = new Size(640, 616);
-            pictureBox2.TabIndex = 0;
-            pictureBox2.TabStop = false;
+            pb_LINE1PCBBACK.BackColor = Color.FromArgb(128, 128, 255);
+            pb_LINE1PCBBACK.Location = new Point(52, 40);
+            pb_LINE1PCBBACK.Name = "pb_LINE1PCBBACK";
+            pb_LINE1PCBBACK.Size = new Size(640, 616);
+            pb_LINE1PCBBACK.TabIndex = 0;
+            pb_LINE1PCBBACK.TabStop = false;
             // 
             // PCBMonitoringView
             // 
@@ -108,22 +108,22 @@
             Name = "PCBMonitoringView";
             Size = new Size(1600, 700);
             Load += PCBMonitoringView_Load;
-            ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
+            ((System.ComponentModel.ISupportInitialize)pb_LINE1PCBFRONT).EndInit();
             cardPCBFrontMonitoring.ResumeLayout(false);
             cardPCBFrontMonitoring.PerformLayout();
             cardPCBBackMonitoring.ResumeLayout(false);
             cardPCBBackMonitoring.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();
+            ((System.ComponentModel.ISupportInitialize)pb_LINE1PCBBACK).EndInit();
             ResumeLayout(false);
         }
 
         #endregion
 
-        private PictureBox pictureBox1;
+        private PictureBox pb_LINE1PCBFRONT;
         private Panel cardPCBFrontMonitoring;
         private Label label2;
         private Panel cardPCBBackMonitoring;
         private Label label1;
-        private PictureBox pictureBox2;
+        private PictureBox pb_LINE1PCBBACK;
     }
 }

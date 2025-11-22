@@ -84,7 +84,7 @@ db = DatabaseManager(**DB_CONFIG)
 # YOLO 모델 로드
 try:
     from ultralytics import YOLO
-    model_path = 'runs/detect/roboflow_pcb_balanced/weights/best.pt'
+    model_path = '../runs/detect/roboflow_pcb_balanced/weights/best.pt'
     yolo_model = YOLO(model_path)
     logger.info(f"✅ YOLO 모델 로드 완료: {model_path}")
     logger.info(f"   - 모델 타입: YOLOv11l")

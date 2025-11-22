@@ -73,7 +73,7 @@
             label2.AutoSize = true;
             label2.Font = new Font("맑은 고딕", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 129);
             label2.ForeColor = SystemColors.Window;
-            label2.Location = new Point(52, 26);
+            label2.Location = new Point(0, 0);
             label2.Name = "label2";
             label2.Size = new Size(179, 30);
             label2.TabIndex = 4;
@@ -262,7 +262,7 @@
             // 
             // lvAlarmHistory
             // 
-            lvAlarmHistory.BackColor = Color.Black;
+            lvAlarmHistory.BackColor = Color.FromArgb(44, 44, 44);
             lvAlarmHistory.Columns.AddRange(new ColumnHeader[] { columnHeader1, columnHeader2, columnHeader3, columnHeader4, columnHeader5 });
             lvAlarmHistory.ForeColor = Color.White;
             lvAlarmHistory.FullRowSelect = true;

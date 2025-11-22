@@ -40,10 +40,10 @@
             timerClock = new System.Windows.Forms.Timer(components);
             labelusername = new Label();
             labeluserauthority = new Label();
-            pictureBox2 = new PictureBox();
+            pictureBox_Main_user = new PictureBox();
             btnLogout = new Button();
             cardLogout = new Panel();
-            ((System.ComponentModel.ISupportInitialize)pictureBox2).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)pictureBox_Main_user).BeginInit();
             cardLogout.SuspendLayout();
             SuspendLayout();
             // 
@@ -162,18 +162,18 @@
             labeluserauthority.TabIndex = 10;
             labeluserauthority.Text = "[ 관리자 ]";
             // 
-            // pictureBox2
+            // pictureBox_Main_user
             // 
-            pictureBox2.BackColor = Color.FromArgb(44, 44, 44);
-            pictureBox2.ErrorImage = null;
-            pictureBox2.Image = Properties.Resources.Main_user_user_white;
-            pictureBox2.InitialImage = null;
-            pictureBox2.Location = new Point(3, 13);
-            pictureBox2.Name = "pictureBox2";
-            pictureBox2.Size = new Size(76, 90);
-            pictureBox2.SizeMode = PictureBoxSizeMode.Zoom;
-            pictureBox2.TabIndex = 11;
-            pictureBox2.TabStop = false;
+            pictureBox_Main_user.BackColor = Color.FromArgb(44, 44, 44);
+            pictureBox_Main_user.ErrorImage = null;
+            pictureBox_Main_user.Image = Properties.Resources.Main_user_user_white;
+            pictureBox_Main_user.InitialImage = null;
+            pictureBox_Main_user.Location = new Point(3, 13);
+            pictureBox_Main_user.Name = "pictureBox_Main_user";
+            pictureBox_Main_user.Size = new Size(76, 90);
+            pictureBox_Main_user.SizeMode = PictureBoxSizeMode.Zoom;
+            pictureBox_Main_user.TabIndex = 11;
+            pictureBox_Main_user.TabStop = false;
             // 
             // btnLogout
             // 
@@ -193,7 +193,7 @@
             // cardLogout
             // 
             cardLogout.BackColor = Color.FromArgb(44, 44, 44);
-            cardLogout.Controls.Add(pictureBox2);
+            cardLogout.Controls.Add(pictureBox_Main_user);
             cardLogout.Controls.Add(labeluserauthority);
             cardLogout.Controls.Add(labelusername);
             cardLogout.Controls.Add(btnLogout);
@@ -222,7 +222,7 @@
             Text = "PCB_Detect_Monitoring";
             WindowState = FormWindowState.Maximized;
             Load += MainForm_Load;
-            ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();
+            ((System.ComponentModel.ISupportInitialize)pictureBox_Main_user).EndInit();
             cardLogout.ResumeLayout(false);
             cardLogout.PerformLayout();
             ResumeLayout(false);
@@ -242,7 +242,7 @@
         private System.Windows.Forms.Timer timerClock;
         private Label labelusername;
         private Label labeluserauthority;
-        private PictureBox pictureBox2;
+        private PictureBox pictureBox_Main_user;
         private Button btnLogout;
         private Panel cardLogout;
     }

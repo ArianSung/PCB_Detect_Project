@@ -78,7 +78,6 @@ namespace pcb_monitoring_program.Views.Monitoring
             UiStyleHelper.AttachDropShadow(btnOhtCall, radius: 16, offset: 4);
 
             // ▼ 작업유형 콤보는 더이상 사용하지 않음 (숨김)
-            if (cmbJobType != null) cmbJobType.Visible = false;
 
             // OHT 대상 콤보
             cmbOhtId.Items.Clear();

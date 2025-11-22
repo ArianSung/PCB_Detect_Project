@@ -2,9 +2,7 @@ using System;
 
 namespace pcb_monitoring_program.DatabaseManager.Filters
 {
-    /// <summary>
     /// 검사 이력 필터 클래스
-    /// </summary>
     public class InspectionFilter
     {
         public DateTime? StartDate { get; set; }
@@ -20,9 +18,7 @@ namespace pcb_monitoring_program.DatabaseManager.Filters
             EndDate = DateTime.Now;
         }
 
-        /// <summary>
         /// 필터가 비어있는지 확인
-        /// </summary>
         public bool IsEmpty()
         {
             return !StartDate.HasValue &&

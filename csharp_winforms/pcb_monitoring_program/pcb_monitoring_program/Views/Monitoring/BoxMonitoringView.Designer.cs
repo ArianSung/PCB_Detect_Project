@@ -55,11 +55,11 @@
             // label2
             // 
             label2.AutoSize = true;
-            label2.Font = new Font("맑은 고딕", 12F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            label2.Font = new Font("맑은 고딕", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 129);
             label2.ForeColor = SystemColors.Window;
-            label2.Location = new Point(0, 0);
+            label2.Location = new Point(-3, 0);
             label2.Name = "label2";
-            label2.Size = new Size(189, 21);
+            label2.Size = new Size(248, 30);
             label2.TabIndex = 4;
             label2.Text = "LINE 1 BOX Monitoring";
             // 
@@ -75,11 +75,11 @@
             // label1
             // 
             label1.AutoSize = true;
-            label1.Font = new Font("맑은 고딕", 12F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            label1.Font = new Font("맑은 고딕", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 129);
             label1.ForeColor = SystemColors.Window;
             label1.Location = new Point(3, 0);
             label1.Name = "label1";
-            label1.Size = new Size(152, 21);
+            label1.Size = new Size(197, 30);
             label1.TabIndex = 6;
             label1.Text = "LINE 1 박스 적재율";
             // 
