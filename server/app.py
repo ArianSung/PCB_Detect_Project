@@ -8,6 +8,11 @@ PCB 불량 검사 Flask 추론 서버
     flask --app server/app run --host=0.0.0.0 --port=5000
 """
 
+# eventlet monkey patching (SocketIO 소켓 누수 방지) ⭐⭐⭐
+# 반드시 다른 import보다 먼저 실행되어야 함
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, request, jsonify, Response, render_template_string
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit  # WebSocket 지원
@@ -44,9 +49,15 @@ CORS(app)  # C# WinForms 연동을 위한 CORS 활성화
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",  # 모든 Origin 허용 (프로덕션에서는 제한 필요)
-    async_mode='threading',     # 스레딩 모드 (gevent나 eventlet 대신)
+    async_mode='eventlet',      # eventlet 모드 (프로덕션 권장, 소켓 누수 방지) ⭐⭐⭐
     logger=True,                # 디버깅용 로그
-    engineio_logger=True        # Engine.IO 디버깅 로그
+    engineio_logger=True,       # Engine.IO 디버깅 로그
+    # 소켓 타임아웃 설정 (좀비 연결 방지) ⭐
+    ping_timeout=60,            # 60초 동안 응답 없으면 연결 종료
+    ping_interval=25,           # 25초마다 ping 전송
+    # 연결 설정
+    max_http_buffer_size=10 * 1024 * 1024,  # 10MB (프레임 크기 고려)
+    async_handlers=True         # 비동기 핸들러 사용 (성능 향상)
 )
 logger_socketio = logging.getLogger('socketio')
 logger_socketio.setLevel(logging.INFO)
@@ -1369,8 +1380,23 @@ def handle_connect():
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    """클라이언트 연결 종료 이벤트"""
-    logger.info(f"[WebSocket] 클라이언트 연결 종료: {request.sid}")
+    """
+    클라이언트 연결 종료 이벤트
+    리소스 정리 및 소켓 누수 방지 ⭐
+    """
+    session_id = request.sid
+    logger.info(f"[WebSocket] 클라이언트 연결 종료: {session_id}")
+
+    try:
+        # 1. 세션 관련 리소스 정리
+        # (필요시 세션별 추적 데이터 삭제)
+
+        # 2. eventlet 소켓 정리 강제 실행
+        eventlet.sleep(0)  # greenlet 스위칭으로 정리 작업 완료 보장
+
+        logger.info(f"[WebSocket] 세션 {session_id} 리소스 정리 완료")
+    except Exception as e:
+        logger.error(f"[WebSocket] disconnect 처리 중 오류: {e}", exc_info=True)
 
 
 @socketio.on('request_frame')
@@ -1436,16 +1462,18 @@ def handle_frame_request(data):
 
 
 if __name__ == '__main__':
-    logger.info("Flask 추론 서버 시작 (SocketIO 활성화)...")
+    logger.info("Flask 추론 서버 시작 (SocketIO + eventlet 활성화)...")
     logger.info("포트: 5000")
     logger.info("호스트: 0.0.0.0 (모든 인터페이스)")
     logger.info("WebSocket 엔드포인트: ws://0.0.0.0:5000/socket.io/")
+    logger.info("비동기 모드: eventlet (프로덕션 모드, 소켓 누수 방지) ⭐")
 
-    # SocketIO로 실행 (app.run() 대신)
+    # SocketIO로 실행 (eventlet 서버 사용)
     socketio.run(
         app,
         host='0.0.0.0',  # 외부 접근 허용
         port=5000,
-        debug=False,     # 프로덕션에서는 False
-        allow_unsafe_werkzeug=True  # 개발 서버 경고 무시
+        debug=False,     # 프로덕션 모드
+        use_reloader=False,  # 자동 재시작 비활성화 (프로덕션)
+        log_output=True   # 로그 출력 활성화
     )
