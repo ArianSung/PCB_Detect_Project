@@ -47,7 +47,7 @@ namespace pcb_monitoring_program.Views.Monitoring
         // 프레임 드롭을 위한 마지막 업데이트 시간 (UI 과부하 방지)
         private DateTime _lastLeftUpdate = DateTime.MinValue;
         private DateTime _lastRightUpdate = DateTime.MinValue;
-        private const int MIN_UPDATE_INTERVAL_MS = 100;  // 최소 100ms 간격 (10 FPS 제한)
+        private const int MIN_UPDATE_INTERVAL_MS = 200;  // 최소 200ms 간격 (요청 간격과 동일)
 
         // Flask 서버 URL (나중에 config에서 읽도록 변경 예정)
         private const string SERVER_URL = "http://100.123.23.111:5000";
@@ -56,9 +56,9 @@ namespace pcb_monitoring_program.Views.Monitoring
         {
             InitializeComponent();
 
-            // PictureBox 설정
-            pb_LINE1PCBFRONT.SizeMode = PictureBoxSizeMode.Zoom;
-            pb_LINE1PCBBACK.SizeMode = PictureBoxSizeMode.Zoom;
+            // PictureBox 설정 (StretchImage: 고품질 스무딩 비활성화로 성능 향상)
+            pb_LINE1PCBFRONT.SizeMode = PictureBoxSizeMode.StretchImage;
+            pb_LINE1PCBBACK.SizeMode = PictureBoxSizeMode.StretchImage;
 
             // 더블 버퍼링 활성화 (깜빡거림 방지)
             EnableDoubleBuffering(pb_LINE1PCBFRONT);
@@ -249,12 +249,12 @@ namespace pcb_monitoring_program.Views.Monitoring
             if (_frameRequestTimer == null)
             {
                 _frameRequestTimer = new System.Windows.Forms.Timer();
-                _frameRequestTimer.Interval = 100;  // 100ms = 10 FPS
+                _frameRequestTimer.Interval = 200;  // 200ms (양쪽 카메라 요청 시 초당 10 FPS 총합)
                 _frameRequestTimer.Tick += OnFrameRequestTimerTick;
             }
 
             _frameRequestTimer.Start();
-            System.Diagnostics.Debug.WriteLine("[PCBMonitoringView] 프레임 요청 타이머 시작 (100ms 간격)");
+            System.Diagnostics.Debug.WriteLine("[PCBMonitoringView] 프레임 요청 타이머 시작 (200ms 간격)");
         }
 
         private void StopFrameRequestTimer()
