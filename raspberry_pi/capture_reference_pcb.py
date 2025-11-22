@@ -6,8 +6,27 @@
 좌측/우측 카메라로 각각 촬영하여 저장합니다.
 
 사용법:
+    # Interactive 모드 (GUI 프리뷰) - 권장!
     python3 capture_reference_pcb.py --side left --camera-id 0 --output ./reference_images
-    python3 capture_reference_pcb.py --side right --camera-id 0 --output ./reference_images
+
+    # Headless 모드 (자동 촬영, GUI 없음)
+    python3 capture_reference_pcb.py --side left --camera-id 0 --output ./reference_images --headless
+
+원격 접속 방법:
+    1. VNC (권장):
+       - 라즈베리파이: sudo raspi-config -> Interface Options -> VNC 활성화
+       - Windows/Mac: VNC Viewer 설치 (RealVNC)
+       - 접속: vnc://라즈베리파이IP:5900
+       - 스크립트 실행 시 OpenCV 창이 자동으로 나타남
+
+    2. 원격 데스크톱 (RDP):
+       - 라즈베리파이: sudo apt install xrdp
+       - Windows: 원격 데스크톱 연결 (mstsc.exe)
+       - Mac: Microsoft Remote Desktop 설치
+
+    3. SSH X11 forwarding:
+       - ssh -X pi@라즈베리파이
+       - DISPLAY 환경변수 확인: echo $DISPLAY
 """
 
 import cv2
@@ -17,8 +36,16 @@ import sys
 from datetime import datetime
 import time
 
+# GUI 백엔드 설정 (VNC/원격 데스크톱 환경 지원)
+# Qt, GTK 순서로 시도
+try:
+    cv2.namedWindow("test")
+    cv2.destroyWindow("test")
+except:
+    pass  # 백엔드 자동 선택
 
-def capture_reference_images(side, camera_id, output_dir, num_images=5):
+
+def capture_reference_images(side, camera_id, output_dir, num_images=5, headless=False, interval=2):
     """
     기준 PCB 이미지 촬영
 
@@ -27,6 +54,8 @@ def capture_reference_images(side, camera_id, output_dir, num_images=5):
         camera_id (int): 카메라 인덱스
         output_dir (str): 저장 디렉토리
         num_images (int): 촬영할 이미지 수 (기본 5장)
+        headless (bool): SSH 환경용 headless 모드 (GUI 없음)
+        interval (int): headless 모드에서 촬영 간격 (초)
 
     Returns:
         list: 저장된 이미지 파일 경로 리스트
@@ -57,6 +86,11 @@ def capture_reference_images(side, camera_id, output_dir, num_images=5):
 
     print(f"\n{'='*60}")
     print(f"기준 PCB 촬영 모드 ({side})")
+    if headless:
+        print(f"모드: Headless (SSH 환경용)")
+        print(f"촬영 간격: {interval}초")
+    else:
+        print(f"모드: Interactive (대화형)")
     print(f"{'='*60}")
     print(f"총 {num_images}장의 이미지를 촬영합니다.")
     print(f"PCB를 카메라 앞에 정확히 위치시켜주세요.")
@@ -64,50 +98,92 @@ def capture_reference_images(side, camera_id, output_dir, num_images=5):
 
     for i in range(num_images):
         print(f"\n[{i+1}/{num_images}] 촬영 준비...")
-        print("PCB 위치를 확인하고 Enter 키를 누르세요 (q: 종료)")
 
-        # 프리뷰 모드
-        while True:
+        if headless:
+            # Headless 모드: 자동 촬영
+            print(f"{interval}초 후 자동 촬영합니다...")
+
+            # 카운트다운
+            for countdown in range(interval, 0, -1):
+                print(f"  {countdown}초...", end='\r')
+                time.sleep(1)
+            print("  촬영!      ")
+
+            # 프레임 읽기
             ret, frame = cap.read()
             if not ret:
-                print("[ERROR] 프레임을 읽을 수 없습니다.")
+                print("[ERROR] 프레임 캡처 실패")
                 continue
+        else:
+            # Interactive 모드: GUI 프리뷰
+            print("GUI 창에서 PCB 위치를 확인하세요")
+            print("스페이스바: 촬영 | q: 종료")
 
-            # 화면에 가이드 표시 (콘솔 환경이므로 생략 가능)
-            display_frame = frame.copy()
-            cv2.putText(
-                display_frame,
-                f"[{i+1}/{num_images}] Press ENTER to capture, 'q' to quit",
-                (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (0, 255, 0),
-                2
-            )
+            window_name = f'Reference PCB Capture - {side.upper()}'
 
-            # 중앙 십자선 표시 (PCB 중앙 맞추기 가이드)
-            h, w = display_frame.shape[:2]
-            cv2.line(display_frame, (w//2, 0), (w//2, h), (0, 255, 0), 1)
-            cv2.line(display_frame, (0, h//2), (w, h//2), (0, 255, 0), 1)
+            # 프리뷰 루프
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    print("[ERROR] 프레임을 읽을 수 없습니다.")
+                    time.sleep(0.1)
+                    continue
 
-            # 라즈베리파이는 GUI가 없을 수 있으므로 imshow는 선택사항
-            # cv2.imshow(f'Reference PCB - {side}', display_frame)
+                # 화면에 가이드 표시
+                display_frame = frame.copy()
 
-            # 키 입력 대기 (콘솔 환경)
-            key = input("Enter를 누르면 촬영, 'q'를 입력하면 종료: ").strip().lower()
+                # 상단 텍스트
+                cv2.putText(
+                    display_frame,
+                    f"[{i+1}/{num_images}] SPACE: Capture | Q: Quit",
+                    (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (0, 255, 0),
+                    2
+                )
 
-            if key == 'q':
-                print("[INFO] 촬영을 중단합니다.")
-                cap.release()
-                return saved_files
-            elif key == '':  # Enter
-                break
+                # 중앙 십자선 (PCB 중앙 맞추기 가이드)
+                h, w = display_frame.shape[:2]
+                cv2.line(display_frame, (w//2, 0), (w//2, h), (0, 255, 0), 1)
+                cv2.line(display_frame, (0, h//2), (w, h//2), (0, 255, 0), 1)
 
-        # 촬영
-        ret, frame = cap.read()
-        if not ret:
-            print("[ERROR] 프레임 캡처 실패")
-            continue
+                # 코너 마커 (PCB 위치 가이드)
+                margin = 50
+                marker_size = 20
+                # 좌상단
+                cv2.line(display_frame, (margin, margin), (margin + marker_size, margin), (0, 255, 255), 2)
+                cv2.line(display_frame, (margin, margin), (margin, margin + marker_size), (0, 255, 255), 2)
+                # 우상단
+                cv2.line(display_frame, (w - margin, margin), (w - margin - marker_size, margin), (0, 255, 255), 2)
+                cv2.line(display_frame, (w - margin, margin), (w - margin, margin + marker_size), (0, 255, 255), 2)
+                # 좌하단
+                cv2.line(display_frame, (margin, h - margin), (margin + marker_size, h - margin), (0, 255, 255), 2)
+                cv2.line(display_frame, (margin, h - margin), (margin, h - margin - marker_size), (0, 255, 255), 2)
+                # 우하단
+                cv2.line(display_frame, (w - margin, h - margin), (w - margin - marker_size, h - margin), (0, 255, 255), 2)
+                cv2.line(display_frame, (w - margin, h - margin), (w - margin, h - margin - marker_size), (0, 255, 255), 2)
+
+                # GUI 창에 표시
+                cv2.imshow(window_name, display_frame)
+
+                # 키 입력 대기 (30ms)
+                key = cv2.waitKey(30) & 0xFF
+
+                if key == ord('q') or key == ord('Q'):
+                    print("[INFO] 촬영을 중단합니다.")
+                    cv2.destroyAllWindows()
+                    cap.release()
+                    return saved_files
+                elif key == ord(' '):  # 스페이스바
+                    print("  촬영!")
+                    break
+
+            # 촬영
+            ret, frame = cap.read()
+            if not ret:
+                print("[ERROR] 프레임 캡처 실패")
+                continue
 
         # 파일명 생성 (타임스탬프 포함)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -128,6 +204,7 @@ def capture_reference_images(side, camera_id, output_dir, num_images=5):
 
     # 정리
     cap.release()
+    cv2.destroyAllWindows()
 
     print(f"\n{'='*60}")
     print(f"촬영 완료!")
@@ -177,6 +254,19 @@ def main():
         help='촬영할 이미지 수 (기본값: 5)'
     )
 
+    parser.add_argument(
+        '--headless',
+        action='store_true',
+        help='Headless 모드 (SSH 환경용, GUI 없이 자동 촬영)'
+    )
+
+    parser.add_argument(
+        '--interval',
+        type=int,
+        default=2,
+        help='Headless 모드에서 촬영 간격 (초, 기본값: 2)'
+    )
+
     args = parser.parse_args()
 
     # 촬영 시작
@@ -184,7 +274,9 @@ def main():
         side=args.side,
         camera_id=args.camera_id,
         output_dir=args.output,
-        num_images=args.num_images
+        num_images=args.num_images,
+        headless=args.headless,
+        interval=args.interval
     )
 
     if saved_files:
