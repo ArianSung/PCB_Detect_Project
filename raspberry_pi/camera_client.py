@@ -34,7 +34,7 @@ CAMERA_INDEX = int(os.getenv('CAMERA_INDEX', 0))
 CAMERA_WIDTH = int(os.getenv('CAMERA_WIDTH', 640))
 CAMERA_HEIGHT = int(os.getenv('CAMERA_HEIGHT', 640))  # 640x640 정사각형 해상도
 JPEG_QUALITY = int(os.getenv('JPEG_QUALITY', 85))
-TARGET_FPS = int(os.getenv('CAMERA_FPS', 10))
+TARGET_FPS = int(os.getenv('CAMERA_FPS', 30))
 
 # 로깅 설정
 logging.basicConfig(
