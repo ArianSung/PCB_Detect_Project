@@ -109,10 +109,10 @@ def select_corner_holes(holes, debug=False):
     bottom_left = holes[np.argmax(holes[:, 1] - holes[:, 0])]
 
     corner_holes = [
-        tuple(top_left),
-        tuple(top_right),
-        tuple(bottom_right),
-        tuple(bottom_left)
+        (int(top_left[0]), int(top_left[1])),
+        (int(top_right[0]), int(top_right[1])),
+        (int(bottom_right[0]), int(bottom_right[1])),
+        (int(bottom_left[0]), int(bottom_left[1]))
     ]
 
     if debug:
