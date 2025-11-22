@@ -32,7 +32,7 @@ SERVER_URL = os.getenv('SERVER_URL', 'http://100.123.23.111:5000')
 CAMERA_ID = os.getenv('CAMERA_ID', 'left')
 CAMERA_INDEX = int(os.getenv('CAMERA_INDEX', 0))
 CAMERA_WIDTH = int(os.getenv('CAMERA_WIDTH', 640))
-CAMERA_HEIGHT = int(os.getenv('CAMERA_HEIGHT', 480))
+CAMERA_HEIGHT = int(os.getenv('CAMERA_HEIGHT', 640))  # 640x640 정사각형 해상도
 JPEG_QUALITY = int(os.getenv('JPEG_QUALITY', 85))
 TARGET_FPS = int(os.getenv('CAMERA_FPS', 10))
 
