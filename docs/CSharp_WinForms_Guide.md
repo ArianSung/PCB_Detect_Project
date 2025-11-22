@@ -26,6 +26,7 @@ MySql.Data (또는 MySqlConnector)
 Newtonsoft.Json
 LiveCharts.WinForms
 System.Net.Http (내장)
+SocketIOClient  # WebSocket 실시간 프레임 수신 ⭐
 ```
 
 ---
@@ -57,6 +58,9 @@ Install-Package Newtonsoft.Json
 # 차트 라이브러리
 Install-Package LiveCharts.WinForms
 Install-Package LiveCharts.Wpf
+
+# WebSocket 실시간 프레임 수신 ⭐
+Install-Package SocketIOClient
 ```
 
 ---
@@ -810,6 +814,163 @@ namespace PCB_Inspection_Monitor
     }
 }
 ```
+
+---
+
+## WebSocket 기반 실시간 프레임 수신 ⭐
+
+### 개요
+Flask-SocketIO 서버로부터 실시간 YOLO 검출 결과가 그려진 프레임을 WebSocket을 통해 수신합니다.
+
+### 장점
+- **낮은 오버헤드**: HTTP MJPEG 대비 ~95% 감소 (~10 bytes/frame)
+- **클라이언트 제어**: 100ms 간격으로 요청 → 백프레셔 제어
+- **양방향 통신**: 실시간 이벤트 수신 가능
+- **안정성**: 바운딩 박스 많을 때도 UI 멈춤 없음
+
+### 구현 예제
+
+#### 1. using 선언
+```csharp
+using SocketIOClient;
+using System.IO;
+using System.Drawing;
+using System.Threading.Tasks;
+```
+
+#### 2. 필드 선언
+```csharp
+public partial class PCBMonitoringView : UserControl
+{
+    private SocketIO _socket;
+    private System.Windows.Forms.Timer _frameRequestTimer;
+    private const string SERVER_URL = "http://100.96.79.71:5000";
+
+    // PictureBox
+    private PictureBox pb_LINE1PCBFRONT;  // 좌측 카메라
+    private PictureBox pb_LINE1PCBBACK;   // 우측 카메라
+}
+```
+
+#### 3. WebSocket 연결 및 이벤트 핸들러
+```csharp
+private async void InitializeWebSocket()
+{
+    try
+    {
+        // SocketIO 클라이언트 생성
+        _socket = new SocketIO(SERVER_URL);
+
+        // frame_data 이벤트 핸들러
+        _socket.On("frame_data", response =>
+        {
+            try
+            {
+                var cameraId = response.GetValue<string>("camera_id");
+                var frameBytes = response.GetValue<byte[]>("frame");
+
+                // JPEG 바이트 → Bitmap 변환
+                using (var ms = new MemoryStream(frameBytes))
+                using (var tempImage = Image.FromStream(ms))
+                {
+                    var bitmap = new Bitmap(tempImage);
+
+                    // UI 스레드에서 PictureBox 업데이트
+                    if (cameraId == "left")
+                    {
+                        UpdatePictureBox(pb_LINE1PCBFRONT, bitmap);
+                    }
+                    else if (cameraId == "right")
+                    {
+                        UpdatePictureBox(pb_LINE1PCBBACK, bitmap);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WebSocket] 프레임 수신 실패: {ex.Message}");
+            }
+        });
+
+        // 연결
+        await _socket.ConnectAsync();
+        Debug.WriteLine("[WebSocket] 연결 성공");
+
+        // 타이머 시작 (100ms 간격 = 10 FPS)
+        StartFrameRequestTimer();
+    }
+    catch (Exception ex)
+    {
+        MessageBox.Show($"WebSocket 연결 실패: {ex.Message}", "오류",
+            MessageBoxButtons.OK, MessageBoxIcon.Error);
+    }
+}
+```
+
+#### 4. 프레임 요청 타이머
+```csharp
+private void StartFrameRequestTimer()
+{
+    _frameRequestTimer = new System.Windows.Forms.Timer();
+    _frameRequestTimer.Interval = 100;  // 10 FPS
+    _frameRequestTimer.Tick += async (s, e) =>
+    {
+        try
+        {
+            // 양쪽 카메라 프레임 요청
+            await _socket.EmitAsync("request_frame", new { camera_id = "left" });
+            await _socket.EmitAsync("request_frame", new { camera_id = "right" });
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[WebSocket] 프레임 요청 실패: {ex.Message}");
+        }
+    };
+    _frameRequestTimer.Start();
+}
+```
+
+#### 5. PictureBox 업데이트 (UI 스레드)
+```csharp
+private void UpdatePictureBox(PictureBox pictureBox, Bitmap newFrame)
+{
+    if (pictureBox.InvokeRequired)
+    {
+        pictureBox.Invoke(new Action(() =>
+        {
+            var oldImage = pictureBox.Image;
+            pictureBox.Image = newFrame;
+            oldImage?.Dispose();
+        }));
+    }
+    else
+    {
+        var oldImage = pictureBox.Image;
+        pictureBox.Image = newFrame;
+        oldImage?.Dispose();
+    }
+}
+```
+
+#### 6. 정리 (Dispose)
+```csharp
+protected override void Dispose(bool disposing)
+{
+    if (disposing)
+    {
+        _frameRequestTimer?.Stop();
+        _frameRequestTimer?.Dispose();
+        _socket?.DisconnectAsync().Wait();
+        _socket?.Dispose();
+    }
+    base.Dispose(disposing);
+}
+```
+
+### 성능 최적화
+- **프레임 드롭**: UI 바쁠 때 요청 건너뛰기 (선택사항)
+- **더블 버퍼링**: PictureBox.DoubleBuffered = true
+- **메모리 관리**: oldImage?.Dispose()로 메모리 누수 방지
 
 ---
 
