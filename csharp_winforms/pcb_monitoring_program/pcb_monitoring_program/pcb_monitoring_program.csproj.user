@@ -40,9 +40,6 @@
     <Compile Update="Views\Monitoring\PCBLine3.cs">
       <SubType>UserControl</SubType>
     </Compile>
-    <Compile Update="Views\Monitoring\PCBMonitoringView.cs">
-      <SubType>UserControl</SubType>
-    </Compile>
     <Compile Update="Views\Settings\SettingView.cs">
       <SubType>UserControl</SubType>
     </Compile>

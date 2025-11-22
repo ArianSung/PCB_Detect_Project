@@ -161,6 +161,8 @@ namespace pcb_monitoring_program.Views.Monitoring
                                 // 복사본 생성 (원본은 스트림과 함께 해제되므로)
                                 Bitmap bitmap = new Bitmap(tempImage);
 
+                                //bitmap.Save(@"C:\Test.bmp");
+
                                 // UI 스레드에서 PictureBox 업데이트
                                 if (cameraId == "left")
                                 {
