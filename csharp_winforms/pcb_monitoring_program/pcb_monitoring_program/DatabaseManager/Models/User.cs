@@ -2,9 +2,7 @@ using System;
 
 namespace pcb_monitoring_program.DatabaseManager.Models
 {
-    /// <summary>
     /// 사용자 계정 모델
-    /// </summary>
     public class User
     {
         public int Id { get; set; }
@@ -23,9 +21,7 @@ namespace pcb_monitoring_program.DatabaseManager.Models
         }
     }
 
-    /// <summary>
     /// 사용자 권한 레벨
-    /// </summary>
     public enum UserRole
     {
         Admin,      // 관리자 - 모든 권한

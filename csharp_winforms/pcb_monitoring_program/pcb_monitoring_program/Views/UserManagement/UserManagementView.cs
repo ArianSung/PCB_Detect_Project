@@ -10,15 +10,23 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using pcb_monitoring_program.DatabaseManager.Repositories; // DB 연동
 
 namespace pcb_monitoring_program.Views.UserManagement
 {
     public partial class UserManagementView : UserControl
     {
         public event EventHandler OpenDetailsRequested;
+
+        private readonly UserRepository _userRepo = new UserRepository();
+
         public UserManagementView()
         {
             InitializeComponent();
+            this.Load += UserManagementView_Load;
+
+            TextBox_UM_ID.KeyDown += TextBox_UM_ID_KeyDown;
+            kComboBox_UM_Role.SelectedIndexChanged += kComboBox_UM_Role_SelectedIndexChanged;
         }
 
         private void StyleAllButtons(Control root)
@@ -43,6 +51,7 @@ namespace pcb_monitoring_program.Views.UserManagement
                     StyleAllButtons(ctrl);
             }
         }
+
         private void UserManagementView_Load(object sender, EventArgs e)
         {
 
@@ -64,24 +73,101 @@ namespace pcb_monitoring_program.Views.UserManagement
 
             StyleAllButtons(this);
 
-            DGV_UserManagement.Rows.Add("윤영서", "1", "temp1234","Admin", "활성", "2025-11-11 18:10");
-            DGV_UserManagement.Rows.Add("박민준", "2", "temp1234", "Operator", "활성", "2025-11-10 14:22");
-            DGV_UserManagement.Rows.Add("성요셉", "3", "temp1234", "Operator", "비활성", "2025-11-10 14:22");
-            DGV_UserManagement.Rows.Add("가대교", "4", "temp1234", "Operator", "활성", "2025-11-10 14:22");
-            DGV_UserManagement.Rows.Add("차승우", "5", "temp1234", "Operator", "활성", "2025-11-10 14:22");
-            DGV_UserManagement.Rows.Add("김찬송", "6", "temp1234", "Operator", "비활성", "2025-11-10 14:22");
-            DGV_UserManagement.Rows.Add("황장보", "7", "temp1234", "Operator", "활성", "2025-11-10 14:22");
-            DGV_UserManagement.Rows.Add("허주옥", "8", "temp1234", "Operator", "활성", "2025-11-10 14:22");
-            DGV_UserManagement.Rows.Add("이서연", "9", "temp1234", "Operator", "활성", "2025-11-10 14:22");
+            LoadUsersFromDB();
         }
-        private void btn_UserSearch_Click(object sender, EventArgs e)
-        {
 
+        private void LoadUsersFromDB()
+        {
+            var dt = _userRepo.GetAllUsers();   // DB에서 가져오기
+            DGV_UserManagement.DataSource = dt;
+
+            ApplyGridStyle();
+
+            DGV_UserManagement.ReadOnly = true;
+
+            // (선택) 줄바꿈 방지
+            DGV_UserManagement.DefaultCellStyle.WrapMode = DataGridViewTriState.False;
+        }
+
+        private void ApplyGridStyle()
+        {
+            // 🔒 읽기 전용
+            DGV_UserManagement.ReadOnly = true;
+
+            //// 🔄 자동 사이즈 끄고 직접 너비 지정
+            //DGV_UserManagement.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+            //DGV_UserManagement.ScrollBars = ScrollBars.Both;
+
+            //// 📏 열 헤더 + 너비 설정
+            //DGV_UserManagement.Columns["id"].HeaderText = "번호";
+            //DGV_UserManagement.Columns["id"].Width = 60;
+
+            //DGV_UserManagement.Columns["username"].HeaderText = "아이디";
+            //DGV_UserManagement.Columns["username"].Width = 160;
+
+            //DGV_UserManagement.Columns["full_name"].HeaderText = "사용자 이름";
+            //DGV_UserManagement.Columns["full_name"].Width = 160;
+
+            //DGV_UserManagement.Columns["role"].HeaderText = "권한";
+            //DGV_UserManagement.Columns["role"].Width = 160;
+
+            //DGV_UserManagement.Columns["status_text"].HeaderText = "상태";
+            //DGV_UserManagement.Columns["status_text"].Width = 80;
+
+            //DGV_UserManagement.Columns["last_login"].HeaderText = "마지막 로그인";
+            //DGV_UserManagement.Columns["last_login"].Width = 220;
+
+            //DGV_UserManagement.Columns["created_at"].HeaderText = "생성일";
+            //DGV_UserManagement.Columns["created_at"].Width = 220;
+
+            // 🔁 카드 안 폭에 맞춰서 열 자동으로 채우기
+            DGV_UserManagement.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            DGV_UserManagement.ScrollBars = ScrollBars.Vertical; // 가로 스크롤 안 쓰면 Vertical 만
+
+            // 열 헤더 텍스트
+            DGV_UserManagement.Columns["id"].HeaderText = "번호";
+            DGV_UserManagement.Columns["username"].HeaderText = "아이디";
+            DGV_UserManagement.Columns["full_name"].HeaderText = "사용자 이름";
+            DGV_UserManagement.Columns["role"].HeaderText = "권한";
+            DGV_UserManagement.Columns["status_text"].HeaderText = "상태";
+            DGV_UserManagement.Columns["last_login"].HeaderText = "마지막 로그인";
+            DGV_UserManagement.Columns["created_at"].HeaderText = "생성일";
+
+            // 🔢 너비 대신 FillWeight로 비율만 지정 (원하면)
+            DGV_UserManagement.Columns["id"].FillWeight = 40;
+            DGV_UserManagement.Columns["username"].FillWeight = 120;
+            DGV_UserManagement.Columns["full_name"].FillWeight = 120;
+            DGV_UserManagement.Columns["role"].FillWeight = 80;
+            DGV_UserManagement.Columns["status_text"].FillWeight = 80;
+            DGV_UserManagement.Columns["last_login"].FillWeight = 140;
+            DGV_UserManagement.Columns["created_at"].FillWeight = 140;
+
+            // 📅 날짜 포맷
+            DGV_UserManagement.Columns["last_login"].DefaultCellStyle.Format = "yyyy-MM-dd HH:mm";
+            DGV_UserManagement.Columns["created_at"].DefaultCellStyle.Format = "yyyy-MM-dd HH:mm";
         }
 
         private void btn_UserManage_Search_Click(object sender, EventArgs e)
         {
+            var result = PerformSearch();
 
+            switch (result)
+            {
+                case SearchResultStatus.AllLoaded:
+                    MessageBox.Show("전체 조회되었습니다.", "알림",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    break;
+
+                case SearchResultStatus.NoMatch:
+                    MessageBox.Show("없는 아이디 입니다.", "결과 없음",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    break;
+
+                case SearchResultStatus.HasResult:
+                    MessageBox.Show("조회되었습니다.", "알림",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    break;
+            }
         }
 
         private void btn_UserManage_AddUser_Click(object sender, EventArgs e)
@@ -95,6 +181,23 @@ namespace pcb_monitoring_program.Views.UserManagement
             UserManagementForm_AddUser form = new UserManagementForm_AddUser();
             form.StartPosition = FormStartPosition.CenterParent; // 부모 기준 중앙 정렬
             form.Show();
+        }
+
+        private void btn_UserManage_Refresh_Click(object sender, EventArgs e)
+        {
+            // 1. 텍스트박스 초기화
+            TextBox_UM_ID.Text = string.Empty;
+
+            // 2. 콤보박스 '전체'로 변경
+            if (kComboBox_UM_Role.Items.Count > 0)
+                kComboBox_UM_Role.SelectedIndex = 0;   // '전체'
+
+            // 3. 표 전체 다시 로드
+            LoadUsersFromDB();
+
+            // 4. 안내 메시지
+            MessageBox.Show("새로고침되었습니다.", "알림",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void btn_UserManage_EditUser_Click(object sender, EventArgs e)
@@ -120,9 +223,53 @@ namespace pcb_monitoring_program.Views.UserManagement
             MessageBox.Show("'윤영서'의 비밀번호가 'temp1234'로 리셋되었습니다.", "비밀번호 초기화", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
-        private void btn_UserManage_Refresh_Click(object sender, EventArgs e)
+        private void kComboBox_UM_Role_SelectedIndexChanged(object sender, EventArgs e)
         {
+            PerformSearch();
+        }
 
+        private void TextBox_UM_ID_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                btn_UserManage_Search.PerformClick();  // 검색 버튼 강제 클릭
+                e.SuppressKeyPress = true;             // 삑 소리/줄바꿈 방지
+            }
+        }
+
+        private enum SearchResultStatus
+        {
+            AllLoaded,   // 전체 목록 로드
+            NoMatch,     // 조건에 맞는 행 없음
+            HasResult    // 정상적으로 필터된 결과 있음
+        }
+
+        private SearchResultStatus PerformSearch()
+        {
+            string username = TextBox_UM_ID.Text.Trim();
+            string roleFilter = kComboBox_UM_Role.SelectedItem?.ToString() ?? "전체";
+
+            // ✅ 1) 조건이 아무것도 없고, 권한도 '전체'면 → 전체 로드
+            if (string.IsNullOrWhiteSpace(username) && roleFilter == "전체")
+            {
+                LoadUsersFromDB();
+                return SearchResultStatus.AllLoaded;
+            }
+
+            // ✅ 2) DB에서 조건 검색 (부분검색 + 권한 필터는 UserRepository에서 처리)
+            var dt = _userRepo.SearchUsers(username, roleFilter);
+
+            // ✅ 3) 결과 없음
+            if (dt.Rows.Count == 0)
+            {
+                DGV_UserManagement.DataSource = null;
+                return SearchResultStatus.NoMatch;
+            }
+
+            // ✅ 4) 결과 있음 → 그리드에 바인딩
+            DGV_UserManagement.DataSource = dt;
+            ApplyGridStyle();
+            return SearchResultStatus.HasResult;
         }
     }
 }

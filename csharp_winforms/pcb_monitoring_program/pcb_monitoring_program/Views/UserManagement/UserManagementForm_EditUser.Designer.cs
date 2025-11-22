@@ -29,318 +29,359 @@
         private void InitializeComponent()
         {
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(UserManagementForm_EditUser));
-            panel1 = new Panel();
+            cardEditUserBackground = new Panel();
             cardEditUser = new Panel();
-            pictureBox1 = new PictureBox();
-            panel2 = new Panel();
-            panel3 = new Panel();
-            panel4 = new Panel();
-            panel5 = new Panel();
-            kryptonComboBox1 = new ComponentFactory.Krypton.Toolkit.KryptonComboBox();
-            label6 = new Label();
-            btn_UserManage_cancel = new Button();
-            btn_UserManage_EditUser = new Button();
-            label5 = new Label();
-            panel6 = new Panel();
-            label4 = new Label();
-            textBox3 = new TextBox();
-            label3 = new Label();
-            textBox2 = new TextBox();
-            label2 = new Label();
-            textBox1 = new TextBox();
-            label1 = new Label();
-            userIdTextBox = new TextBox();
-            panel1.SuspendLayout();
+            CB_UM_Edit_Active_True = new CheckBox();
+            label_UM_ADD_Active = new Label();
+            panel_UM_Edit_Active = new Panel();
+            pictureBox_UM_Edit_User = new PictureBox();
+            panel_UM_Edit_NAME = new Panel();
+            panel_UM_Edit_ID = new Panel();
+            panel_UM_Edit_PW = new Panel();
+            panel_UM_Edit_VerifyPW = new Panel();
+            kComboBox_UM_Edit_Role = new ComponentFactory.Krypton.Toolkit.KryptonComboBox();
+            label_UM_Edit_AddUser = new Label();
+            btn_UM_Edit_cancel = new Button();
+            btn_UM_Edit_EditUser = new Button();
+            label_UM_Edit_Role = new Label();
+            panel_UM_Edit_Role = new Panel();
+            label_UM_Edit_VerifyPW = new Label();
+            textbox_UM_Edit_VerifyPW = new TextBox();
+            label_UM_Edit_PW = new Label();
+            textbox_UM_Edit_PW = new TextBox();
+            label_UM_Edit_Name = new Label();
+            textbox_UM_Edit_Name = new TextBox();
+            label_UM_Edit_ID = new Label();
+            textbox_UM_Edit_ID = new TextBox();
+            cardEditUserBackground.SuspendLayout();
             cardEditUser.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)kryptonComboBox1).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)pictureBox_UM_Edit_User).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)kComboBox_UM_Edit_Role).BeginInit();
             SuspendLayout();
             // 
-            // panel1
+            // cardEditUserBackground
             // 
-            panel1.BackColor = Color.FromArgb(64, 64, 64);
-            panel1.Controls.Add(cardEditUser);
-            panel1.Dock = DockStyle.Fill;
-            panel1.Location = new Point(0, 0);
-            panel1.Name = "panel1";
-            panel1.Size = new Size(1084, 761);
-            panel1.TabIndex = 2;
+            cardEditUserBackground.BackColor = Color.FromArgb(64, 64, 64);
+            cardEditUserBackground.Controls.Add(cardEditUser);
+            cardEditUserBackground.Dock = DockStyle.Fill;
+            cardEditUserBackground.Location = new Point(0, 0);
+            cardEditUserBackground.Name = "cardEditUserBackground";
+            cardEditUserBackground.Size = new Size(1084, 861);
+            cardEditUserBackground.TabIndex = 2;
             // 
             // cardEditUser
             // 
             cardEditUser.BackColor = Color.FromArgb(44, 44, 44);
-            cardEditUser.Controls.Add(pictureBox1);
-            cardEditUser.Controls.Add(panel2);
-            cardEditUser.Controls.Add(panel3);
-            cardEditUser.Controls.Add(panel4);
-            cardEditUser.Controls.Add(panel5);
-            cardEditUser.Controls.Add(kryptonComboBox1);
-            cardEditUser.Controls.Add(label6);
-            cardEditUser.Controls.Add(btn_UserManage_cancel);
-            cardEditUser.Controls.Add(btn_UserManage_EditUser);
-            cardEditUser.Controls.Add(label5);
-            cardEditUser.Controls.Add(panel6);
-            cardEditUser.Controls.Add(label4);
-            cardEditUser.Controls.Add(textBox3);
-            cardEditUser.Controls.Add(label3);
-            cardEditUser.Controls.Add(textBox2);
-            cardEditUser.Controls.Add(label2);
-            cardEditUser.Controls.Add(textBox1);
-            cardEditUser.Controls.Add(label1);
-            cardEditUser.Controls.Add(userIdTextBox);
-            cardEditUser.Location = new Point(241, 41);
+            cardEditUser.Controls.Add(CB_UM_Edit_Active_True);
+            cardEditUser.Controls.Add(label_UM_ADD_Active);
+            cardEditUser.Controls.Add(panel_UM_Edit_Active);
+            cardEditUser.Controls.Add(pictureBox_UM_Edit_User);
+            cardEditUser.Controls.Add(panel_UM_Edit_NAME);
+            cardEditUser.Controls.Add(panel_UM_Edit_ID);
+            cardEditUser.Controls.Add(panel_UM_Edit_PW);
+            cardEditUser.Controls.Add(panel_UM_Edit_VerifyPW);
+            cardEditUser.Controls.Add(kComboBox_UM_Edit_Role);
+            cardEditUser.Controls.Add(label_UM_Edit_AddUser);
+            cardEditUser.Controls.Add(btn_UM_Edit_cancel);
+            cardEditUser.Controls.Add(btn_UM_Edit_EditUser);
+            cardEditUser.Controls.Add(label_UM_Edit_Role);
+            cardEditUser.Controls.Add(panel_UM_Edit_Role);
+            cardEditUser.Controls.Add(label_UM_Edit_VerifyPW);
+            cardEditUser.Controls.Add(textbox_UM_Edit_VerifyPW);
+            cardEditUser.Controls.Add(label_UM_Edit_PW);
+            cardEditUser.Controls.Add(textbox_UM_Edit_PW);
+            cardEditUser.Controls.Add(label_UM_Edit_Name);
+            cardEditUser.Controls.Add(textbox_UM_Edit_Name);
+            cardEditUser.Controls.Add(label_UM_Edit_ID);
+            cardEditUser.Controls.Add(textbox_UM_Edit_ID);
+            cardEditUser.Location = new Point(240, 60);
             cardEditUser.Name = "cardEditUser";
-            cardEditUser.Size = new Size(665, 680);
+            cardEditUser.Size = new Size(665, 740);
             cardEditUser.TabIndex = 5;
             // 
-            // pictureBox1
+            // CB_UM_Edit_Active_True
             // 
-            pictureBox1.Image = (Image)resources.GetObject("pictureBox1.Image");
-            pictureBox1.Location = new Point(283, 14);
-            pictureBox1.Name = "pictureBox1";
-            pictureBox1.Size = new Size(100, 97);
-            pictureBox1.SizeMode = PictureBoxSizeMode.Zoom;
-            pictureBox1.TabIndex = 31;
-            pictureBox1.TabStop = false;
+            CB_UM_Edit_Active_True.AutoSize = true;
+            CB_UM_Edit_Active_True.Font = new Font("맑은 고딕", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            CB_UM_Edit_Active_True.ForeColor = Color.White;
+            CB_UM_Edit_Active_True.Location = new Point(223, 511);
+            CB_UM_Edit_Active_True.Name = "CB_UM_Edit_Active_True";
+            CB_UM_Edit_Active_True.Size = new Size(117, 41);
+            CB_UM_Edit_Active_True.TabIndex = 34;
+            CB_UM_Edit_Active_True.Text = "활성화";
+            CB_UM_Edit_Active_True.UseVisualStyleBackColor = true;
             // 
-            // panel2
+            // label_UM_ADD_Active
             // 
-            panel2.BackColor = Color.Silver;
-            panel2.ForeColor = Color.Silver;
-            panel2.Location = new Point(76, 238);
-            panel2.Name = "panel2";
-            panel2.Size = new Size(500, 4);
-            panel2.TabIndex = 30;
+            label_UM_ADD_Active.AutoSize = true;
+            label_UM_ADD_Active.Font = new Font("맑은 고딕", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            label_UM_ADD_Active.ForeColor = SystemColors.Window;
+            label_UM_ADD_Active.Location = new Point(76, 511);
+            label_UM_ADD_Active.Name = "label_UM_ADD_Active";
+            label_UM_ADD_Active.Size = new Size(71, 37);
+            label_UM_ADD_Active.TabIndex = 33;
+            label_UM_ADD_Active.Text = "상태";
             // 
-            // panel3
+            // panel_UM_Edit_Active
             // 
-            panel3.BackColor = Color.Silver;
-            panel3.ForeColor = Color.Silver;
-            panel3.Location = new Point(76, 324);
-            panel3.Name = "panel3";
-            panel3.Size = new Size(500, 4);
-            panel3.TabIndex = 29;
+            panel_UM_Edit_Active.BackColor = Color.Silver;
+            panel_UM_Edit_Active.ForeColor = Color.Silver;
+            panel_UM_Edit_Active.Location = new Point(76, 566);
+            panel_UM_Edit_Active.Name = "panel_UM_Edit_Active";
+            panel_UM_Edit_Active.Size = new Size(500, 4);
+            panel_UM_Edit_Active.TabIndex = 32;
             // 
-            // panel4
+            // pictureBox_UM_Edit_User
             // 
-            panel4.BackColor = Color.Silver;
-            panel4.ForeColor = Color.Silver;
-            panel4.Location = new Point(76, 408);
-            panel4.Name = "panel4";
-            panel4.Size = new Size(500, 4);
-            panel4.TabIndex = 28;
+            pictureBox_UM_Edit_User.Image = (Image)resources.GetObject("pictureBox_UM_Edit_User.Image");
+            pictureBox_UM_Edit_User.Location = new Point(283, 14);
+            pictureBox_UM_Edit_User.Name = "pictureBox_UM_Edit_User";
+            pictureBox_UM_Edit_User.Size = new Size(100, 97);
+            pictureBox_UM_Edit_User.SizeMode = PictureBoxSizeMode.Zoom;
+            pictureBox_UM_Edit_User.TabIndex = 31;
+            pictureBox_UM_Edit_User.TabStop = false;
             // 
-            // panel5
+            // panel_UM_Edit_NAME
             // 
-            panel5.BackColor = Color.Silver;
-            panel5.ForeColor = Color.Silver;
-            panel5.Location = new Point(76, 487);
-            panel5.Name = "panel5";
-            panel5.Size = new Size(500, 4);
-            panel5.TabIndex = 27;
+            panel_UM_Edit_NAME.BackColor = Color.Silver;
+            panel_UM_Edit_NAME.ForeColor = Color.Silver;
+            panel_UM_Edit_NAME.Location = new Point(76, 238);
+            panel_UM_Edit_NAME.Name = "panel_UM_Edit_NAME";
+            panel_UM_Edit_NAME.Size = new Size(500, 4);
+            panel_UM_Edit_NAME.TabIndex = 30;
             // 
-            // kryptonComboBox1
+            // panel_UM_Edit_ID
             // 
-            kryptonComboBox1.DropDownWidth = 200;
-            kryptonComboBox1.Location = new Point(223, 522);
-            kryptonComboBox1.Name = "kryptonComboBox1";
-            kryptonComboBox1.Size = new Size(340, 41);
-            kryptonComboBox1.StateCommon.ComboBox.Back.Color1 = Color.FromArgb(44, 44, 44);
-            kryptonComboBox1.StateCommon.ComboBox.Border.Color1 = Color.FromArgb(44, 44, 44);
-            kryptonComboBox1.StateCommon.ComboBox.Border.Color2 = Color.FromArgb(44, 44, 44);
-            kryptonComboBox1.StateCommon.ComboBox.Border.DrawBorders = ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Top | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Bottom | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Left | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Right;
-            kryptonComboBox1.StateCommon.ComboBox.Content.Color1 = Color.White;
-            kryptonComboBox1.StateCommon.ComboBox.Content.Font = new Font("맑은 고딕", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
-            kryptonComboBox1.TabIndex = 30;
-            kryptonComboBox1.Text = "전체";
+            panel_UM_Edit_ID.BackColor = Color.Silver;
+            panel_UM_Edit_ID.ForeColor = Color.Silver;
+            panel_UM_Edit_ID.Location = new Point(78, 320);
+            panel_UM_Edit_ID.Name = "panel_UM_Edit_ID";
+            panel_UM_Edit_ID.Size = new Size(500, 4);
+            panel_UM_Edit_ID.TabIndex = 29;
             // 
-            // label6
+            // panel_UM_Edit_PW
             // 
-            label6.AutoSize = true;
-            label6.Font = new Font("Arial", 36F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            label6.ForeColor = SystemColors.Window;
-            label6.Location = new Point(232, 103);
-            label6.Name = "label6";
-            label6.Size = new Size(221, 55);
-            label6.TabIndex = 18;
-            label6.Text = "Edit User";
+            panel_UM_Edit_PW.BackColor = Color.Silver;
+            panel_UM_Edit_PW.ForeColor = Color.Silver;
+            panel_UM_Edit_PW.Location = new Point(77, 402);
+            panel_UM_Edit_PW.Name = "panel_UM_Edit_PW";
+            panel_UM_Edit_PW.Size = new Size(500, 4);
+            panel_UM_Edit_PW.TabIndex = 28;
             // 
-            // btn_UserManage_cancel
+            // panel_UM_Edit_VerifyPW
             // 
-            btn_UserManage_cancel.BackColor = Color.FromArgb(44, 44, 44);
-            btn_UserManage_cancel.FlatAppearance.BorderSize = 0;
-            btn_UserManage_cancel.FlatStyle = FlatStyle.Flat;
-            btn_UserManage_cancel.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            btn_UserManage_cancel.ForeColor = Color.White;
-            btn_UserManage_cancel.Location = new Point(476, 603);
-            btn_UserManage_cancel.Name = "btn_UserManage_cancel";
-            btn_UserManage_cancel.Size = new Size(100, 50);
-            btn_UserManage_cancel.TabIndex = 29;
-            btn_UserManage_cancel.Text = "취소";
-            btn_UserManage_cancel.UseVisualStyleBackColor = false;
-            btn_UserManage_cancel.Click += btn_UserManage_cancel_Click;
+            panel_UM_Edit_VerifyPW.BackColor = Color.Silver;
+            panel_UM_Edit_VerifyPW.ForeColor = Color.Silver;
+            panel_UM_Edit_VerifyPW.Location = new Point(77, 484);
+            panel_UM_Edit_VerifyPW.Name = "panel_UM_Edit_VerifyPW";
+            panel_UM_Edit_VerifyPW.Size = new Size(500, 4);
+            panel_UM_Edit_VerifyPW.TabIndex = 27;
             // 
-            // btn_UserManage_EditUser
+            // kComboBox_UM_Edit_Role
             // 
-            btn_UserManage_EditUser.BackColor = Color.FromArgb(44, 44, 44);
-            btn_UserManage_EditUser.FlatAppearance.BorderSize = 0;
-            btn_UserManage_EditUser.FlatStyle = FlatStyle.Flat;
-            btn_UserManage_EditUser.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            btn_UserManage_EditUser.ForeColor = Color.White;
-            btn_UserManage_EditUser.Location = new Point(370, 603);
-            btn_UserManage_EditUser.Name = "btn_UserManage_EditUser";
-            btn_UserManage_EditUser.Size = new Size(100, 50);
-            btn_UserManage_EditUser.TabIndex = 28;
-            btn_UserManage_EditUser.Text = "수정";
-            btn_UserManage_EditUser.UseVisualStyleBackColor = false;
-            btn_UserManage_EditUser.Click += btn_UserManage_AddUser_Click;
+            kComboBox_UM_Edit_Role.DropDownWidth = 200;
+            kComboBox_UM_Edit_Role.Items.AddRange(new object[] { "admin", "operator", "viewer" });
+            kComboBox_UM_Edit_Role.Location = new Point(223, 595);
+            kComboBox_UM_Edit_Role.Name = "kComboBox_UM_Edit_Role";
+            kComboBox_UM_Edit_Role.Size = new Size(340, 41);
+            kComboBox_UM_Edit_Role.StateCommon.ComboBox.Back.Color1 = Color.FromArgb(44, 44, 44);
+            kComboBox_UM_Edit_Role.StateCommon.ComboBox.Border.Color1 = Color.FromArgb(44, 44, 44);
+            kComboBox_UM_Edit_Role.StateCommon.ComboBox.Border.Color2 = Color.FromArgb(44, 44, 44);
+            kComboBox_UM_Edit_Role.StateCommon.ComboBox.Border.DrawBorders = ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Top | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Bottom | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Left | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Right;
+            kComboBox_UM_Edit_Role.StateCommon.ComboBox.Content.Color1 = Color.White;
+            kComboBox_UM_Edit_Role.StateCommon.ComboBox.Content.Font = new Font("맑은 고딕", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            kComboBox_UM_Edit_Role.TabIndex = 30;
             // 
-            // label5
+            // label_UM_Edit_AddUser
             // 
-            label5.AutoSize = true;
-            label5.Font = new Font("맑은 고딕", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
-            label5.ForeColor = SystemColors.Window;
-            label5.Location = new Point(75, 515);
-            label5.Name = "label5";
-            label5.Size = new Size(71, 37);
-            label5.TabIndex = 27;
-            label5.Text = "권한";
+            label_UM_Edit_AddUser.AutoSize = true;
+            label_UM_Edit_AddUser.Font = new Font("Arial", 36F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            label_UM_Edit_AddUser.ForeColor = SystemColors.Window;
+            label_UM_Edit_AddUser.Location = new Point(232, 103);
+            label_UM_Edit_AddUser.Name = "label_UM_Edit_AddUser";
+            label_UM_Edit_AddUser.Size = new Size(221, 55);
+            label_UM_Edit_AddUser.TabIndex = 18;
+            label_UM_Edit_AddUser.Text = "Edit User";
             // 
-            // panel6
+            // btn_UM_Edit_cancel
             // 
-            panel6.BackColor = Color.Silver;
-            panel6.ForeColor = Color.Silver;
-            panel6.Location = new Point(76, 570);
-            panel6.Name = "panel6";
-            panel6.Size = new Size(500, 4);
-            panel6.TabIndex = 26;
+            btn_UM_Edit_cancel.BackColor = Color.FromArgb(44, 44, 44);
+            btn_UM_Edit_cancel.FlatAppearance.BorderSize = 0;
+            btn_UM_Edit_cancel.FlatStyle = FlatStyle.Flat;
+            btn_UM_Edit_cancel.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            btn_UM_Edit_cancel.ForeColor = Color.White;
+            btn_UM_Edit_cancel.Location = new Point(550, 671);
+            btn_UM_Edit_cancel.Name = "btn_UM_Edit_cancel";
+            btn_UM_Edit_cancel.Size = new Size(100, 50);
+            btn_UM_Edit_cancel.TabIndex = 29;
+            btn_UM_Edit_cancel.Text = "취소";
+            btn_UM_Edit_cancel.UseVisualStyleBackColor = false;
+            btn_UM_Edit_cancel.Click += btn_UM_Edit_cancel_Click;
             // 
-            // label4
+            // btn_UM_Edit_EditUser
             // 
-            label4.AutoSize = true;
-            label4.Font = new Font("맑은 고딕", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
-            label4.ForeColor = SystemColors.Window;
-            label4.Location = new Point(75, 430);
-            label4.Name = "label4";
-            label4.Size = new Size(121, 37);
-            label4.TabIndex = 24;
-            label4.Text = "PW 확인";
+            btn_UM_Edit_EditUser.BackColor = Color.FromArgb(44, 44, 44);
+            btn_UM_Edit_EditUser.FlatAppearance.BorderSize = 0;
+            btn_UM_Edit_EditUser.FlatStyle = FlatStyle.Flat;
+            btn_UM_Edit_EditUser.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            btn_UM_Edit_EditUser.ForeColor = Color.White;
+            btn_UM_Edit_EditUser.Location = new Point(433, 671);
+            btn_UM_Edit_EditUser.Name = "btn_UM_Edit_EditUser";
+            btn_UM_Edit_EditUser.Size = new Size(100, 50);
+            btn_UM_Edit_EditUser.TabIndex = 28;
+            btn_UM_Edit_EditUser.Text = "수정";
+            btn_UM_Edit_EditUser.UseVisualStyleBackColor = false;
+            btn_UM_Edit_EditUser.Click += btn_UM_Edit_EditUser_Click;
             // 
-            // textBox3
+            // label_UM_Edit_Role
             // 
-            textBox3.BackColor = Color.FromArgb(44, 44, 44);
-            textBox3.BorderStyle = BorderStyle.None;
-            textBox3.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            textBox3.ForeColor = SystemColors.Window;
-            textBox3.Location = new Point(223, 448);
-            textBox3.Name = "textBox3";
-            textBox3.Size = new Size(340, 37);
-            textBox3.TabIndex = 22;
+            label_UM_Edit_Role.AutoSize = true;
+            label_UM_Edit_Role.Font = new Font("맑은 고딕", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            label_UM_Edit_Role.ForeColor = SystemColors.Window;
+            label_UM_Edit_Role.Location = new Point(76, 590);
+            label_UM_Edit_Role.Name = "label_UM_Edit_Role";
+            label_UM_Edit_Role.Size = new Size(71, 37);
+            label_UM_Edit_Role.TabIndex = 27;
+            label_UM_Edit_Role.Text = "권한";
             // 
-            // label3
+            // panel_UM_Edit_Role
             // 
-            label3.AutoSize = true;
-            label3.Font = new Font("Arial", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            label3.ForeColor = SystemColors.Window;
-            label3.Location = new Point(75, 355);
-            label3.Name = "label3";
-            label3.Size = new Size(59, 32);
-            label3.TabIndex = 21;
-            label3.Text = "PW";
+            panel_UM_Edit_Role.BackColor = Color.Silver;
+            panel_UM_Edit_Role.ForeColor = Color.Silver;
+            panel_UM_Edit_Role.Location = new Point(76, 648);
+            panel_UM_Edit_Role.Name = "panel_UM_Edit_Role";
+            panel_UM_Edit_Role.Size = new Size(500, 4);
+            panel_UM_Edit_Role.TabIndex = 26;
             // 
-            // textBox2
+            // label_UM_Edit_VerifyPW
             // 
-            textBox2.BackColor = Color.FromArgb(44, 44, 44);
-            textBox2.BorderStyle = BorderStyle.None;
-            textBox2.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            textBox2.ForeColor = SystemColors.Window;
-            textBox2.Location = new Point(223, 368);
-            textBox2.Name = "textBox2";
-            textBox2.Size = new Size(340, 37);
-            textBox2.TabIndex = 19;
+            label_UM_Edit_VerifyPW.AutoSize = true;
+            label_UM_Edit_VerifyPW.Font = new Font("맑은 고딕", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            label_UM_Edit_VerifyPW.ForeColor = SystemColors.Window;
+            label_UM_Edit_VerifyPW.Location = new Point(76, 427);
+            label_UM_Edit_VerifyPW.Name = "label_UM_Edit_VerifyPW";
+            label_UM_Edit_VerifyPW.Size = new Size(121, 37);
+            label_UM_Edit_VerifyPW.TabIndex = 24;
+            label_UM_Edit_VerifyPW.Text = "PW 확인";
             // 
-            // label2
+            // textbox_UM_Edit_VerifyPW
             // 
-            label2.AutoSize = true;
-            label2.Font = new Font("Arial", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            label2.ForeColor = SystemColors.Window;
-            label2.Location = new Point(75, 275);
-            label2.Name = "label2";
-            label2.Size = new Size(42, 32);
-            label2.TabIndex = 18;
-            label2.Text = "ID";
+            textbox_UM_Edit_VerifyPW.BackColor = Color.FromArgb(44, 44, 44);
+            textbox_UM_Edit_VerifyPW.BorderStyle = BorderStyle.None;
+            textbox_UM_Edit_VerifyPW.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            textbox_UM_Edit_VerifyPW.ForeColor = SystemColors.Window;
+            textbox_UM_Edit_VerifyPW.Location = new Point(224, 444);
+            textbox_UM_Edit_VerifyPW.Name = "textbox_UM_Edit_VerifyPW";
+            textbox_UM_Edit_VerifyPW.Size = new Size(340, 37);
+            textbox_UM_Edit_VerifyPW.TabIndex = 22;
             // 
-            // textBox1
+            // label_UM_Edit_PW
             // 
-            textBox1.BackColor = Color.FromArgb(44, 44, 44);
-            textBox1.BorderStyle = BorderStyle.None;
-            textBox1.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            textBox1.ForeColor = SystemColors.Window;
-            textBox1.Location = new Point(224, 288);
-            textBox1.Name = "textBox1";
-            textBox1.Size = new Size(340, 37);
-            textBox1.TabIndex = 16;
+            label_UM_Edit_PW.AutoSize = true;
+            label_UM_Edit_PW.Font = new Font("Arial", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            label_UM_Edit_PW.ForeColor = SystemColors.Window;
+            label_UM_Edit_PW.Location = new Point(76, 348);
+            label_UM_Edit_PW.Name = "label_UM_Edit_PW";
+            label_UM_Edit_PW.Size = new Size(59, 32);
+            label_UM_Edit_PW.TabIndex = 21;
+            label_UM_Edit_PW.Text = "PW";
             // 
-            // label1
+            // textbox_UM_Edit_PW
             // 
-            label1.AutoSize = true;
-            label1.Font = new Font("맑은 고딕", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
-            label1.ForeColor = SystemColors.Window;
-            label1.Location = new Point(75, 185);
-            label1.Name = "label1";
-            label1.Size = new Size(71, 37);
-            label1.TabIndex = 15;
-            label1.Text = "이름";
+            textbox_UM_Edit_PW.BackColor = Color.FromArgb(44, 44, 44);
+            textbox_UM_Edit_PW.BorderStyle = BorderStyle.None;
+            textbox_UM_Edit_PW.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            textbox_UM_Edit_PW.ForeColor = SystemColors.Window;
+            textbox_UM_Edit_PW.Location = new Point(224, 362);
+            textbox_UM_Edit_PW.Name = "textbox_UM_Edit_PW";
+            textbox_UM_Edit_PW.Size = new Size(340, 37);
+            textbox_UM_Edit_PW.TabIndex = 19;
             // 
-            // userIdTextBox
+            // label_UM_Edit_Name
             // 
-            userIdTextBox.BackColor = Color.FromArgb(44, 44, 44);
-            userIdTextBox.BorderStyle = BorderStyle.None;
-            userIdTextBox.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            userIdTextBox.ForeColor = SystemColors.Window;
-            userIdTextBox.Location = new Point(223, 198);
-            userIdTextBox.Name = "userIdTextBox";
-            userIdTextBox.Size = new Size(340, 37);
-            userIdTextBox.TabIndex = 13;
+            label_UM_Edit_Name.AutoSize = true;
+            label_UM_Edit_Name.Font = new Font("맑은 고딕", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            label_UM_Edit_Name.ForeColor = SystemColors.Window;
+            label_UM_Edit_Name.Location = new Point(76, 264);
+            label_UM_Edit_Name.Name = "label_UM_Edit_Name";
+            label_UM_Edit_Name.Size = new Size(71, 37);
+            label_UM_Edit_Name.TabIndex = 18;
+            label_UM_Edit_Name.Text = "이름";
+            // 
+            // textbox_UM_Edit_Name
+            // 
+            textbox_UM_Edit_Name.BackColor = Color.FromArgb(44, 44, 44);
+            textbox_UM_Edit_Name.BorderStyle = BorderStyle.None;
+            textbox_UM_Edit_Name.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            textbox_UM_Edit_Name.ForeColor = SystemColors.Window;
+            textbox_UM_Edit_Name.Location = new Point(224, 280);
+            textbox_UM_Edit_Name.Name = "textbox_UM_Edit_Name";
+            textbox_UM_Edit_Name.Size = new Size(340, 37);
+            textbox_UM_Edit_Name.TabIndex = 16;
+            // 
+            // label_UM_Edit_ID
+            // 
+            label_UM_Edit_ID.AutoSize = true;
+            label_UM_Edit_ID.Font = new Font("Arial", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            label_UM_Edit_ID.ForeColor = SystemColors.Window;
+            label_UM_Edit_ID.Location = new Point(76, 185);
+            label_UM_Edit_ID.Name = "label_UM_Edit_ID";
+            label_UM_Edit_ID.Size = new Size(42, 32);
+            label_UM_Edit_ID.TabIndex = 15;
+            label_UM_Edit_ID.Text = "ID";
+            // 
+            // textbox_UM_Edit_ID
+            // 
+            textbox_UM_Edit_ID.BackColor = Color.FromArgb(44, 44, 44);
+            textbox_UM_Edit_ID.BorderStyle = BorderStyle.None;
+            textbox_UM_Edit_ID.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            textbox_UM_Edit_ID.ForeColor = SystemColors.Window;
+            textbox_UM_Edit_ID.Location = new Point(224, 198);
+            textbox_UM_Edit_ID.Name = "textbox_UM_Edit_ID";
+            textbox_UM_Edit_ID.Size = new Size(340, 37);
+            textbox_UM_Edit_ID.TabIndex = 13;
             // 
             // UserManagementForm_EditUser
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1084, 761);
-            Controls.Add(panel1);
+            ClientSize = new Size(1084, 861);
+            Controls.Add(cardEditUserBackground);
             Name = "UserManagementForm_EditUser";
             Text = "UserManagementForm_EditUser";
-            panel1.ResumeLayout(false);
+            cardEditUserBackground.ResumeLayout(false);
             cardEditUser.ResumeLayout(false);
             cardEditUser.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
-            ((System.ComponentModel.ISupportInitialize)kryptonComboBox1).EndInit();
+            ((System.ComponentModel.ISupportInitialize)pictureBox_UM_Edit_User).EndInit();
+            ((System.ComponentModel.ISupportInitialize)kComboBox_UM_Edit_Role).EndInit();
             ResumeLayout(false);
         }
 
         #endregion
 
-        private Panel panel1;
+        private Panel cardEditUserBackground;
         private Panel cardEditUser;
-        private PictureBox pictureBox1;
-        private Panel panel2;
-        private Panel panel3;
-        private Panel panel4;
-        private Panel panel5;
-        private ComponentFactory.Krypton.Toolkit.KryptonComboBox kryptonComboBox1;
-        private Label label6;
-        private Button btn_UserManage_cancel;
-        private Button btn_UserManage_EditUser;
-        private Label label5;
-        private Panel panel6;
-        private Label label4;
-        private TextBox textBox3;
-        private Label label3;
-        private TextBox textBox2;
-        private Label label2;
-        private TextBox textBox1;
-        private Label label1;
-        private TextBox userIdTextBox;
+        private PictureBox pictureBox_UM_Edit_User;
+        private Panel panel_UM_Edit_NAME;
+        private Panel panel_UM_Edit_ID;
+        private Panel panel_UM_Edit_PW;
+        private Panel panel_UM_Edit_VerifyPW;
+        private ComponentFactory.Krypton.Toolkit.KryptonComboBox kComboBox_UM_Edit_Role;
+        private Label label_UM_Edit_AddUser;
+        private Button btn_UM_Edit_cancel;
+        private Button btn_UM_Edit_EditUser;
+        private Label label_UM_Edit_Role;
+        private Panel panel_UM_Edit_Role;
+        private Label label_UM_Edit_VerifyPW;
+        private TextBox textbox_UM_Edit_VerifyPW;
+        private Label label_UM_Edit_PW;
+        private TextBox textbox_UM_Edit_PW;
+        private Label label_UM_Edit_Name;
+        private TextBox textbox_UM_Edit_Name;
+        private Label label_UM_Edit_ID;
+        private TextBox textbox_UM_Edit_ID;
+        private Panel panel_UM_Edit_Active;
+        private CheckBox CB_UM_Edit_Active_True;
+        private Label label_UM_ADD_Active;
     }
 }

@@ -2,9 +2,7 @@ using System;
 
 namespace pcb_monitoring_program.DatabaseManager.Models
 {
-    /// <summary>
     /// OHT (Overhead Hoist Transport) 운영 이력 모델
-    /// </summary>
     public class OHTOperation
     {
         public int Id { get; set; }
@@ -32,9 +30,7 @@ namespace pcb_monitoring_program.DatabaseManager.Models
         }
     }
 
-    /// <summary>
     /// OHT 카테고리 (수거할 PCB 종류)
-    /// </summary>
     public enum OHTCategory
     {
         NORMAL,             // 정상 PCB
@@ -42,9 +38,7 @@ namespace pcb_monitoring_program.DatabaseManager.Models
         SOLDER_DEFECT       // 납땜 불량 PCB
     }
 
-    /// <summary>
     /// OHT 운영 상태
-    /// </summary>
     public enum OHTStatus
     {
         Pending,      // 대기 중

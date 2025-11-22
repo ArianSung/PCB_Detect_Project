@@ -2,11 +2,9 @@ using System;
 
 namespace pcb_monitoring_program.DatabaseManager.Models
 {
-    /// <summary>
     /// 로봇팔 박스 상태 관리 모델
     /// 3개 박스 (정상/부품불량/납땜불량) × 5개 슬롯 = 15개 슬롯
     /// DISCARD는 슬롯 관리 안 함 (고정 위치에 떨어뜨리기)
-    /// </summary>
     public class BoxStatus
     {
         public int Id { get; set; }
@@ -29,9 +27,7 @@ namespace pcb_monitoring_program.DatabaseManager.Models
             LastUpdated = DateTime.Now;
         }
 
-        /// <summary>
         /// 슬롯 사용률 계산 (%)
-        /// </summary>
         public double GetUtilizationRate()
         {
             if (MaxSlots > 0)
@@ -41,9 +37,7 @@ namespace pcb_monitoring_program.DatabaseManager.Models
             return 0.0;
         }
 
-        /// <summary>
         /// 슬롯 사용 현황 문자열 (예: "3/5")
-        /// </summary>
         public string GetSlotStatus()
         {
             return $"{CurrentSlot + 1}/{MaxSlots}";

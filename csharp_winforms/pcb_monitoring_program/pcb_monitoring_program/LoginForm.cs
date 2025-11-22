@@ -10,12 +10,17 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
+using pcb_monitoring_program.DatabaseManager;
+using pcb_monitoring_program.DatabaseManager.Models;
+
 namespace pcb_monitoring_program
 {
     public partial class LoginForm : Form
     {
         public event EventHandler OpenDetailsRequested;
 
+        private int _failedLoginCount = 0;
+        private DateTime? _lockoutUntil = null;
         public LoginForm()
         {
             InitializeComponent();
@@ -43,54 +48,79 @@ namespace pcb_monitoring_program
 
         private void btn_login_Click(object sender, EventArgs e)
         {
-            string enteredUserId = userIdTextBox.Text;
-            string enteredPassword = passwordTextBox.Text;
+            string enteredUserId = userIdTextBox.Text.Trim();      // ← username
+            string enteredPassword = passwordTextBox.Text;         // ← 평문 비번
 
-            // TODO: 🚨 실제 비밀번호는 해시 처리 필요! 
-            // 현재는 테스트를 위해 평문(qwer)을 가정합니다.
-
-            // 1. 데이터베이스 연결 문자열 (이 부분은 사용자 환경에 맞게 수정해야 합니다.)
-            string connectionString = "Server=localhost;Database=userdb;Uid=root;Pwd=moble;";
-
-            // 2. SQL 쿼리 작성 (변경 없음)
-            string query = "SELECT role FROM users WHERE user_id = @userId AND password = @password";
-
-            using (MySqlConnection connection = new MySqlConnection(connectionString))
+            if (_lockoutUntil.HasValue && DateTime.Now < _lockoutUntil.Value)
             {
-                try
+                var remaining = _lockoutUntil.Value - DateTime.Now;
+                int seconds = (int)Math.Ceiling(remaining.TotalSeconds);
+                MessageBox.Show(
+                    $"로그인 시도가 잠겨 있습니다.\n{seconds}초 후에 다시 시도해주세요.",
+                    "로그인 잠금",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(enteredUserId) || string.IsNullOrEmpty(enteredPassword))
+            {
+                MessageBox.Show("아이디와 비밀번호를 입력하세요.", "로그인 실패");
+                return;
+            }
+
+            try
+            {
+                // ✅ 새 DB (pcb_inspection)용 연결 문자열
+                string connectionString = "Server=100.80.24.53;Port=3306;Database=pcb_inspection;Uid=pcb_admin;Pwd=1234;CharSet=utf8mb4;";
+
+                // ✅ DatabaseManager 사용해서 로그인 검증
+                using (var db = new DatabaseManager.DatabaseManager(connectionString))
                 {
-                    connection.Open();
-                    MySqlCommand command = new MySqlCommand(query, connection);
+                    // 여기서 username / password 넘기면 내부에서 bcrypt로 검증해줌
+                    User user = db.ValidateLogin(enteredUserId, enteredPassword);
 
-                    // 3. 파라미터 값 설정 (변경 없음)
-                    command.Parameters.AddWithValue("@userId", enteredUserId);
-                    // ⚠️ 여기서 실제로는 enteredPassword를 해시하여 DB의 해시 값과 비교해야 합니다!
-                    command.Parameters.AddWithValue("@password", enteredPassword);
-
-                    // 4. 쿼리 실행 및 결과 가져오기 (이하 변경 없음)
-                    object result = command.ExecuteScalar();
-
-                    if (result != null)
+                    if (user != null)
                     {
                         // 로그인 성공!
-                        string userRole = result.ToString();
-                        MessageBox.Show($"{userRole} 권한으로 로그인 성공!", "로그인 성공");
+                        MessageBox.Show($"{user.Role} 권한으로 로그인 성공!", "로그인 성공");
 
-                        // 5. Form2 열기 및 Form1 숨기기
-                        MainForm nextForm = new MainForm();
+                        // 여기서 user 정보를 MainForm에 넘기고 싶으면 생성자 수정해서 전달해도 됨
+                        MainForm nextForm = new MainForm(); // 필요하면 new MainForm(user)로 바꾸기
                         nextForm.Show();
                         this.Hide();
                     }
                     else
                     {
-                        // 로그인 실패
-                        MessageBox.Show("아이디 또는 비밀번호가 일치하지 않습니다.", "로그인 실패");
+                        _failedLoginCount++;
+
+                        if (_failedLoginCount >= 5)
+                        {
+                            // 5회 연속 실패 → 1분 잠금
+                            _lockoutUntil = DateTime.Now.AddMinutes(1);
+                            _failedLoginCount = 0; // 잠금 후 카운트 초기화 (1분 뒤 다시 5번 기회)
+
+                            MessageBox.Show(
+                                "로그인 5회 연속 실패로 1분 동안 로그인 시도가 잠깁니다.",
+                                "로그인 잠금",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Error);
+                        }
+                        else
+                        {
+                            int remain = 5 - _failedLoginCount;
+                            MessageBox.Show(
+                                $"아이디 또는 비밀번호가 일치하지 않습니다.\n남은 시도 횟수: {remain}회",
+                                "로그인 실패",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning);
+                        }
                     }
                 }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"데이터베이스 연결 오류 또는 쿼리 오류: {ex.Message}", "오류");
-                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"로그인 처리 중 오류 발생: {ex.Message}", "오류");
             }
         }
     }

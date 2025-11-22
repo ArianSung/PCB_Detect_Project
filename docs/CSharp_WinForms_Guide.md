@@ -25,8 +25,8 @@
 MySql.Data (또는 MySqlConnector)
 Newtonsoft.Json
 LiveCharts.WinForms
-System.Net.Http (내장)
 SocketIOClient  # WebSocket 실시간 프레임 수신 ⭐
+System.Net.Http (내장)
 ```
 
 ---
@@ -817,160 +817,288 @@ namespace PCB_Inspection_Monitor
 
 ---
 
-## WebSocket 기반 실시간 프레임 수신 ⭐
+## WebSocket 실시간 프레임 수신 ⭐ (바운딩 박스 많을 때 UI 멈춤 해결)
 
 ### 개요
-Flask-SocketIO 서버로부터 실시간 YOLO 검출 결과가 그려진 프레임을 WebSocket을 통해 수신합니다.
 
-### 장점
-- **낮은 오버헤드**: HTTP MJPEG 대비 ~95% 감소 (~10 bytes/frame)
-- **클라이언트 제어**: 100ms 간격으로 요청 → 백프레셔 제어
-- **양방향 통신**: 실시간 이벤트 수신 가능
-- **안정성**: 바운딩 박스 많을 때도 UI 멈춤 없음
+기존 HTTP MJPEG 스트리밍 방식은 서버 푸시 모델로 인해 클라이언트 처리 속도가 느릴 때 네트워크 버퍼가 쌓여 UI가 멈추는 문제가 발생합니다. **WebSocket (SocketIO) 방식**으로 변경하여 **클라이언트가 프레임을 요청하는 방식 (Pull Model)**으로 변경합니다.
 
-### 구현 예제
+### 주요 변경사항
 
-#### 1. using 선언
+**Before (HTTP MJPEG)**:
+- Server Push: 서버가 계속 프레임 전송
+- 문제: 바운딩 박스 20+ 개일 때 UI 처리 느려지면 버퍼 누적 → UI 멈춤
+
+**After (WebSocket)**:
+- Client Pull: 클라이언트가 100ms마다 프레임 요청
+- 해결: 백프레셔 제어 - 클라이언트 속도에 맞춰 프레임 수신
+
+### PCBMonitoringView.cs 구현 (전체 코드)
+
 ```csharp
-using SocketIOClient;
-using System.IO;
+using System;
 using System.Drawing;
+using System.IO;
 using System.Threading.Tasks;
-```
+using System.Windows.Forms;
+using SocketIOClient;
 
-#### 2. 필드 선언
-```csharp
-public partial class PCBMonitoringView : UserControl
+namespace pcb_monitoring_program.Views.Monitoring
 {
-    private SocketIO _socket;
-    private System.Windows.Forms.Timer _frameRequestTimer;
-    private const string SERVER_URL = "http://100.96.79.71:5000";
-
-    // PictureBox
-    private PictureBox pb_LINE1PCBFRONT;  // 좌측 카메라
-    private PictureBox pb_LINE1PCBBACK;   // 우측 카메라
-}
-```
-
-#### 3. WebSocket 연결 및 이벤트 핸들러
-```csharp
-private async void InitializeWebSocket()
-{
-    try
+    // SocketIO 데이터 전송 객체 (DTO)
+    public class FrameData
     {
-        // SocketIO 클라이언트 생성
-        _socket = new SocketIO(SERVER_URL);
+        public string camera_id { get; set; }
+        public string frameData { get; set; }  // Flask 서버와 필드명 일치 (frame → frameData)
+        public double timestamp { get; set; }
+        public int size { get; set; }
+    }
 
-        // frame_data 이벤트 핸들러
-        _socket.On("frame_data", response =>
+    public class ConnectionResponse
+    {
+        public string status { get; set; }
+        public string message { get; set; }
+    }
+
+    public class ErrorResponse
+    {
+        public string message { get; set; }
+    }
+
+    public partial class PCBMonitoringView : UserControl
+    {
+        // SocketIO 클라이언트
+        private SocketIOClient.SocketIO _socket;
+
+        // 프레임 요청 타이머 (100ms 간격 = 10 FPS)
+        private Timer _frameRequestTimer;
+
+        // 프레임 카운트
+        private int _leftFrameCount = 0;
+        private int _rightFrameCount = 0;
+
+        // Flask 서버 URL
+        private const string SERVER_URL = "http://100.123.23.111:5000";
+
+        public PCBMonitoringView()
+        {
+            InitializeComponent();
+
+            // PictureBox 설정
+            pb_LINE1PCBFRONT.SizeMode = PictureBoxSizeMode.Zoom;
+            pb_LINE1PCBBACK.SizeMode = PictureBoxSizeMode.Zoom;
+
+            // 더블 버퍼링 활성화
+            EnableDoubleBuffering(pb_LINE1PCBFRONT);
+            EnableDoubleBuffering(pb_LINE1PCBBACK);
+
+            // 컨트롤 파괴 시 WebSocket 정리
+            this.HandleDestroyed += OnHandleDestroyed;
+        }
+
+        private async void PCBMonitoringView_Load(object sender, EventArgs e)
+        {
+            // WebSocket 연결 시작
+            await InitializeWebSocket();
+        }
+
+        private async Task InitializeWebSocket()
         {
             try
             {
-                var cameraId = response.GetValue<string>("camera_id");
-                var frameBytes = response.GetValue<byte[]>("frame");
+                System.Diagnostics.Debug.WriteLine("[PCBMonitoringView] WebSocket 연결 시작...");
 
-                // JPEG 바이트 → Bitmap 변환
-                using (var ms = new MemoryStream(frameBytes))
-                using (var tempImage = Image.FromStream(ms))
+                // SocketIO 클라이언트 생성
+                _socket = new SocketIOClient.SocketIO(SERVER_URL);
+
+                // 연결 성공 이벤트
+                _socket.OnConnected += async (sender, e) =>
                 {
-                    var bitmap = new Bitmap(tempImage);
+                    System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] WebSocket 연결 성공: {SERVER_URL}");
 
-                    // UI 스레드에서 PictureBox 업데이트
-                    if (cameraId == "left")
+                    // 프레임 요청 타이머 시작
+                    if (InvokeRequired)
+                        Invoke(new Action(StartFrameRequestTimer));
+                    else
+                        StartFrameRequestTimer();
+                };
+
+                // 연결 해제 이벤트
+                _socket.OnDisconnected += (sender, e) =>
+                {
+                    System.Diagnostics.Debug.WriteLine("[PCBMonitoringView] WebSocket 연결 해제");
+
+                    // 타이머 중지
+                    if (InvokeRequired)
+                        Invoke(new Action(StopFrameRequestTimer));
+                    else
+                        StopFrameRequestTimer();
+                };
+
+                // frame_data 이벤트 핸들러 (프레임 수신)
+                _socket.On("frame_data", response =>
+                {
+                    try
                     {
-                        UpdatePictureBox(pb_LINE1PCBFRONT, bitmap);
+                        // DTO 객체로 데이터 수신
+                        var data = response.GetValue<FrameData>();
+                        string cameraId = data.camera_id;
+                        string frameBase64 = data.frameData;  // 필드명 변경: frame → frameData
+
+                        // Base64 디코딩
+                        byte[] frameBytes = Convert.FromBase64String(frameBase64);
+
+                        // JPEG 바이트를 Image로 변환
+                        using (MemoryStream ms = new MemoryStream(frameBytes))
+                        using (Image tempImage = Image.FromStream(ms))
+                        {
+                            // 복사본 생성 (원본은 스트림과 함께 해제)
+                            Bitmap bitmap = new Bitmap(tempImage);
+
+                            // UI 스레드에서 PictureBox 업데이트
+                            if (cameraId == "left")
+                            {
+                                _leftFrameCount++;
+                                if (InvokeRequired)
+                                    BeginInvoke(new Action(() => UpdatePictureBox(pb_LINE1PCBFRONT, bitmap, "좌측")));
+                                else
+                                    UpdatePictureBox(pb_LINE1PCBFRONT, bitmap, "좌측");
+                            }
+                            else if (cameraId == "right")
+                            {
+                                _rightFrameCount++;
+                                if (InvokeRequired)
+                                    BeginInvoke(new Action(() => UpdatePictureBox(pb_LINE1PCBBACK, bitmap, "우측")));
+                                else
+                                    UpdatePictureBox(pb_LINE1PCBBACK, bitmap, "우측");
+                            }
+
+                            // 10프레임마다 로그
+                            int frameCount = (cameraId == "left") ? _leftFrameCount : _rightFrameCount;
+                            if (frameCount % 10 == 0)
+                                System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] {cameraId} 프레임 수신: {frameCount}개");
+                        }
                     }
-                    else if (cameraId == "right")
+                    catch (Exception ex)
                     {
-                        UpdatePictureBox(pb_LINE1PCBBACK, bitmap);
+                        System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] frame_data 처리 실패: {ex.Message}");
                     }
+                });
+
+                // WebSocket 연결
+                await _socket.ConnectAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] WebSocket 초기화 실패: {ex.Message}");
+                MessageBox.Show($"WebSocket 연결 실패: {ex.Message}", "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void StartFrameRequestTimer()
+        {
+            if (_frameRequestTimer == null)
+            {
+                _frameRequestTimer = new Timer();
+                _frameRequestTimer.Interval = 100;  // 100ms = 10 FPS
+                _frameRequestTimer.Tick += OnFrameRequestTimerTick;
+            }
+
+            _frameRequestTimer.Start();
+            System.Diagnostics.Debug.WriteLine("[PCBMonitoringView] 프레임 요청 타이머 시작 (100ms)");
+        }
+
+        private void StopFrameRequestTimer()
+        {
+            _frameRequestTimer?.Stop();
+        }
+
+        private async void OnFrameRequestTimerTick(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_socket != null && _socket.Connected)
+                {
+                    // 양쪽 카메라에 대해 프레임 요청
+                    await _socket.EmitAsync("request_frame", new { camera_id = "left" });
+                    await _socket.EmitAsync("request_frame", new { camera_id = "right" });
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[WebSocket] 프레임 수신 실패: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] 프레임 요청 실패: {ex.Message}");
             }
-        });
-
-        // 연결
-        await _socket.ConnectAsync();
-        Debug.WriteLine("[WebSocket] 연결 성공");
-
-        // 타이머 시작 (100ms 간격 = 10 FPS)
-        StartFrameRequestTimer();
-    }
-    catch (Exception ex)
-    {
-        MessageBox.Show($"WebSocket 연결 실패: {ex.Message}", "오류",
-            MessageBoxButtons.OK, MessageBoxIcon.Error);
-    }
-}
-```
-
-#### 4. 프레임 요청 타이머
-```csharp
-private void StartFrameRequestTimer()
-{
-    _frameRequestTimer = new System.Windows.Forms.Timer();
-    _frameRequestTimer.Interval = 100;  // 10 FPS
-    _frameRequestTimer.Tick += async (s, e) =>
-    {
-        try
-        {
-            // 양쪽 카메라 프레임 요청
-            await _socket.EmitAsync("request_frame", new { camera_id = "left" });
-            await _socket.EmitAsync("request_frame", new { camera_id = "right" });
         }
-        catch (Exception ex)
+
+        private void UpdatePictureBox(PictureBox pictureBox, Image newFrame, string camera)
         {
-            Debug.WriteLine($"[WebSocket] 프레임 요청 실패: {ex.Message}");
+            try
+            {
+                // 이전 이미지 해제
+                var oldImage = pictureBox.Image;
+                pictureBox.Image = newFrame;
+                oldImage?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] {camera} PictureBox 업데이트 실패: {ex.Message}");
+            }
         }
-    };
-    _frameRequestTimer.Start();
-}
-```
 
-#### 5. PictureBox 업데이트 (UI 스레드)
-```csharp
-private void UpdatePictureBox(PictureBox pictureBox, Bitmap newFrame)
-{
-    if (pictureBox.InvokeRequired)
-    {
-        pictureBox.Invoke(new Action(() =>
+        private void OnHandleDestroyed(object sender, EventArgs e)
         {
-            var oldImage = pictureBox.Image;
-            pictureBox.Image = newFrame;
-            oldImage?.Dispose();
-        }));
-    }
-    else
-    {
-        var oldImage = pictureBox.Image;
-        pictureBox.Image = newFrame;
-        oldImage?.Dispose();
+            CleanupWebSocket();
+        }
+
+        private async void CleanupWebSocket()
+        {
+            try
+            {
+                StopFrameRequestTimer();
+                _frameRequestTimer?.Dispose();
+
+                if (_socket != null)
+                {
+                    await _socket.DisconnectAsync();
+                    _socket.Dispose();
+                    _socket = null;
+                }
+
+                System.Diagnostics.Debug.WriteLine("[PCBMonitoringView] WebSocket 정리 완료");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] WebSocket 정리 실패: {ex.Message}");
+            }
+        }
+
+        private void EnableDoubleBuffering(PictureBox pictureBox)
+        {
+            typeof(PictureBox).InvokeMember("DoubleBuffered",
+                System.Reflection.BindingFlags.SetProperty |
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic,
+                null, pictureBox, new object[] { true });
+        }
     }
 }
 ```
 
-#### 6. 정리 (Dispose)
-```csharp
-protected override void Dispose(bool disposing)
-{
-    if (disposing)
-    {
-        _frameRequestTimer?.Stop();
-        _frameRequestTimer?.Dispose();
-        _socket?.DisconnectAsync().Wait();
-        _socket?.Dispose();
-    }
-    base.Dispose(disposing);
-}
-```
+### 핵심 포인트
 
-### 성능 최적화
-- **프레임 드롭**: UI 바쁠 때 요청 건너뛰기 (선택사항)
-- **더블 버퍼링**: PictureBox.DoubleBuffered = true
-- **메모리 관리**: oldImage?.Dispose()로 메모리 누수 방지
+1. **SocketIO 클라이언트 초기화**: `new SocketIOClient.SocketIO(SERVER_URL)`
+2. **연결 이벤트**: `OnConnected` → 타이머 시작
+3. **프레임 요청**: 100ms마다 `request_frame` 이벤트 발송
+4. **프레임 수신**: `frame_data` 이벤트 수신 → JPEG 디코딩 → PictureBox 업데이트
+5. **메모리 관리**: `using` 구문으로 MemoryStream, Image 자동 해제
+
+### 테스트 방법
+
+1. Flask 서버 시작 (feature/flask-server 브랜치)
+2. Visual Studio에서 C# 프로젝트 빌드
+3. PCBMonitoringView 화면 열기
+4. 디버그 콘솔에서 "WebSocket 연결 성공" 확인
+5. 프레임 수신 로그 확인
 
 ---
 

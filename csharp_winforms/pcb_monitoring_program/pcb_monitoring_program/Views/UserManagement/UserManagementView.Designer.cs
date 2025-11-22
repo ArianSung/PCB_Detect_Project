@@ -32,26 +32,20 @@
             DataGridViewCellStyle dataGridViewCellStyle2 = new DataGridViewCellStyle();
             card_userManagement = new Panel();
             btn_UserManage_Search = new Button();
-            kryptonComboBox1 = new ComponentFactory.Krypton.Toolkit.KryptonComboBox();
-            label2 = new Label();
-            panel2 = new Panel();
+            kComboBox_UM_Role = new ComponentFactory.Krypton.Toolkit.KryptonComboBox();
+            label_UM_Role = new Label();
+            panel_UM_Role = new Panel();
             btn_UserManage_Refresh = new Button();
             btn_UserManage_ResetPW = new Button();
             btn_UserManage_DeleteUser = new Button();
             btn_UserManage_EditUser = new Button();
             btn_UserManage_AddUser = new Button();
             DGV_UserManagement = new ComponentFactory.Krypton.Toolkit.KryptonDataGridView();
-            name = new DataGridViewTextBoxColumn();
-            ID = new DataGridViewTextBoxColumn();
-            pw = new DataGridViewTextBoxColumn();
-            role = new DataGridViewTextBoxColumn();
-            status = new DataGridViewTextBoxColumn();
-            lastLogin = new DataGridViewTextBoxColumn();
-            label1 = new Label();
-            userIdTextBox = new TextBox();
-            panel1 = new Panel();
+            label_UM_ID = new Label();
+            TextBox_UM_ID = new TextBox();
+            panel_UM_ID = new Panel();
             card_userManagement.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)kryptonComboBox1).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)kComboBox_UM_Role).BeginInit();
             ((System.ComponentModel.ISupportInitialize)DGV_UserManagement).BeginInit();
             SuspendLayout();
             // 
@@ -59,27 +53,27 @@
             // 
             card_userManagement.BackColor = Color.FromArgb(64, 64, 64);
             card_userManagement.Controls.Add(btn_UserManage_Search);
-            card_userManagement.Controls.Add(kryptonComboBox1);
-            card_userManagement.Controls.Add(label2);
-            card_userManagement.Controls.Add(panel2);
+            card_userManagement.Controls.Add(kComboBox_UM_Role);
+            card_userManagement.Controls.Add(label_UM_Role);
+            card_userManagement.Controls.Add(panel_UM_Role);
             card_userManagement.Controls.Add(btn_UserManage_Refresh);
             card_userManagement.Controls.Add(btn_UserManage_ResetPW);
             card_userManagement.Controls.Add(btn_UserManage_DeleteUser);
             card_userManagement.Controls.Add(btn_UserManage_EditUser);
             card_userManagement.Controls.Add(btn_UserManage_AddUser);
             card_userManagement.Controls.Add(DGV_UserManagement);
-            card_userManagement.Controls.Add(label1);
-            card_userManagement.Controls.Add(userIdTextBox);
-            card_userManagement.Controls.Add(panel1);
+            card_userManagement.Controls.Add(label_UM_ID);
+            card_userManagement.Controls.Add(TextBox_UM_ID);
+            card_userManagement.Controls.Add(panel_UM_ID);
             card_userManagement.Location = new Point(104, 81);
             card_userManagement.Name = "card_userManagement";
-            card_userManagement.Size = new Size(1300, 698);
+            card_userManagement.Size = new Size(1400, 698);
             card_userManagement.TabIndex = 0;
             // 
             // btn_UserManage_Search
             // 
             btn_UserManage_Search.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            btn_UserManage_Search.Location = new Point(822, 46);
+            btn_UserManage_Search.Location = new Point(924, 46);
             btn_UserManage_Search.Name = "btn_UserManage_Search";
             btn_UserManage_Search.Size = new Size(150, 50);
             btn_UserManage_Search.TabIndex = 21;
@@ -87,45 +81,46 @@
             btn_UserManage_Search.UseVisualStyleBackColor = true;
             btn_UserManage_Search.Click += btn_UserManage_Search_Click;
             // 
-            // kryptonComboBox1
+            // kComboBox_UM_Role
             // 
-            kryptonComboBox1.DropDownWidth = 200;
-            kryptonComboBox1.Location = new Point(570, 55);
-            kryptonComboBox1.Name = "kryptonComboBox1";
-            kryptonComboBox1.Size = new Size(199, 31);
-            kryptonComboBox1.StateCommon.ComboBox.Back.Color1 = Color.FromArgb(44, 44, 44);
-            kryptonComboBox1.StateCommon.ComboBox.Border.Color1 = Color.FromArgb(44, 44, 44);
-            kryptonComboBox1.StateCommon.ComboBox.Border.Color2 = Color.FromArgb(44, 44, 44);
-            kryptonComboBox1.StateCommon.ComboBox.Border.DrawBorders = ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Top | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Bottom | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Left | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Right;
-            kryptonComboBox1.StateCommon.ComboBox.Content.Color1 = Color.White;
-            kryptonComboBox1.StateCommon.ComboBox.Content.Font = new Font("맑은 고딕", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
-            kryptonComboBox1.TabIndex = 20;
-            kryptonComboBox1.Text = "전체";
+            kComboBox_UM_Role.DropDownWidth = 200;
+            kComboBox_UM_Role.Items.AddRange(new object[] { "전체", "admin", "operator", "viewer" });
+            kComboBox_UM_Role.Location = new Point(613, 55);
+            kComboBox_UM_Role.Name = "kComboBox_UM_Role";
+            kComboBox_UM_Role.Size = new Size(199, 31);
+            kComboBox_UM_Role.StateCommon.ComboBox.Back.Color1 = Color.FromArgb(44, 44, 44);
+            kComboBox_UM_Role.StateCommon.ComboBox.Border.Color1 = Color.FromArgb(44, 44, 44);
+            kComboBox_UM_Role.StateCommon.ComboBox.Border.Color2 = Color.FromArgb(44, 44, 44);
+            kComboBox_UM_Role.StateCommon.ComboBox.Border.DrawBorders = ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Top | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Bottom | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Left | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Right;
+            kComboBox_UM_Role.StateCommon.ComboBox.Content.Color1 = Color.White;
+            kComboBox_UM_Role.StateCommon.ComboBox.Content.Font = new Font("맑은 고딕", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            kComboBox_UM_Role.TabIndex = 20;
+            kComboBox_UM_Role.Text = "전체";
             // 
-            // label2
+            // label_UM_Role
             // 
-            label2.AutoSize = true;
-            label2.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            label2.ForeColor = SystemColors.Window;
-            label2.Location = new Point(484, 39);
-            label2.Name = "label2";
-            label2.Size = new Size(63, 36);
-            label2.TabIndex = 19;
-            label2.Text = "권한";
+            label_UM_Role.AutoSize = true;
+            label_UM_Role.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            label_UM_Role.ForeColor = SystemColors.Window;
+            label_UM_Role.Location = new Point(527, 39);
+            label_UM_Role.Name = "label_UM_Role";
+            label_UM_Role.Size = new Size(63, 36);
+            label_UM_Role.TabIndex = 19;
+            label_UM_Role.Text = "권한";
             // 
-            // panel2
+            // panel_UM_Role
             // 
-            panel2.BackColor = Color.Silver;
-            panel2.ForeColor = Color.Silver;
-            panel2.Location = new Point(486, 93);
-            panel2.Name = "panel2";
-            panel2.Size = new Size(300, 5);
-            panel2.TabIndex = 18;
+            panel_UM_Role.BackColor = Color.Silver;
+            panel_UM_Role.ForeColor = Color.Silver;
+            panel_UM_Role.Location = new Point(529, 93);
+            panel_UM_Role.Name = "panel_UM_Role";
+            panel_UM_Role.Size = new Size(300, 5);
+            panel_UM_Role.TabIndex = 18;
             // 
             // btn_UserManage_Refresh
             // 
             btn_UserManage_Refresh.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            btn_UserManage_Refresh.Location = new Point(998, 49);
+            btn_UserManage_Refresh.Location = new Point(1145, 46);
             btn_UserManage_Refresh.Name = "btn_UserManage_Refresh";
             btn_UserManage_Refresh.Size = new Size(150, 50);
             btn_UserManage_Refresh.TabIndex = 17;
@@ -136,7 +131,7 @@
             // btn_UserManage_ResetPW
             // 
             btn_UserManage_ResetPW.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            btn_UserManage_ResetPW.Location = new Point(946, 585);
+            btn_UserManage_ResetPW.Location = new Point(1095, 585);
             btn_UserManage_ResetPW.Name = "btn_UserManage_ResetPW";
             btn_UserManage_ResetPW.Size = new Size(200, 50);
             btn_UserManage_ResetPW.TabIndex = 16;
@@ -147,7 +142,7 @@
             // btn_UserManage_DeleteUser
             // 
             btn_UserManage_DeleteUser.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            btn_UserManage_DeleteUser.Location = new Point(680, 585);
+            btn_UserManage_DeleteUser.Location = new Point(775, 585);
             btn_UserManage_DeleteUser.Name = "btn_UserManage_DeleteUser";
             btn_UserManage_DeleteUser.Size = new Size(200, 50);
             btn_UserManage_DeleteUser.TabIndex = 15;
@@ -158,7 +153,7 @@
             // btn_UserManage_EditUser
             // 
             btn_UserManage_EditUser.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            btn_UserManage_EditUser.Location = new Point(414, 585);
+            btn_UserManage_EditUser.Location = new Point(460, 585);
             btn_UserManage_EditUser.Name = "btn_UserManage_EditUser";
             btn_UserManage_EditUser.Size = new Size(200, 50);
             btn_UserManage_EditUser.TabIndex = 14;
@@ -169,7 +164,7 @@
             // btn_UserManage_AddUser
             // 
             btn_UserManage_AddUser.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            btn_UserManage_AddUser.Location = new Point(148, 585);
+            btn_UserManage_AddUser.Location = new Point(145, 585);
             btn_UserManage_AddUser.Name = "btn_UserManage_AddUser";
             btn_UserManage_AddUser.Size = new Size(200, 50);
             btn_UserManage_AddUser.TabIndex = 13;
@@ -193,9 +188,8 @@
             DGV_UserManagement.ClipboardCopyMode = DataGridViewClipboardCopyMode.Disable;
             DGV_UserManagement.ColumnHeadersHeight = 41;
             DGV_UserManagement.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-            DGV_UserManagement.Columns.AddRange(new DataGridViewColumn[] { name, ID, pw, role, status, lastLogin });
             DGV_UserManagement.EditMode = DataGridViewEditMode.EditProgrammatically;
-            DGV_UserManagement.Location = new Point(148, 131);
+            DGV_UserManagement.Location = new Point(145, 130);
             DGV_UserManagement.MultiSelect = false;
             DGV_UserManagement.Name = "DGV_UserManagement";
             DGV_UserManagement.PaletteMode = ComponentFactory.Krypton.Toolkit.PaletteMode.Office2010Black;
@@ -215,7 +209,7 @@
             DGV_UserManagement.RowTemplate.Height = 41;
             DGV_UserManagement.ScrollBars = ScrollBars.Vertical;
             DGV_UserManagement.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            DGV_UserManagement.Size = new Size(1000, 420);
+            DGV_UserManagement.Size = new Size(1150, 420);
             DGV_UserManagement.StateCommon.Background.Color1 = Color.FromArgb(44, 44, 44);
             DGV_UserManagement.StateCommon.Background.Color2 = Color.FromArgb(44, 44, 44);
             DGV_UserManagement.StateCommon.BackStyle = ComponentFactory.Krypton.Toolkit.PaletteBackStyle.GridBackgroundList;
@@ -344,72 +338,36 @@
             DGV_UserManagement.StateTracking.HeaderRow.Content.Color2 = Color.White;
             DGV_UserManagement.TabIndex = 1;
             // 
-            // name
+            // label_UM_ID
             // 
-            name.HeaderText = "이름";
-            name.Name = "name";
-            name.ReadOnly = true;
+            label_UM_ID.AutoSize = true;
+            label_UM_ID.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            label_UM_ID.ForeColor = SystemColors.Window;
+            label_UM_ID.Location = new Point(147, 39);
+            label_UM_ID.Name = "label_UM_ID";
+            label_UM_ID.Size = new Size(47, 36);
+            label_UM_ID.TabIndex = 12;
+            label_UM_ID.Text = "ID";
             // 
-            // ID
+            // TextBox_UM_ID
             // 
-            ID.HeaderText = "ID";
-            ID.Name = "ID";
-            ID.ReadOnly = true;
+            TextBox_UM_ID.BackColor = Color.FromArgb(44, 44, 44);
+            TextBox_UM_ID.BorderStyle = BorderStyle.None;
+            TextBox_UM_ID.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            TextBox_UM_ID.ForeColor = SystemColors.Window;
+            TextBox_UM_ID.Location = new Point(230, 49);
+            TextBox_UM_ID.Name = "TextBox_UM_ID";
+            TextBox_UM_ID.Size = new Size(218, 37);
+            TextBox_UM_ID.TabIndex = 9;
             // 
-            // pw
+            // panel_UM_ID
             // 
-            pw.HeaderText = "pw";
-            pw.Name = "pw";
-            pw.ReadOnly = true;
-            // 
-            // role
-            // 
-            role.HeaderText = "권한";
-            role.Name = "role";
-            role.ReadOnly = true;
-            // 
-            // status
-            // 
-            status.HeaderText = "상태";
-            status.Name = "status";
-            status.ReadOnly = true;
-            // 
-            // lastLogin
-            // 
-            lastLogin.HeaderText = "마지막 로그인";
-            lastLogin.Name = "lastLogin";
-            lastLogin.ReadOnly = true;
-            // 
-            // label1
-            // 
-            label1.AutoSize = true;
-            label1.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            label1.ForeColor = SystemColors.Window;
-            label1.Location = new Point(147, 39);
-            label1.Name = "label1";
-            label1.Size = new Size(47, 36);
-            label1.TabIndex = 12;
-            label1.Text = "ID";
-            // 
-            // userIdTextBox
-            // 
-            userIdTextBox.BackColor = Color.FromArgb(44, 44, 44);
-            userIdTextBox.BorderStyle = BorderStyle.None;
-            userIdTextBox.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            userIdTextBox.ForeColor = SystemColors.Window;
-            userIdTextBox.Location = new Point(211, 49);
-            userIdTextBox.Name = "userIdTextBox";
-            userIdTextBox.Size = new Size(237, 37);
-            userIdTextBox.TabIndex = 9;
-            // 
-            // panel1
-            // 
-            panel1.BackColor = Color.Silver;
-            panel1.ForeColor = Color.Silver;
-            panel1.Location = new Point(148, 93);
-            panel1.Name = "panel1";
-            panel1.Size = new Size(300, 5);
-            panel1.TabIndex = 11;
+            panel_UM_ID.BackColor = Color.Silver;
+            panel_UM_ID.ForeColor = Color.Silver;
+            panel_UM_ID.Location = new Point(148, 93);
+            panel_UM_ID.Name = "panel_UM_ID";
+            panel_UM_ID.Size = new Size(300, 5);
+            panel_UM_ID.TabIndex = 11;
             // 
             // UserManagementView
             // 
@@ -422,7 +380,7 @@
             Load += UserManagementView_Load;
             card_userManagement.ResumeLayout(false);
             card_userManagement.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)kryptonComboBox1).EndInit();
+            ((System.ComponentModel.ISupportInitialize)kComboBox_UM_Role).EndInit();
             ((System.ComponentModel.ISupportInitialize)DGV_UserManagement).EndInit();
             ResumeLayout(false);
         }
@@ -430,24 +388,18 @@
         #endregion
 
         private Panel card_userManagement;
-        private Panel panel1;
-        private TextBox userIdTextBox;
-        private Label label1;
+        private Panel panel_UM_ID;
+        private TextBox TextBox_UM_ID;
+        private Label label_UM_ID;
         private ComponentFactory.Krypton.Toolkit.KryptonDataGridView DGV_UserManagement;
+        private Label label_UM_Role;
+        private Panel panel_UM_Role;
+        private Button btn_UserManage_Refresh;
+        private ComponentFactory.Krypton.Toolkit.KryptonComboBox kComboBox_UM_Role;
+        private Button btn_UserManage_Search;
         private Button btn_UserManage_ResetPW;
         private Button btn_UserManage_DeleteUser;
         private Button btn_UserManage_EditUser;
         private Button btn_UserManage_AddUser;
-        private DataGridViewTextBoxColumn name;
-        private DataGridViewTextBoxColumn ID;
-        private DataGridViewTextBoxColumn pw;
-        private DataGridViewTextBoxColumn role;
-        private DataGridViewTextBoxColumn status;
-        private DataGridViewTextBoxColumn lastLogin;
-        private Label label2;
-        private Panel panel2;
-        private Button btn_UserManage_Refresh;
-        private ComponentFactory.Krypton.Toolkit.KryptonComboBox kryptonComboBox1;
-        private Button btn_UserManage_Search;
     }
 }

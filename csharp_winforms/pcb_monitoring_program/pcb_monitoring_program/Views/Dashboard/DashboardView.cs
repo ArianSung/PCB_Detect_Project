@@ -10,6 +10,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
 using pcb_monitoring_program;
+using pcb_monitoring_program.DatabaseManager;
+using pcb_monitoring_program.DatabaseManager.Models;
 
 namespace pcb_monitoring_program.Views.Dashboard
 {
@@ -62,29 +64,41 @@ namespace pcb_monitoring_program.Views.Dashboard
         private void InitDummyData()
         {
             // 0~23시 (길이 24)
-            _hourlyNormal = new int[]
-            {
-                30, 32, 28, 25, 23, 24, 26, 28, 32, 35, 40, 38,
-                36, 34, 32, 30, 29, 31, 33, 37, 39, 41, 42, 40
-            };
+            _hourlyNormal = new int[24];
+            _hourlyPartDefect = new int[24];
+            _hourlySolderDefect = new int[24];
+            _hourlyScrap = new int[24];
 
-            _hourlyPartDefect = new int[]
+            try
             {
-                5, 4, 3, 4, 3, 3, 4, 5, 14, 7, 6, 5,
-                4, 4, 3, 3, 3, 4, 4, 5, 13, 5, 4, 4
-            };
+                string connectionString =
+                    "Server=100.80.24.53;Port=3306;Database=pcb_inspection;Uid=pcb_admin;Pwd=1234;CharSet=utf8mb4;";
 
-            _hourlySolderDefect = new int[]
-            {
-                2, 2, 1, 2, 1, 1, 1, 2, 10, 3, 3, 2,
-                2, 1, 1, 1, 1, 2, 2, 2, 8, 2, 2, 2
-            };
+                using (var db = new DatabaseManager.DatabaseManager(connectionString))
+                {
+                    DateTime today = DateTime.Today;
+                    DateTime tomorrow = today.AddDays(1);
 
-            _hourlyScrap = new int[]
+                    List<HourlyStatistics> stats = db.GetHourlyStatistics(today, tomorrow);
+
+                    foreach (var item in stats)
+                    {
+                        int h = item.StatDatetime.Hour;   // 0~23
+
+                        if (h < 0 || h > 23)
+                            continue;
+
+                        _hourlyNormal[h] = item.NormalCount;
+                        _hourlyPartDefect[h] = item.ComponentDefectCount;
+                        _hourlySolderDefect[h] = item.SolderDefectCount;
+                        _hourlyScrap[h] = item.DiscardCount;
+                    }
+                }
+            }
+            catch (Exception ex)
             {
-                1, 1, 2, 1, 5, 1, 2, 1, 5, 1, 1, 2,
-                1, 3, 1, 4, 1, 1, 3, 1, 3, 1, 1, 4
-            };
+                Console.WriteLine($"[InitDummyData(시간별 통계 로드 실패)] {ex.Message}");
+            }
         }
 
         private void SetupDefectRateChart()
