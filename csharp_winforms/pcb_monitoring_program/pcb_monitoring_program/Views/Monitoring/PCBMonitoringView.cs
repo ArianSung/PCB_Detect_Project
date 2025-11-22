@@ -12,25 +12,7 @@ using SocketIOClient;
 
 namespace pcb_monitoring_program.Views.Monitoring
 {
-    // SocketIO 데이터 전송 객체 (DTO)
-    public class FrameData
-    {
-        public string camera_id { get; set; }
-        public string frameData { get; set; }  // Flask 서버와 필드명 일치 (frame → frameData)
-        public double timestamp { get; set; }
-        public int size { get; set; }
-    }
-
-    public class ConnectionResponse
-    {
-        public string status { get; set; }
-        public string message { get; set; }
-    }
-
-    public class ErrorResponse
-    {
-        public string message { get; set; }
-    }
+    
 
     public partial class PCBMonitoringView : UserControl
     {
@@ -160,6 +142,8 @@ namespace pcb_monitoring_program.Views.Monitoring
                             {
                                 // 복사본 생성 (원본은 스트림과 함께 해제되므로)
                                 Bitmap bitmap = new Bitmap(tempImage);
+
+                                //bitmap.Save(@"C:\Test.bmp");
 
                                 // UI 스레드에서 PictureBox 업데이트
                                 if (cameraId == "left")
@@ -352,5 +336,24 @@ namespace pcb_monitoring_program.Views.Monitoring
                 System.Diagnostics.Debug.WriteLine($"더블 버퍼링 설정 실패: {ex.Message}");
             }
         }
+    }
+    // SocketIO 데이터 전송 객체 (DTO)
+    public class FrameData
+    {
+        public string camera_id { get; set; }
+        public string frameData { get; set; }  // Flask 서버와 필드명 일치 (frame → frameData)
+        public double timestamp { get; set; }
+        public int size { get; set; }
+    }
+
+    public class ConnectionResponse
+    {
+        public string status { get; set; }
+        public string message { get; set; }
+    }
+
+    public class ErrorResponse
+    {
+        public string message { get; set; }
     }
 }
