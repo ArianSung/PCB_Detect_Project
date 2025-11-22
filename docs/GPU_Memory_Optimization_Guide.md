@@ -23,7 +23,7 @@
 
 1. 모델 가중치 (YOLOv11l):           ~2.0GB
 2. Optimizer State (AdamW):
-   - Momentum 버퍼:                  ~2.0GB 
+   - Momentum 버퍼:                  ~2.0GB
    - Variance 버퍼:                  ~2.0GB
 3. 배치 데이터 (32 × 640×640×3):     ~3.0GB
 4. Gradient 버퍼:                    ~2.0GB
