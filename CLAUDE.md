@@ -12,7 +12,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### 핵심 기능
 - 웹캠 2대(좌측/우측)를 통한 PCB 양면 촬영 (컨베이어 벨트 좌우 배치)
-- Flask 웹서버를 통한 실시간 프레임 전송 및 AI 추론
+- **WebSocket 기반 실시간 프레임 전송** (Flask-SocketIO) 및 AI 추론 ⭐
+  - 양방향 실시간 통신
+  - 클라이언트 요청 시 프레임 전송 (백프레셔 제어)
+  - C# WinForms: SocketIOClient 사용
 - **이중 전문 YOLO v11l 모델**:
   - **모델 1**: FPIC-Component (부품 검출, 25개 클래스)
   - **모델 2**: SolDef_AI (납땜 불량, 5-6개 클래스)
@@ -143,16 +146,24 @@ pytest tests/test_dual_model.py
                                       ↓
                               C# WinForms
                            모니터링 대시보드
+                              ↑ WebSocket ⭐
+                              │ (SocketIOClient)
+                              │ request_frame (100ms 간격)
+                              │ frame_data (JPEG 바이너리)
+                              └─ Flask SocketIO
 ```
 
 ### 주요 프레임워크 및 라이브러리
 - **딥러닝**: PyTorch, YOLO v11l (Ultralytics)
-- **웹 서버**: Flask, Flask-CORS
+- **웹 서버**: Flask, Flask-CORS, **Flask-SocketIO** ⭐
 - **컴퓨터 비전**: OpenCV, Pillow
-- **통신**: Requests (HTTP), Base64 인코딩
+- **통신**:
+  - Requests (HTTP) - 추론 API
+  - **WebSocket (SocketIO)** - 실시간 프레임 스트리밍 ⭐
+  - Base64 인코딩
 - **데이터베이스**: MySQL 8.0, PyMySQL (Python), MySql.Data (C#)
 - **GPIO 제어**: RPi.GPIO (라즈베리파이 4)
-- **C# UI**: .NET 6+ WinForms, LiveCharts, Newtonsoft.Json
+- **C# UI**: .NET 6+ WinForms, LiveCharts, Newtonsoft.Json, **SocketIOClient** ⭐
 - **데이터 처리**: NumPy, Pandas
 
 ### 주요 디렉토리 역할

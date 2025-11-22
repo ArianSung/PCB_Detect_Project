@@ -17,6 +17,9 @@ pandas>=2.0.0
 # Web Server & API
 flask>=2.3.0
 flask-cors>=4.0.0
+flask-socketio>=5.3.0  # WebSocket 실시간 프레임 스트리밍
+python-socketio>=5.9.0  # SocketIO 백엔드
+eventlet>=0.33.0  # 프로덕션 SocketIO 비동기 모드 (소켓 누수 방지) ⭐
 requests>=2.31.0
 
 # Database
