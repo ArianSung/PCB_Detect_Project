@@ -19,6 +19,8 @@ namespace pcb_monitoring_program.Views.Statistics
         private List<DailyStatistics> _yearDailyStats = new List<DailyStatistics>();
         private int _currentYear = 2025;  // 일단 2025년 기준 (원하면 DateTime.Today.Year 쓰면 됨)
         private int _currentMonth = 10;   // 일단 10월 기준으로 테스트
+        private readonly ToolTip _monthlyChartToolTip = new ToolTip();
+        private string _lastToolTipKey = null;
         public StatisticsView()
         {
             InitializeComponent();
@@ -34,13 +36,20 @@ namespace pcb_monitoring_program.Views.Statistics
             dtpMonth.Format = DateTimePickerFormat.Custom;
             dtpMonth.CustomFormat = "yyyy년 MM월";
             dtpMonth.Value = new DateTime(_currentYear, _currentMonth, 1);
+
+            _monthlyChartToolTip.AutoPopDelay = 5000;
+            _monthlyChartToolTip.InitialDelay = 200;
+            _monthlyChartToolTip.ReshowDelay = 100;
+
             UiStyleHelper.MakeRoundedPanel(cardMonthlyLine, radius: 16, back: Color.FromArgb(44, 44, 44));
             UiStyleHelper.MakeRoundedPanel(cardMonthlyAccum, radius: 16, back: Color.FromArgb(44, 44, 44));
             UiStyleHelper.MakeRoundedPanel(cardDefectPie, radius: 16, back: Color.FromArgb(44, 44, 44));
+            UiStyleHelper.MakeRoundedPanel(cardMonthlyTarget, radius: 16, back: Color.FromArgb(44, 44, 44));
 
             UiStyleHelper.AddShadowRoundedPanel(cardMonthlyLine, 16);
             UiStyleHelper.AddShadowRoundedPanel(cardMonthlyAccum, 16);
             UiStyleHelper.AddShadowRoundedPanel(cardDefectPie, 16);
+            UiStyleHelper.AddShadowRoundedPanel(cardMonthlyTarget, 16);
 
             UiStyleHelper.MakeRoundedButton(btn_Excel, 24);
 
@@ -62,6 +71,7 @@ namespace pcb_monitoring_program.Views.Statistics
             SetupMonthlyLineChart();
             SetupMonthlyAccumChart();
             SetupDefectTypePieChart();
+            SetupMonthlyTargetChart();
             UpdateMonthLabels();
         }
 
@@ -172,6 +182,10 @@ namespace pcb_monitoring_program.Views.Statistics
             s.MarkerStyle = MarkerStyle.Circle;
             s.MarkerSize = 4;
             s.MarkerColor = color;
+
+            // 기본 툴팁 포맷 (백업용)
+            //s.ToolTip = "#SERIESNAME\n#VALX일: #VALY개";
+
             return s;
         }
 
@@ -301,6 +315,11 @@ namespace pcb_monitoring_program.Views.Statistics
         ("폐기",     sumScrap,        scrapColor),
             };
 
+            // 🔹 전체 합 (각 카테고리 비율 계산용)
+            int totalAll = categories.Sum(c => c.value);
+            Func<int, double> calcRate = v =>
+                totalAll > 0 ? (v * 100.0 / totalAll) : 0.0;
+
             var chart = DefectTypePieChart;
             chart.Series.Clear();
             chart.Legends.Clear();
@@ -326,12 +345,12 @@ namespace pcb_monitoring_program.Views.Statistics
 
             foreach (var item in categories)
             {
-                var pt = s.Points.AddXY(item.name, item.value);
+                int pt = s.Points.AddXY(item.name, item.value);
                 s.Points[pt].Color = item.color;
             }
             chart.Series.Add(s);
 
-            // 커스텀 레전드 (원래 코드 그대로 재사용)
+            // 🔹 커스텀 레전드 영역(flowPie) 구성
             flowPie.SuspendLayout();
             flowPie.Controls.Clear();
             flowPie.FlowDirection = FlowDirection.TopDown;
@@ -339,8 +358,39 @@ namespace pcb_monitoring_program.Views.Statistics
             flowPie.AutoSize = false;
             flowPie.BackColor = Color.Transparent;
 
+            // 🔥 1) 상단에 큰 % 라벨 추가 (기본은 "정상" 비율 기준)
+            var ratePanel = new Panel
+            {
+                Height = 50,
+                Width = flowPie.Width - 16,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, 0, 0, 8),
+            };
+
+            var rateLabel = new Label
+            {
+                AutoSize = false,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font = new Font("맑은 고딕", 18, FontStyle.Bold),
+                ForeColor = normalColor
+            };
+
+            // 기본값: 정상 비율 (데이터 없으면 0%)
+            double defaultRate = calcRate(sumNormal);
+            rateLabel.Text = $"{defaultRate:0.0}%";
+
+            ratePanel.Controls.Add(rateLabel);
+            flowPie.Controls.Add(ratePanel);
+
+            // 🔥 2) 각 카테고리별 라인 (색 네모 + 텍스트 + 클릭 시 하이라이트 + % 변경)
             foreach (var item in categories)
             {
+                // 캡처 안전용 로컬 복사
+                string localName = item.name;
+                int localValue = item.value;
+                Color localColor = item.color;
+
                 var row = new Panel
                 {
                     Height = 24,
@@ -353,7 +403,7 @@ namespace pcb_monitoring_program.Views.Statistics
                 {
                     Width = 12,
                     Height = 12,
-                    BackColor = item.color,
+                    BackColor = localColor,
                     Left = 0,
                     Top = (row.Height - 12) / 2
                 };
@@ -363,15 +413,25 @@ namespace pcb_monitoring_program.Views.Statistics
                     AutoSize = true,
                     Left = 20,
                     Top = (row.Height - 16) / 2,
-                    Text = $"{item.name}  {item.value}개",
+                    Text = $"{localName}  {localValue}개",
                     ForeColor = Color.Gainsboro
                 };
 
                 EventHandler clickHandler = (_, __) =>
                 {
+                    // 1) 도넛 조각 하이라이트
                     foreach (var p in s.Points) { p.BorderWidth = 0; }
-                    var target = s.Points.FirstOrDefault(p => p.AxisLabel == item.name);
-                    if (target != null) { target.BorderColor = Color.White; target.BorderWidth = 3; }
+                    var target = s.Points.FirstOrDefault(p => p.AxisLabel == localName);
+                    if (target != null)
+                    {
+                        target.BorderColor = Color.White;
+                        target.BorderWidth = 3;
+                    }
+
+                    // 2) 위의 큰 % 라벨에 이 카테고리 비율 표시
+                    double rate = calcRate(localValue);
+                    rateLabel.Text = $"{rate:0.0}%";
+                    rateLabel.ForeColor = localColor;
                 };
 
                 row.Cursor = Cursors.Hand;
@@ -386,13 +446,240 @@ namespace pcb_monitoring_program.Views.Statistics
                 row.Controls.Add(lbl);
                 flowPie.Controls.Add(row);
             }
+
             flowPie.ResumeLayout();
         }
+
+
+        private void SetupMonthlyTargetChart()
+        {
+            // 🔹 1) 월 목표 / 실제 생산량 계산
+            int targetMonthly = 30000; // 월 목표 생산량
+
+            // 현재 선택된 연/월 데이터만 필터
+            var monthData = _yearDailyStats
+                .Where(d => d.StatDate.Year == _currentYear && d.StatDate.Month == _currentMonth)
+                .ToList();
+
+            // 여기서는 "실제 생산량" 느낌으로 정상 개수만 사용
+            int actualProduction = monthData.Sum(d => d.NormalCount);
+
+            // 목표보다 많이 나왔으면 그래프는 목표까지만 잘라줌
+            if (actualProduction > targetMonthly)
+                actualProduction = targetMonthly;
+
+            int remaining = Math.Max(targetMonthly - actualProduction, 0);
+
+            // 🔹 달성률 / 미달성률 미리 계산
+            double achievementRate = targetMonthly > 0
+                ? (actualProduction * 100.0) / targetMonthly
+                : 0.0;
+            double missRate = 100.0 - achievementRate;
+
+            // 2) 도넛 차트 데이터 (달성 vs 미달성)
+            var categories = new (string name, int value, Color color)[]
+            {
+        ("달성",   actualProduction, Color.FromArgb(100, 181, 246)), // 파랑
+        ("미달성", remaining,        Color.FromArgb(66, 66, 66)),   // 어두운 회색
+            };
+
+            // 3) Chart 초기화
+            var chart = MonthlyTargetChart;
+            chart.Series.Clear();
+            chart.ChartAreas.Clear();
+            chart.Legends.Clear();
+            chart.BackColor = Color.Transparent;
+            chart.BorderlineWidth = 0;
+
+            var area = new ChartArea("area");
+            area.BackColor = Color.Transparent;
+
+            // 도넛 위치 / 크기 고정
+            area.Position.Auto = false;
+            area.Position.X = 5;
+            area.Position.Y = 5;
+            area.Position.Width = 90;
+            area.Position.Height = 90;
+
+            area.InnerPlotPosition.Auto = false;
+            area.InnerPlotPosition.X = 10;
+            area.InnerPlotPosition.Y = 10;
+            area.InnerPlotPosition.Width = 80;
+            area.InnerPlotPosition.Height = 80;
+
+            chart.ChartAreas.Add(area);
+
+            var s = new Series("월 목표 생산량")
+            {
+                ChartType = SeriesChartType.Doughnut
+            };
+            s["DoughnutRadius"] = "50";
+            s["PieLabelStyle"] = "Disabled";
+            s.IsValueShownAsLabel = false;
+
+            foreach (var item in categories)
+            {
+                int idx = s.Points.AddXY(item.name, item.value);
+                s.Points[idx].Color = item.color;
+            }
+
+            chart.Series.Add(s);
+
+            // 4) 오른쪽(또는 아래) 레전드용 FlowLayoutPanel 구성
+            flowLegendMonthlyTarget.SuspendLayout();
+            flowLegendMonthlyTarget.Controls.Clear();
+            flowLegendMonthlyTarget.FlowDirection = FlowDirection.TopDown;
+            flowLegendMonthlyTarget.WrapContents = false;
+            flowLegendMonthlyTarget.AutoSize = false;
+            flowLegendMonthlyTarget.BackColor = Color.Transparent;
+
+            // 5) 달성률 크게 표시 (기본은 "달성" 기준)
+            var ratePanel = new Panel
+            {
+                Height = 50,
+                Width = flowLegendMonthlyTarget.Width - 16,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, 0, 0, 8),
+            };
+
+            var rateLabel = new Label
+            {
+                AutoSize = false,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Text = $"{achievementRate:0.#}%",
+                Font = new Font("맑은 고딕", 18, FontStyle.Bold),
+                ForeColor = Color.FromArgb(100, 181, 246) // 파랑 (달성 기준)
+            };
+
+            ratePanel.Controls.Add(rateLabel);
+            flowLegendMonthlyTarget.Controls.Add(ratePanel);
+
+            // 6) 목표 / 실제 생산량 텍스트
+            var targetPanel = new Panel
+            {
+                Height = 24,
+                Width = flowLegendMonthlyTarget.Width - 16,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, 0, 0, 2),
+            };
+
+            var targetLabel = new Label
+            {
+                AutoSize = false,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Text = $"월 목표: {targetMonthly:N0}개",
+                Font = new Font("맑은 고딕", 9),
+                ForeColor = Color.Gainsboro
+            };
+
+            targetPanel.Controls.Add(targetLabel);
+            flowLegendMonthlyTarget.Controls.Add(targetPanel);
+
+            var actualPanel = new Panel
+            {
+                Height = 24,
+                Width = flowLegendMonthlyTarget.Width - 16,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, 0, 0, 8),
+            };
+
+            var actualLabel = new Label
+            {
+                AutoSize = false,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Text = $"실제: {actualProduction:N0}개",
+                Font = new Font("맑은 고딕", 9),
+                ForeColor = Color.Gainsboro
+            };
+
+            actualPanel.Controls.Add(actualLabel);
+            flowLegendMonthlyTarget.Controls.Add(actualPanel);
+
+            // 7) 달성/미달성 색상 네모 + 라벨
+            foreach (var item in categories)
+            {
+                // 🔹 foreach 캡처 안전용으로 로컬 변수에 복사
+                string localName = item.name;
+                int localValue = item.value;
+                Color localColor = item.color;
+
+                var row = new Panel
+                {
+                    Height = 24,
+                    Width = flowLegendMonthlyTarget.Width - 16,
+                    BackColor = Color.Transparent,
+                    Margin = new Padding(0, 2, 0, 2),
+                };
+
+                var swatch = new Panel
+                {
+                    Width = 12,
+                    Height = 12,
+                    BackColor = localColor,
+                    Left = 0,
+                    Top = (row.Height - 12) / 2
+                };
+
+                var lbl = new Label
+                {
+                    AutoSize = true,
+                    Left = 20,
+                    Top = (row.Height - 16) / 2,
+                    Text = $"{localName}  {localValue:N0}개",
+                    ForeColor = Color.Gainsboro
+                };
+
+                // 🔥 클릭 시 해당 도넛 조각 강조 + 퍼센트 레이블 모드 변경
+                EventHandler clickHandler = (_, __) =>
+                {
+                    // 1) 도넛 강조
+                    foreach (var p in s.Points) { p.BorderWidth = 0; }
+                    var targetPoint = s.Points.FirstOrDefault(p => p.AxisLabel == localName);
+                    if (targetPoint != null)
+                    {
+                        targetPoint.BorderColor = Color.White;
+                        targetPoint.BorderWidth = 3;
+                    }
+
+                    // 2) 퍼센트 레이블 내용 변경
+                    if (localName == "달성")
+                    {
+                        rateLabel.Text = $"{achievementRate:0.#}%";
+                        rateLabel.ForeColor = Color.FromArgb(100, 181, 246); // 파랑
+                    }
+                    else if (localName == "미달성")
+                    {
+                        rateLabel.Text = $"{missRate:0.#}%";
+                        rateLabel.ForeColor = Color.FromArgb(244, 67, 54); // 살짝 경고 느낌 빨강
+                    }
+                };
+
+                row.Cursor = Cursors.Hand;
+                swatch.Cursor = Cursors.Hand;
+                lbl.Cursor = Cursors.Hand;
+
+                row.Click += clickHandler;
+                swatch.Click += clickHandler;
+                lbl.Click += clickHandler;
+
+                row.Controls.Add(swatch);
+                row.Controls.Add(lbl);
+                flowLegendMonthlyTarget.Controls.Add(row);
+            }
+
+            flowLegendMonthlyTarget.ResumeLayout();
+        }
+
+
 
         private void UpdateMonthLabels()
         {
             // 예: 2025년 11월
             string ymText = $"{_currentYear}년 {_currentMonth:00}월";
+            string ymText1 = $"{_currentMonth:00}월";
 
             // 각 카드별 제목 텍스트
             if (lblMonthlyLineTitle != null)
@@ -402,7 +689,10 @@ namespace pcb_monitoring_program.Views.Statistics
                 lblMonthlyAccumTitle.Text = $"{_currentYear}년 월별 누적 현황";
 
             if (lblDefectPieTitle != null)
-                lblDefectPieTitle.Text = $"{ymText} 불량 유형 비율";
+                lblDefectPieTitle.Text = $"{ymText1} 불량 유형 비율";
+
+            if (lblMonthlyTargetTitle != null)
+                lblMonthlyTargetTitle.Text = $"{ymText1} 생산 목표 달성률";     
         }
 
         private void MonthlyLineChart_MouseClick(object sender, MouseEventArgs e)
@@ -420,42 +710,48 @@ namespace pcb_monitoring_program.Views.Statistics
             var legendItem = (LegendItem)hit.Object;
             string clickedSeriesName = legendItem.SeriesName;
 
-            // 4) 현재 필터 상태 확인 (chart.Tag 에 저장해두자)
-            string? currentFilter = chart.Tag as string;   // null = 전체보기 상태
-
-            if (currentFilter == null)
+            // 4) 선택 상태를 HashSet<string> 으로 관리
+            var selectedSet = chart.Tag as HashSet<string>;
+            if (selectedSet == null)
             {
-                // 전체 보기 상태 → 클릭한 시리즈만 보이게 (필터 ON)
-                chart.Tag = clickedSeriesName;
-
-                foreach (var s in chart.Series)
-                {
-                    bool isClicked = (s.Name == clickedSeriesName);
-
-                    if (isClicked)
-                    {
-                        // 클릭한 시리즈: 원래 스타일 유지
-                        // (CreateLineSeries에서 이미 색/마커 설정해줬으니까 그대로 둬도 됨)
-                    }
-                    else
-                    {
-                        // 나머지 시리즈: 그래프만 안 보이게
-                        s.Color = Color.Transparent;
-                        s.MarkerStyle = MarkerStyle.None;
-                    }
-
-                    s.IsVisibleInLegend = true; // 레전드는 항상 보이게
-                }
+                selectedSet = new HashSet<string>();
+                chart.Tag = selectedSet;
             }
-            else if (currentFilter == clickedSeriesName)
-            {
-                // 이미 이 시리즈로 필터 중 → 다시 클릭하면 전체보기로 복귀
-                chart.Tag = null;
 
-                foreach (var s in chart.Series)
+            int totalSeries = chart.Series.Count;
+
+            // 🔹 현재 상태가 "4개 다 보이는 상태"인지 판단
+            //  - selectedSet.Count == 0  → Tag로 필터를 안 쓰는 '전체 보기'
+            //  - selectedSet.Count == totalSeries → 4개를 전부 '선택'한 상태
+            bool allVisibleBefore =
+                (selectedSet.Count == 0) ||
+                (selectedSet.Count >= totalSeries);
+
+            if (allVisibleBefore)
+            {
+                // ✅ 4개 다 보이는 상태에서 클릭 → 클릭한 것만 남기기
+                selectedSet.Clear();
+                selectedSet.Add(clickedSeriesName);
+            }
+            else
+            {
+                // ✅ 일부만 보이는 상태 → 토글 동작
+                if (selectedSet.Contains(clickedSeriesName))
+                    selectedSet.Remove(clickedSeriesName);
+                else
+                    selectedSet.Add(clickedSeriesName);
+            }
+
+            // 선택된 게 0개면 다시 '전체 보기' 모드
+            bool showAll = selectedSet.Count == 0;
+
+            foreach (var s in chart.Series)
+            {
+                bool isSelected = showAll || selectedSet.Contains(s.Name);
+
+                if (isSelected)
                 {
-                    // 여기서 각 시리즈 원래 색/마커를 다시 세팅해주기
-                    // 예: 이름 기준으로 색 복원
+                    // 👉 이름별 원래 색 복원
                     if (s.Name == "정상")
                         s.Color = Color.FromArgb(100, 181, 246);
                     else if (s.Name == "부품불량")
@@ -467,45 +763,18 @@ namespace pcb_monitoring_program.Views.Statistics
 
                     s.MarkerStyle = MarkerStyle.Circle;
                     s.MarkerSize = 4;
-
-                    s.IsVisibleInLegend = true;
                 }
-            }
-            else
-            {
-                // 다른 시리즈로 필터 변경
-                chart.Tag = clickedSeriesName;
-
-                foreach (var s in chart.Series)
+                else
                 {
-                    bool isClicked = (s.Name == clickedSeriesName);
-
-                    if (isClicked)
-                    {
-                        // 클릭된 시리즈: 색/마커 복원
-                        if (s.Name == "정상")
-                            s.Color = Color.FromArgb(100, 181, 246);
-                        else if (s.Name == "부품불량")
-                            s.Color = Color.Orange;
-                        else if (s.Name == "납땜불량")
-                            s.Color = Color.FromArgb(158, 158, 158);
-                        else if (s.Name == "폐기")
-                            s.Color = Color.Red;
-
-                        s.MarkerStyle = MarkerStyle.Circle;
-                        s.MarkerSize = 4;
-                    }
-                    else
-                    {
-                        // 나머지: 숨기기
-                        s.Color = Color.Transparent;
-                        s.MarkerStyle = MarkerStyle.None;
-                    }
-
-                    s.IsVisibleInLegend = true;
+                    // 숨기기
+                    s.Color = Color.Transparent;
+                    s.MarkerStyle = MarkerStyle.None;
                 }
+
+                s.IsVisibleInLegend = true; // 레전드는 항상 보이게
             }
         }
+        
 
         private void MonthlyLineChart_MouseMove(object sender, MouseEventArgs e)
         {
@@ -514,11 +783,151 @@ namespace pcb_monitoring_program.Views.Statistics
             // 마우스 위치로 히트 테스트
             var hit = chart.HitTest(e.X, e.Y);
 
-            // 레전드 아이템 위에 있으면 손가락, 아니면 기본
+            // 1) 레전드 위에 있으면 손가락 커서
             if (hit.ChartElementType == ChartElementType.LegendItem)
+            {
                 chart.Cursor = Cursors.Hand;
+            }
             else
+            {
                 chart.Cursor = Cursors.Default;
+            }
+
+            // 2) 데이터 포인트 위에 있으면 “고급” 툴팁 보여주기
+            if (hit.ChartElementType == ChartElementType.DataPoint &&
+                hit.PointIndex >= 0 &&
+                hit.Series != null)
+            {
+                var series = hit.Series;
+                var point = series.Points[hit.PointIndex];
+
+                int day = (int)point.XValue;         // 1 ~ 31
+                int value = (int)point.YValues[0];   // 해당 시리즈 값
+
+                // ✅ 같은 포인트에서 계속 움직일 땐 다시 툴팁 안 띄우기
+                string key = $"{series.Name}_{day}";
+                if (_lastToolTipKey == key)
+                {
+                    return; // 이미 이 포인트에 대한 툴팁이 떠 있는 상태
+                }
+                _lastToolTipKey = key;
+
+                // 현재 월 데이터에서 그 날짜 레코드 찾기
+                var rec = _yearDailyStats
+                    .FirstOrDefault(d =>
+                        d.StatDate.Year == _currentYear &&
+                        d.StatDate.Month == _currentMonth &&
+                        d.StatDate.Day == day);
+
+                if (rec != null)
+                {
+                    int total = rec.TotalInspections;
+                    int normal = rec.NormalCount;
+                    int comp = rec.ComponentDefectCount;
+                    int solder = rec.SolderDefectCount;
+                    int scrap = rec.DiscardCount;
+                    int defectSum = comp + solder + scrap;
+
+                    double defectRate = 0;
+                    if (total > 0)
+                        defectRate = defectSum * 100.0 / total;
+
+                    // 고급 툴팁 텍스트 구성
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"{rec.StatDate:yyyy-MM-dd}");
+                    sb.AppendLine($"[{series.Name}] {value:N0}개");
+                    sb.AppendLine($"총 검사: {total:N0}개");
+                    sb.AppendLine($"정상: {normal:N0} / 부품: {comp:N0} / 납땜: {solder:N0} / 폐기: {scrap:N0}");
+                    sb.AppendLine($"불량률: {defectRate:0.00}% ({defectSum:N0}개)");
+
+                    // 마우스 위치 기준으로 약간 옆/위에 표시
+                    _monthlyChartToolTip.Show(
+                        sb.ToString(),
+                        chart,
+                        e.Location.X + 15,
+                        e.Location.Y - 15,
+                        3000   // 3초 후 자동 숨김
+                    );
+                }
+                else
+                {
+                    _monthlyChartToolTip.Hide(chart);
+                    _lastToolTipKey = null;
+                }
+            }
+            else
+            {
+                // 포인트 위가 아니면 툴팁 숨김 + 상태 리셋
+                _monthlyChartToolTip.Hide(chart);
+                _lastToolTipKey = null;
+            }
+        }
+
+        private void MonthlyAccumChart_MouseMove(object sender, MouseEventArgs e)
+        {
+            var chart = (Chart)sender;
+
+            // 마우스 위치로 히트 테스트
+            var hit = chart.HitTest(e.X, e.Y);
+
+            // 1) 데이터 포인트 위에 있는지 확인
+            if (hit.ChartElementType == ChartElementType.DataPoint &&
+                hit.PointIndex >= 0 &&
+                hit.Series != null)
+            {
+                var series = hit.Series;
+                var point = series.Points[hit.PointIndex];
+
+                int month = (int)point.XValue;      // 1~12
+                int value = (int)point.YValues[0];  // 해당 시리즈 값
+
+                // 깜빡임 방지용 키 (같은 월/같은 시리즈면 재생성 안 함)
+                string key = $"Accum_{series.Name}_{month}";
+                if (_lastToolTipKey == key)
+                    return;
+
+                _lastToolTipKey = key;
+
+                // 🔹 이 월 데이터 전체 다시 합산
+                var monthGroup = _yearDailyStats
+                    .Where(d => d.StatDate.Year == _currentYear &&
+                                d.StatDate.Month == month)
+                    .ToList();
+
+                int sumNormal = monthGroup.Sum(d => d.NormalCount);
+                int sumPartDefect = monthGroup.Sum(d => d.ComponentDefectCount);
+                int sumSolderDefect = monthGroup.Sum(d => d.SolderDefectCount);
+                int sumScrap = monthGroup.Sum(d => d.DiscardCount);
+
+                int total = sumNormal + sumPartDefect + sumSolderDefect + sumScrap;
+                int defectSum = sumPartDefect + sumSolderDefect + sumScrap;
+
+                double defectRate = 0;
+                if (total > 0)
+                    defectRate = defectSum * 100.0 / total;
+
+                // 예쁘게 텍스트 구성
+                var sb = new StringBuilder();
+                sb.AppendLine($"{_currentYear}년 {month:00}월");
+                sb.AppendLine($"[{series.Name}] {value:N0}개");
+                sb.AppendLine($"정상: {sumNormal:N0} / 부품: {sumPartDefect:N0} / 납땜: {sumSolderDefect:N0} / 폐기: {sumScrap:N0}");
+                sb.AppendLine($"총 검사: {total:N0}개");
+                sb.AppendLine($"불량률: {defectRate:0.00}% ({defectSum:N0}개)");
+
+                _monthlyChartToolTip.Show(
+                    sb.ToString(),
+                    chart,
+                    e.Location.X + 15,
+                    e.Location.Y - 15,
+                    3000 // 3초 유지
+                );
+            }
+            else
+            {
+                // 포인트 위가 아니면 툴팁 숨기고 상태 리셋
+                _monthlyChartToolTip.Hide(chart);
+                _lastToolTipKey = null;
+            }
         }
 
         private void btn_Excel_Click(object sender, EventArgs e)
@@ -546,13 +955,14 @@ namespace pcb_monitoring_program.Views.Statistics
 
                 try
                 {
-                    // 3) 엑셀 워크북/시트 생성
                     using (var wb = new XLWorkbook())
                     {
                         var sheetName = $"{_currentYear}-{_currentMonth:00}";
                         var ws = wb.Worksheets.Add(sheetName);
 
+                        // ─────────────────────
                         // 3-1) 헤더 행
+                        // ─────────────────────
                         ws.Cell(1, 1).Value = "날짜";
                         ws.Cell(1, 2).Value = "총 검사 수";
                         ws.Cell(1, 3).Value = "정상";
@@ -565,8 +975,12 @@ namespace pcb_monitoring_program.Views.Statistics
                         headerRange.Style.Font.Bold = true;
                         headerRange.Style.Fill.BackgroundColor = XLColor.LightGray;
                         headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                        headerRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                        headerRange.Style.Font.FontColor = XLColor.Black;
 
+                        // ─────────────────────
                         // 3-2) 데이터 행
+                        // ─────────────────────
                         int row = 2;
                         foreach (var d in monthData)
                         {
@@ -579,7 +993,6 @@ namespace pcb_monitoring_program.Views.Statistics
                             ws.Cell(row, 5).Value = d.SolderDefectCount;
                             ws.Cell(row, 6).Value = d.DiscardCount;
 
-                            // 불량률 계산
                             double defectRate = 0;
                             int defectSum = d.ComponentDefectCount + d.SolderDefectCount + d.DiscardCount;
                             if (d.TotalInspections > 0)
@@ -591,24 +1004,80 @@ namespace pcb_monitoring_program.Views.Statistics
                             row++;
                         }
 
-                        // 3-3) 숫자 컬럼(B~F) 형식/정렬/색 지정
                         int lastRow = row - 1;
-                        var dataNumberRange = ws.Range(2, 2, lastRow, 6); // B2 ~ F(lastRow)
-                        dataNumberRange.Style.NumberFormat.Format = "0";  // 정수
-                        dataNumberRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+
+                        // 숫자 컬럼 B~F: 정수 형식
+                        var dataNumberRange = ws.Range(2, 2, lastRow, 6);
+                        dataNumberRange.Style.NumberFormat.Format = "0";
                         dataNumberRange.Style.Font.FontColor = XLColor.Black;
 
-                        // 불량률 컬럼 오른쪽 정렬
-                        ws.Column(7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+                        // 불량률 컬럼 G: 퍼센트 형식은 위에서 설정, 색만 맞춰줌
+                        ws.Column(7).Style.Font.FontColor = XLColor.Black;
 
-                        // 3-4) 컬럼 너비 자동 맞춤 + 최소 폭 보장
+                        // ─────────────────────
+                        // 3-3) 월 생산 목표 요약 (정상 기준)
+                        // ─────────────────────
+                        int targetMonthly = 30000; // 월 목표 생산량
+                        int actualProduction = monthData.Sum(d => d.NormalCount);
+
+                        if (actualProduction > targetMonthly)
+                            actualProduction = targetMonthly;
+
+                        double achievementRate = targetMonthly > 0
+                            ? (actualProduction * 1.0 / targetMonthly)
+                            : 0.0;
+
+                        int summaryRow = lastRow + 2;
+
+                        ws.Cell(summaryRow, 1).Value = "월 생산 목표";
+                        ws.Cell(summaryRow, 2).Value = targetMonthly;
+
+                        ws.Cell(summaryRow + 1, 1).Value = "월 실제 생산량";
+                        ws.Cell(summaryRow + 1, 2).Value = actualProduction;
+
+                        ws.Cell(summaryRow + 2, 1).Value = "달성률";
+                        ws.Cell(summaryRow + 2, 2).Value = achievementRate;
+                        ws.Cell(summaryRow + 2, 2).Style.NumberFormat.Format = "0.00%";
+
+                        // 요약 라벨/값 스타일 (폰트만, 정렬은 아래에서 한 번에 중앙정렬)
+                        var summaryLabelRange = ws.Range(summaryRow, 1, summaryRow + 2, 1);
+                        summaryLabelRange.Style.Font.Bold = true;
+                        summaryLabelRange.Style.Font.FontColor = XLColor.Black;
+
+                        var summaryValueRange = ws.Range(summaryRow, 2, summaryRow + 2, 2);
+                        summaryValueRange.Style.Font.FontColor = XLColor.Black;
+
+                        // 숫자 2개(목표/실제)는 정수로
+                        ws.Cell(summaryRow, 2).Style.NumberFormat.Format = "0";
+                        ws.Cell(summaryRow + 1, 2).Style.NumberFormat.Format = "0";
+                        // 달성률은 이미 % 형식
+
+                        // ─────────────────────
+                        // 3-4) 전체 중앙 정렬 + 컬럼 너비
+                        // ─────────────────────
+
+                        // 메인 테이블 + 요약까지 전체 중앙 정렬
+                        var allRange = ws.Range(1, 1, summaryRow + 2, 7); // 1~7열만 사용 중
+                        allRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                        allRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+                        // 컬럼 너비 자동 맞춤
                         ws.Columns().AdjustToContents();
 
+                        // 기본 최소 폭 보정
                         for (int col = 1; col <= 7; col++)
                         {
                             if (ws.Column(col).Width < 12)
-                                ws.Column(col).Width = 12;   // 너무 좁으면 최소 12
+                                ws.Column(col).Width = 12;
                         }
+
+                        // 요약 텍스트용 1열 약간 넓게
+                        if (ws.Column(1).Width < 17)
+                            ws.Column(1).Width = 17;
+
+                        // 숫자 많이 들어가는 2열도 넉넉하게
+                        if (ws.Column(2).Width < 15)
+                            ws.Column(2).Width = 15;
 
                         // 4) 저장
                         wb.SaveAs(sfd.FileName);
@@ -622,6 +1091,9 @@ namespace pcb_monitoring_program.Views.Statistics
                 }
             }
         }
+
+
+
 
         private void dtpMonth_ValueChanged(object sender, EventArgs e)
         {
@@ -646,6 +1118,7 @@ namespace pcb_monitoring_program.Views.Statistics
             SetupMonthlyLineChart();
             SetupMonthlyAccumChart();
             SetupDefectTypePieChart();
+            SetupMonthlyTargetChart();
             UpdateMonthLabels();
         }
     }

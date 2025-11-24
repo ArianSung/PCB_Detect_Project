@@ -43,7 +43,7 @@
             cardPCBLineChoice.Controls.Add(btnPCBLine2);
             cardPCBLineChoice.Location = new Point(13, 12);
             cardPCBLineChoice.Name = "cardPCBLineChoice";
-            cardPCBLineChoice.Size = new Size(358, 73);
+            cardPCBLineChoice.Size = new Size(358, 61);
             cardPCBLineChoice.TabIndex = 10;
             // 
             // btnPCBLine1
@@ -51,7 +51,7 @@
             btnPCBLine1.FlatAppearance.BorderSize = 0;
             btnPCBLine1.FlatStyle = FlatStyle.Flat;
             btnPCBLine1.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            btnPCBLine1.Location = new Point(21, 17);
+            btnPCBLine1.Location = new Point(13, 10);
             btnPCBLine1.Name = "btnPCBLine1";
             btnPCBLine1.Size = new Size(82, 40);
             btnPCBLine1.TabIndex = 6;
@@ -64,7 +64,7 @@
             btnPCBLine3.FlatAppearance.BorderSize = 0;
             btnPCBLine3.FlatStyle = FlatStyle.Flat;
             btnPCBLine3.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            btnPCBLine3.Location = new Point(259, 17);
+            btnPCBLine3.Location = new Point(263, 10);
             btnPCBLine3.Name = "btnPCBLine3";
             btnPCBLine3.Size = new Size(82, 40);
             btnPCBLine3.TabIndex = 8;
@@ -77,7 +77,7 @@
             btnPCBLine2.FlatAppearance.BorderSize = 0;
             btnPCBLine2.FlatStyle = FlatStyle.Flat;
             btnPCBLine2.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            btnPCBLine2.Location = new Point(140, 17);
+            btnPCBLine2.Location = new Point(138, 10);
             btnPCBLine2.Name = "btnPCBLine2";
             btnPCBLine2.Size = new Size(82, 40);
             btnPCBLine2.TabIndex = 7;
@@ -87,9 +87,9 @@
             // 
             // PCBMonitoringpanel
             // 
-            PCBMonitoringpanel.Location = new Point(0, 100);
+            PCBMonitoringpanel.Location = new Point(0, 79);
             PCBMonitoringpanel.Name = "PCBMonitoringpanel";
-            PCBMonitoringpanel.Size = new Size(1600, 700);
+            PCBMonitoringpanel.Size = new Size(1600, 720);
             PCBMonitoringpanel.TabIndex = 11;
             // 
             // MainPCBMonitoringView
