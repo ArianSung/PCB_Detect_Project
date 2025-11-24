@@ -696,7 +696,6 @@ namespace pcb_monitoring_program.Views.Dashboard
             area.AxisY.MajorGrid.LineColor = Color.FromArgb(70, 70, 70);
             area.AxisY.LabelStyle.ForeColor = Color.Gainsboro;
             area.AxisY.LabelStyle.Font = new Font("맑은 고딕", 9);
-
             chart.ChartAreas.Add(area);
 
             // 3) Series들 생성
