@@ -1,14 +1,26 @@
-# 이중 모델 아키텍처 설계
+# 이중 모델 아키텍처 설계 📦 [DEPRECATED - v2.0]
 
-> **⚠️ 업데이트: 자체 수집 데이터셋 사용 (2025-01-11)**
+> ⚠️ **이 문서는 v2.0 아키텍처를 설명하며, v3.0부터는 사용되지 않습니다.**
 >
-> 이 문서의 모델 파일명은 참고용입니다. 실제 사용 데이터셋:
-> - **부품 검출 모델**: 자체 촬영 데이터셋 (200-300장, Roboflow 라벨링)
-> - **납땜 불량 모델**: 자체 촬영 데이터셋 (200-300장, Roboflow 라벨링)
+> **v3.0 변경사항 (2025-11-28)**:
+> - **이중 YOLO 모델** (부품 검출 + 납땜 불량) → **단일 YOLO 모델 + 제품별 위치 검증**
+> - **공개 데이터셋** (FPIC-Component, SolDef_AI) → **커스텀 데이터셋** (FT, RS, BC 제품)
+> - **결과 융합 로직** → **ComponentVerifier (부품 위치 검증)**
+> - **4단계 판정**: component_defect/solder_defect → missing/position_error
 >
-> 데이터 수집 가이드: `Data_Collection_Guide_Simple.md`
+> **v3.0 문서**:
+> - 시스템 아키텍처: `PCB_Defect_Detection_Project.md`
+> - Flask 서버: `Flask_Server_Setup.md`
+> - 데이터셋: `Dataset_Guide.md` (커스텀 데이터셋)
+> - 데이터베이스: `MySQL_Database_Design.md` (제품별 기준 데이터)
+>
+> ---
+>
+> **아래 내용은 v2.0 참고용으로 보관됩니다.**
 
-## 시스템 흐름
+---
+
+## 시스템 흐름 (v2.0)
 
 ```
 [좌측 카메라] ──→ [부품 검출 모델] ──→ [결과A]
@@ -33,11 +45,11 @@
 ```python
 class DualModelInference:
     def __init__(self):
-        # 모델 1: 부품 검출 (자체 수집 데이터셋)
-        self.component_model = YOLO('models/component_model_best.pt')
+        # 모델 1: 부품 검출 (25개 클래스)
+        self.component_model = YOLO('models/fpic_component_best.pt')
 
-        # 모델 2: 납땜 불량 (자체 수집 데이터셋)
-        self.solder_model = YOLO('models/solder_model_best.pt')
+        # 모델 2: 납땜 불량 (5-6개 클래스)
+        self.solder_model = YOLO('models/soldef_ai_best.pt')
 
     def predict_dual(self, left_frame, right_frame):
         """양면 동시 추론"""
@@ -301,14 +313,14 @@ def capture_and_send():
 
 ## 9. 구현 순서
 
-### Phase 1: 데이터셋 수집 (1일)
-1. 실제 웹캠으로 부품/납땜 이미지 촬영 (각 200-300장)
-2. Roboflow 업로드 → 라벨링 → 증강 (3배 이상)
-3. YOLO 형식 Export 후 `data/custom_component`, `data/custom_solder` 구성
+### Phase 1: 데이터셋 다운로드 (1일)
+1. FPIC-Component 다운로드
+2. SolDef_AI 다운로드
+3. YOLO 형식 변환
 
 ### Phase 2: 모델 학습 (2-3일)
-1. 부품 검출 모델 학습 (`custom_component`)
-2. 납땜 불량 모델 학습 (`custom_solder`)
+1. 부품 검출 모델 학습 (FPIC)
+2. 납땜 불량 모델 학습 (SolDef_AI)
 3. 성능 평가
 
 ### Phase 3: Flask 서버 구현 (1일)
@@ -325,187 +337,7 @@ def capture_and_send():
 
 ---
 
-## 10. YOLO 어노테이션 이미지 생성 및 스트리밍 ⭐ 신규
-
-### 10.1. 어노테이션 이미지 생성
-
-**YOLO 추론 결과를 시각화하여 바운딩 박스가 그려진 이미지 생성**:
-
-```python
-# Flask 서버 (server/app.py)
-
-# 좌측: 부품 검출 모델
-left_results = yolo_component_model(left_frame)
-
-# ✅ YOLO 자체 제공 plot() 함수로 바운딩 박스 그리기
-left_annotated = left_results[0].plot()
-#   - 자동으로 클래스 이름, 신뢰도, 바운딩 박스 표시
-#   - 색상: 클래스별로 자동 할당
-#   - 반환값: NumPy 배열 (BGR, OpenCV 형식)
-
-# JPEG 인코딩
-_, buffer = cv2.imencode('.jpg', left_annotated, [cv2.IMWRITE_JPEG_QUALITY, 85])
-left_annotated_base64 = base64.b64encode(buffer).decode('utf-8')
-
-# MJPEG 스트리밍용 저장
-latest_annotated_frames['left'] = buffer.tobytes()
-```
-
-**plot() 함수 특징**:
-- ✅ 클래스 이름 + 신뢰도 자동 표시 (예: "cold_joint 87%")
-- ✅ 바운딩 박스 자동 그리기 (클래스별 색상 구분)
-- ✅ 별도 코드 불필요 (Ultralytics YOLO 기본 제공)
-
----
-
-### 10.2. 이중 사용 목적 (Dual Purpose)
-
-어노테이션 이미지는 **2가지 방식**으로 활용됩니다:
-
-#### 1. REST API 응답 (즉시 사용)
-
-**`/predict_dual` 응답에 Base64 인코딩된 어노테이션 이미지 포함**:
-
-```json
-{
-  "status": "ok",
-  "final_defect_type": "납땜불량",
-
-  "left_annotated_image": "base64_jpeg_data...",   // ✅ 부품 검출 결과 이미지
-  "right_annotated_image": "base64_jpeg_data...",  // ✅ 납땜 불량 결과 이미지
-
-  "gpio_signal": {"pin": 27}
-}
-```
-
-**용도**: AI 추론 직후 결과를 즉시 확인 (C# 또는 웹 대시보드)
-
----
-
-#### 2. MJPEG 스트리밍 (실시간 모니터링)
-
-**`/video_feed_annotated/<camera_id>` 엔드포인트**:
-
-```python
-@app.route('/video_feed_annotated/<camera_id>')
-def video_feed_annotated(camera_id):
-    """30fps MJPEG 스트림"""
-    def generate():
-        while True:
-            frame_data = latest_annotated_frames.get(camera_id)
-            if frame_data:
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
-            time.sleep(0.033)  # 30fps
-
-    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
-```
-
-**용도**: C# WinForms 모니터링 앱에서 실시간 30fps 영상 표시
-
----
-
-### 10.3. 데이터 흐름 (업데이트)
-
-```
-[라즈베리파이 1, 2]
-   │
-   ├─► 스레드 1: 모니터링용 (30fps)
-   │      POST /upload_frame
-   │      ↓
-   │   [latest_frames 업데이트]
-   │
-   └─► 스레드 2: AI 추론 (PCB 감지 시)
-          POST /predict_dual
-          ↓
-       [Flask 서버]
-          ├─ left_frame → component_model(좌측)
-          ├─ right_frame → solder_model(우측)
-          │
-          ├─ ✅ left_annotated = left_results[0].plot()
-          ├─ ✅ right_annotated = right_results[0].plot()
-          │
-          ├─ ✅ latest_annotated_frames['left'] = left_annotated
-          ├─ ✅ latest_annotated_frames['right'] = right_annotated
-          │
-          ├─ 결과 융합 로직
-          ├─ GPIO 핀 결정
-          │
-          └─ 응답:
-             {
-               "final_defect_type": "...",
-               "left_annotated_image": "base64...",  ✅
-               "right_annotated_image": "base64..." ✅
-             }
-
-[C# WinForms]
-   │
-   GET /video_feed_annotated/left (MJPEG)
-   GET /video_feed_annotated/right
-   ↓
-   ✅ 실시간 30fps 바운딩 박스 영상 표시
-```
-
----
-
-### 10.4. C# WinForms 통합
-
-**AForge.Video 라이브러리 사용**:
-
-```csharp
-using AForge.Video;
-
-public partial class MonitoringForm : Form
-{
-    private MJPEGStream leftStream;
-    private MJPEGStream rightStream;
-
-    private void StartStreaming()
-    {
-        // ✅ YOLO 어노테이션 영상 (바운딩 박스 포함)
-        leftStream = new MJPEGStream("http://100.64.1.1:5000/video_feed_annotated/left");
-        leftStream.NewFrame += (s, e) => {
-            pictureBoxLeft.Image = (Bitmap)e.Frame.Clone();
-        };
-        leftStream.Start();
-
-        rightStream = new MJPEGStream("http://100.64.1.1:5000/video_feed_annotated/right");
-        rightStream.NewFrame += (s, e) => {
-            pictureBoxRight.Image = (Bitmap)e.Frame.Clone();
-        };
-        rightStream.Start();
-    }
-}
-```
-
-**결과**:
-- ✅ 부품 불량: 빨간색 박스 + "missing_component 95%"
-- ✅ 납땜 불량: 파란색 박스 + "cold_joint 87%"
-- ✅ 실시간 30fps 영상
-
----
-
-### 10.5. 성능 영향
-
-**어노테이션 이미지 생성 오버헤드**:
-- YOLO plot() 함수: **5-10ms** (매우 빠름)
-- JPEG 인코딩: **2-5ms**
-- Base64 인코딩: **1-2ms**
-- **총합**: **8-17ms**
-
-**전체 추론 시간**:
-- 부품 모델: 30-50ms
-- 납땜 모델: 30-50ms
-- 어노테이션: +10ms
-- **합계**: **70-110ms** (목표 < 300ms) ✅
-
-**메모리 사용**:
-- 어노테이션 프레임 저장: 640×480×3 = ~0.9MB (2개 = 1.8MB)
-- 영향 미미 (VRAM은 GPU에만 사용) ✅
-
----
-
-## 11. 결론
+## 10. 결론
 
 **이중 모델 + 결과 융합 방식은 충분히 실용적입니다!**
 

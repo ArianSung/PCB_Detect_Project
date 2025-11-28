@@ -498,23 +498,23 @@ sudo apt install wget curl -y
 
 Phase 1이 완료되면 다음 단계로 진행:
 
-1. **Phase 2 시작**: PCB 불량 **자체 데이터셋** 수집 (이중 모델)
+1. **Phase 2 시작**: PCB 불량 데이터셋 수집 (이중 모델)
    - `Dataset_Guide.md` 참고 ⭐
-   - 실제 웹캠으로 부품/납땜 이미지를 촬영 (각 200-300장)
-   - Roboflow에 업로드하여 라벨링 및 증강 (3배 이상)
-   - YOLO 형식으로 Export 후 `data/custom_component`, `data/custom_solder`에 배치
+   - FPIC-Component 데이터셋 다운로드 (Roboflow)
+   - SolDef_AI 데이터셋 다운로드 (Roboflow)
+   - 각 데이터셋을 YOLO 형식으로 변환
 
 2. **프로젝트 폴더 구조 생성** (이중 모델):
 ```bash
 cd ~/work_project
 
 # Component Model 데이터
-mkdir -p data/custom_component/images/{train,valid,test}
-mkdir -p data/custom_component/labels/{train,valid,test}
+mkdir -p data/processed/fpic_component/{train,val,test}/images
+mkdir -p data/processed/fpic_component/{train,val,test}/labels
 
 # Solder Model 데이터
-mkdir -p data/custom_solder/images/{train,valid,test}
-mkdir -p data/custom_solder/labels/{train,valid,test}
+mkdir -p data/processed/soldef_ai/{train,val,test}/images
+mkdir -p data/processed/soldef_ai/{train,val,test}/labels
 
 # 모델 저장 폴더
 mkdir -p models/component_model models/solder_model
@@ -525,8 +525,8 @@ mkdir -p results logs
 
 3. **이중 모델 학습 준비**:
    - `YOLO_Training_Guide.md` 참고
-   - Component Model 학습 (custom_component, 프로젝트 클래스)
-   - Solder Model 학습 (custom_solder, 프로젝트 클래스)
+   - Component Model 학습 (FPIC-Component, 25 클래스)
+   - Solder Model 학습 (SolDef_AI, 5-6 클래스)
    - 각 모델을 독립적으로 학습 및 평가
 
 ---

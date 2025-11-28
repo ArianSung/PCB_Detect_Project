@@ -5,8 +5,8 @@
 이 가이드는 라즈베리파이 4를 사용하여 **양면 동시 웹캠 캡처**, GPIO 제어, OHT 시스템 제어를 수행하는 방법을 설명합니다.
 
 **⭐ 이중 모델 아키텍처**:
-- **Component Model (부품 검출)**: 좌측 카메라 → custom_component 모델 (프로젝트 클래스)
-- **Solder Model (납땜 불량)**: 우측 카메라 → custom_solder 모델 (프로젝트 클래스)
+- **Component Model (부품 검출)**: 좌측 카메라 → FPIC-Component 모델 (25 클래스)
+- **Solder Model (납땜 불량)**: 우측 카메라 → SolDef_AI 모델 (5-6 클래스)
 - **Result Fusion (결과 융합)**: Flask 서버에서 두 결과를 융합하여 최종 판정
 
 **시스템 구성**:
@@ -1416,5 +1416,5 @@ OHT 시스템의 상세한 하드웨어 사양, 제어 로직, API 설계는 다
   - 양면 동시 캡처 클라이언트 (`dual_camera_client.py`)
   - API 엔드포인트 변경: `/predict` → `/predict_dual`
   - GPIO 제어: 융합 결과 기반 (normal, component_defect, solder_defect, discard)
-  - Component Model (custom_component) + Solder Model (custom_solder)
+  - Component Model (FPIC-Component, 25 클래스) + Solder Model (SolDef_AI, 5-6 클래스)
 - **1.1 (2025-10-23)**: Tailscale VPN 원격 연결 섹션 추가

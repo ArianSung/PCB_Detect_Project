@@ -1,23 +1,16 @@
 # 이중 YOLO 모델 학습 완전 가이드 ⭐
 
-> **⚠️ 중요: 자체 수집 데이터셋 사용 (2025-01-11 업데이트)**
->
-> **기존**: 공개 데이터셋 (FPIC-Component, SolDef_AI)
-> **현재**: **자체 촬영 데이터셋** (실제 웹캠으로 촬영, Roboflow 라벨링)
->
-> 데이터 수집 완전 가이드: `Data_Collection_Guide_Simple.md` ⭐⭐⭐
-
-**이중 전문 YOLO v11l 모델 독립 학습 가이드**
+**이중 전문 YOLO v11ll 모델 독립 학습 가이드**
 
 이 가이드는 다음 두 모델을 독립적으로 학습하는 방법을 안내합니다:
-- **모델 1 (Component Model)**: 자체 수집 부품 검출 데이터셋 (목표: 200-300 이미지)
-- **모델 2 (Solder Model)**: 자체 수집 납땜 불량 데이터셋 (목표: 200-300 이미지)
+- **모델 1 (Component Model)**: FPIC-Component 데이터셋 (25 클래스, 6,260 이미지)
+- **모델 2 (Solder Model)**: SolDef_AI 데이터셋 (5-6 클래스, 429 이미지)
 
 ## 목차
 1. [시작하기 전에](#시작하기-전에)
-2. [데이터셋 준비](#데이터셋-준비) ⭐
-   - [자체 데이터 수집](#자체-데이터-수집) (권장)
-   - [데이터셋 구조 확인](#데이터셋-구조-확인)
+2. [데이터셋 준비](#데이터셋-준비)
+   - [FPIC-Component 다운로드](#fpic-component-다운로드)
+   - [SolDef_AI 다운로드](#soldef_ai-다운로드)
 3. [모델 1: Component Model 학습](#모델-1-component-model-학습)
 4. [모델 2: Solder Model 학습](#모델-2-solder-model-학습)
 5. [GPU 모니터링](#gpu-모니터링)
@@ -64,40 +57,47 @@
 
 ---
 
-## 데이터셋 준비 ⭐
+## 데이터셋 준비
 
-### 자체 데이터 수집 (권장) ⭐⭐⭐
+### FPIC-Component 다운로드
 
-**완전한 가이드**: `Data_Collection_Guide_Simple.md` 참조
+**모델 1 (Component Model)** - 25개 클래스, 6,260 이미지
 
-**요약**:
-1. **촬영** (2-4시간)
-   - 실제 사용 웹캠으로 200-300장 촬영
-   - 부품 검출용 + 납땜 불량용
-2. **라벨링** (6-12시간)
-   - Roboflow 업로드
-   - 박스 그리기 (단축키 활용)
-   - 자동 증강 (3배)
-3. **Export**
-   - YOLO v11 형식으로 다운로드
-   - `data/custom_component/`, `data/custom_solder/`에 배치
-
-**장점**:
-- ✅ 실제 환경과 100% 일치
-- ✅ 프로젝트 요구사항 맞춤화
-- ✅ 추가 데이터 수집 용이
-
----
-
-### 데이터셋 구조 확인
-
-자체 수집 데이터를 Roboflow에서 Export하면 다음 구조로 제공됩니다:
+#### 옵션 1: Google Drive (추천)
 
 ```bash
-cd /home/sys1041/work_project/data
+cd /home/sys1041/work_project/data/raw
 
-# 부품 검출 데이터셋 구조
-ls -R custom_component/
+# gdown 설치 (최초 1회)
+pip install gdown
+
+# Google Drive에서 다운로드
+gdown --id <GOOGLE_DRIVE_FILE_ID> -O fpic_component.zip
+
+# 압축 해제
+unzip fpic_component.zip -d fpic_component/
+
+# 확인
+ls -R fpic_component/
+```
+
+#### 옵션 2: 공식 사이트 다운로드
+
+출처: IIT India Research Repository
+논문: "FPIC: A Novel Semantic Dataset for Optical PCB Assurance"
+
+수동 다운로드 후:
+```bash
+# 다운로드한 파일을 data/raw로 이동
+mv ~/Downloads/fpic_component.zip data/raw/
+cd data/raw
+unzip fpic_component.zip
+```
+
+#### 데이터셋 구조 확인
+
+```bash
+cd fpic_component
 tree -L 2
 ```
 
@@ -135,21 +135,15 @@ names:
 
 ```bash
 cd /home/sys1041/work_project
-
-# Roboflow Export 결과를 저장할 폴더
-mkdir -p data/custom_component
-mkdir -p data/custom_solder
-
-# 예시: Roboflow에서 다운로드한 zip 파일 배치
-unzip ~/Downloads/component_export.zip -d data/custom_component/
-unzip ~/Downloads/solder_export.zip -d data/custom_solder/
+mkdir -p data/processed/component_model
+cp -r data/raw/fpic_component/* data/processed/component_model/
 ```
 
 ---
 
-### custom_solder Export (자체 데이터)
+### SolDef_AI 다운로드
 
-**모델 2 (Solder Model)** - 5-6개 클래스, 200-300 원본 이미지 (증강 후 600-900)
+**모델 2 (Solder Model)** - 5-6개 클래스, 429 이미지
 
 #### Roboflow API 사용 (추천)
 
@@ -162,13 +156,16 @@ pip install roboflow
 # Python 스크립트로 다운로드
 python3 << 'EOF'
 from roboflow import Roboflow
-import os
 
-rf = Roboflow(api_key=os.environ["ROBOFLOW_API_KEY"])
-project = rf.workspace("pcb-defect").project("custom-solder")
+# API 키 설정 (Roboflow 웹사이트에서 발급)
+# https://app.roboflow.com/settings/api 에서 API Key 확인
+rf = Roboflow(api_key="YOUR_ROBOFLOW_API_KEY")
+
+# SolDef_AI 프로젝트 접근
+project = rf.workspace("soldef-ai").project("soldering-defects")
 dataset = project.version(1).download("yolo11")
 
-print("✅ custom_solder 데이터셋 다운로드 완료!")
+print("✅ SolDef_AI 데이터셋 다운로드 완료!")
 print(f"경로: {dataset.location}")
 EOF
 ```
@@ -176,39 +173,45 @@ EOF
 **Roboflow API Key 발급 방법:**
 1. https://app.roboflow.com/ 가입/로그인
 2. Settings → API → Copy API Key
-3. 환경변수 `ROBOFLOW_API_KEY`에 저장 후 위 스크립트 실행
+3. 위 스크립트의 `YOUR_ROBOFLOW_API_KEY`에 붙여넣기
 
 #### 웹 UI 다운로드 (대안)
 
-1. Roboflow Workspace → custom_solder 프로젝트 접속
+1. https://universe.roboflow.com/soldef-ai/soldering-defects 접속
 2. "Download Dataset" 클릭
-3. Format: "YOLO v11" 선택
-4. 다운로드 후 `data/custom_solder/`에 압축 해제
+3. Format: "YOLO v11l" 선택
+4. 다운로드 후 압축 해제
+
+```bash
+cd /home/sys1041/work_project/data/raw
+unzip soldering-defects.zip -d soldef_ai/
+```
 
 #### 데이터셋 구조 확인
 
 ```bash
-ls -R data/custom_solder/ | head
+ls -R data/raw/soldef_ai/
 ```
 
 **예상 출력:**
 ```
-custom_solder/
-├── images/
-│   ├── train/    (증강 포함 600-900 images)
-│   ├── valid/    (200 내외)
-│   └── test/     (80-120)
-├── labels/
-│   ├── train/
-│   ├── valid/
-│   └── test/
+soldef_ai/
+├── train/
+│   ├── images/    (300 images)
+│   └── labels/    (YOLO format)
+├── valid/
+│   ├── images/    (86 images)
+│   └── labels/
+├── test/
+│   ├── images/    (43 images)
+│   └── labels/
 └── data.yaml
 ```
 
 #### data.yaml 확인
 
 ```bash
-cat data/custom_solder/data.yaml
+cat data/raw/soldef_ai/data.yaml
 ```
 
 **예상 내용:**
@@ -223,45 +226,55 @@ names:
   - tombstone
 ```
 
+#### 프로젝트 data 폴더로 이동
+
+```bash
+cd /home/sys1041/work_project
+mkdir -p data/processed/solder_model
+cp -r data/raw/soldef_ai/* data/processed/solder_model/
+```
+
+---
+
 ### 데이터셋 준비 확인
 
 ```bash
 cd /home/sys1041/work_project
 
 # Component Model 데이터셋 확인
-echo "=== Component Model (custom_component) ==="
-ls -lh data/custom_component/
-echo "Train images: $(ls data/custom_component/images/train/ | wc -l)"
-echo "Valid images: $(ls data/custom_component/images/valid/ | wc -l)"
-echo "Test images: $(ls data/custom_component/images/test/ | wc -l)"
+echo "=== Component Model (FPIC-Component) ==="
+ls -lh data/processed/component_model/
+echo "Train images: $(ls data/processed/component_model/images/train/ | wc -l)"
+echo "Valid images: $(ls data/processed/component_model/images/valid/ | wc -l)"
+echo "Test images: $(ls data/processed/component_model/images/test/ | wc -l)"
 
 # Solder Model 데이터셋 확인
 echo ""
-echo "=== Solder Model (custom_solder) ==="
-ls -lh data/custom_solder/
-echo "Train images: $(ls data/custom_solder/images/train/ | wc -l)"
-echo "Valid images: $(ls data/custom_solder/images/valid/ | wc -l)"
-echo "Test images: $(ls data/custom_solder/images/test/ | wc -l)"
+echo "=== Solder Model (SolDef_AI) ==="
+ls -lh data/processed/solder_model/
+echo "Train images: $(ls data/processed/solder_model/train/images/ | wc -l)"
+echo "Valid images: $(ls data/processed/solder_model/valid/images/ | wc -l)"
+echo "Test images: $(ls data/processed/solder_model/test/images/ | wc -l)"
 ```
 
 **예상 출력:**
 ```
-=== Component Model (custom_component) ===
-Train images: 600~900
-Valid images: 170~260
-Test images: 80~120
+=== Component Model (FPIC-Component) ===
+Train images: 4382
+Valid images: 1252
+Test images: 626
 
-=== Solder Model (custom_solder) ===
-Train images: 600~900
-Valid images: 170~260
-Test images: 80~120
+=== Solder Model (SolDef_AI) ===
+Train images: 300
+Valid images: 86
+Test images: 43
 ```
 
 ---
 
 ## 모델 1: Component Model 학습
 
-**자체 촬영 부품 데이터셋 (6-8 클래스, 600-900 학습 이미지)**
+**FPIC-Component (25 클래스, 4,382 학습 이미지)**
 
 ### 단계 1: 학습 스크립트 작성
 
@@ -270,16 +283,16 @@ Test images: 80~120
 ```bash
 #!/bin/bash
 
-# Component Model (custom_component) 학습 스크립트
+# Component Model (FPIC-Component) 학습 스크립트
 
 cd /home/sys1041/work_project
 
 echo "=== Component Model Training ==="
-echo "Dataset: custom_component (project-specific classes)"
+echo "Dataset: FPIC-Component (25 classes)"
 echo "Start time: $(date)"
 
 yolo detect train \
-  data=data/custom_component/data.yaml \
+  data=data/processed/component_model/data.yaml \
   model=yolo11l.pt \
   epochs=150 \
   batch=32 \
@@ -317,7 +330,7 @@ echo $! > component_training.pid
 
 # 또는 직접 YOLO 명령 실행
 yolo detect train \
-  data=data/custom_component/data.yaml \
+  data=data/processed/component_model/data.yaml \
   model=yolo11l.pt \
   epochs=150 \
   batch=32 \
@@ -348,10 +361,10 @@ Loading YOLOv11l pretrained weights...
 Transferring 365/365 layers from yolo11l.pt...
 
 === Training Configuration ===
-Dataset: custom_component
-Classes: 6-8 (project-defined)
-Train images: 600~900
-Val images: 170~260
+Dataset: FPIC-Component
+Classes: 25
+Train images: 4,382
+Val images: 1,252
 Epochs: 150
 Batch size: 32
 Image size: 640
@@ -387,7 +400,7 @@ Results saved to runs/detect/component_model/
 
 ## 모델 2: Solder Model 학습
 
-**custom_solder (5-6 클래스, 증강 포함 600-900 학습 이미지)**
+**SolDef_AI (5-6 클래스, 300 학습 이미지)**
 
 ### 단계 1: 학습 스크립트 작성
 
@@ -396,16 +409,16 @@ Results saved to runs/detect/component_model/
 ```bash
 #!/bin/bash
 
-# Solder Model (custom_solder) 학습 스크립트
+# Solder Model (SolDef_AI) 학습 스크립트
 
 cd /home/sys1041/work_project
 
 echo "=== Solder Model Training ==="
-echo "Dataset: custom_solder (project-specific classes)"
+echo "Dataset: SolDef_AI (5-6 classes)"
 echo "Start time: $(date)"
 
 yolo detect train \
-  data=data/custom_solder/data.yaml \
+  data=data/processed/solder_model/data.yaml \
   model=yolo11l.pt \
   epochs=150 \
   batch=32 \
@@ -459,10 +472,10 @@ tail -f logs/solder_training.log
 Ultralytics YOLOv11.3.221 🚀 Python-3.10.19 torch-2.7.1+cu118
 
 === Training Configuration ===
-Dataset: custom_solder
+Dataset: SolDef_AI
 Classes: 6
-Train images: 600~900
-Val images: 170~260
+Train images: 300
+Val images: 86
 Epochs: 150
 Batch size: 32
 
@@ -866,17 +879,16 @@ yolo detect train \
 
 ---
 
-### 문제 5: 데이터셋 Export/동기화 실패
+### 문제 5: 데이터셋 다운로드 실패
 
-**custom_component Export 실패:**
-- Roboflow에서 Export 시 포맷을 `YOLO v11`로 선택했는지 확인
-- 증강 비율을 3배 이상으로 설정했는지 확인
-- 압축 해제 경로가 `data/custom_component/`와 일치하는지 검증
+**FPIC-Component 다운로드 안됨:**
+- Google Drive File ID가 잘못되었을 가능성
+- 공식 사이트에서 수동 다운로드
+- 또는 유사한 대체 데이터셋 사용
 
-**custom_solder Export 실패:**
-- `ROBOFLOW_API_KEY` 환경변수 설정 여부 확인
-- Workspace/Project slug가 정확한지 (`pcb-defect/custom-solder`) 재확인
-- 필요 시 웹 UI에서 직접 다운로드하여 수동으로 배치
+**SolDef_AI 다운로드 안됨:**
+- Roboflow API Key 재확인
+- 웹 UI에서 수동 다운로드 (universe.roboflow.com)
 
 ---
 
@@ -910,13 +922,13 @@ echo "Evaluating models..."
 echo "Component Model:"
 yolo detect val \
   model=runs/detect/component_model/weights/best.pt \
-  data=data/custom_component/data.yaml \
+  data=data/processed/component_model/data.yaml \
   split=test
 
 echo "Solder Model:"
 yolo detect val \
   model=runs/detect/solder_model/weights/best.pt \
-  data=data/custom_solder/data.yaml \
+  data=data/processed/solder_model/data.yaml \
   split=test
 
 echo "Complete: $(date)"
@@ -958,10 +970,10 @@ nohup bash scripts/train_all_models.sh > logs/full_training.log 2>&1 &
 **작성일**: 2025-10-31
 **버전**: 3.0 ⭐ (이중 모델 아키텍처)
 **데이터셋**:
-- **Component Model**: custom_component (자체 촬영 200-300장 → 증강 600-900장, 6-8 클래스)
-  - Train: ~70% / Val: ~20% / Test: ~10%
-- **Solder Model**: custom_solder (자체 촬영 200-300장 → 증강 600-900장, 5-6 클래스)
-  - Train: ~70% / Val: ~20% / Test: ~10%
+- **Component Model**: FPIC-Component (6,260장, 25 클래스)
+  - Train: 4,382 / Val: 1,252 / Test: 626
+- **Solder Model**: SolDef_AI (429장, 5-6 클래스)
+  - Train: 300 / Val: 86 / Test: 43
 **성능 목표**:
 - Component mAP50 > 0.85, 추론 < 80ms
 - Solder mAP50 > 0.90, 추론 < 50ms

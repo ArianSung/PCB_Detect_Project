@@ -13,7 +13,7 @@
 | batch=16   | 800×800    | 10-12GB   | **14-16GB** (추정) | ⚠️ 여유 적음 | 보통 |
 | batch=32   | 800×800    | 14-16GB   | **20GB+** (추정) | ❌ OOM | 불가능 |
 
-**⭐ 2025-11-07 실제 측정**: YOLOv11l, batch=16, imgsz=640, custom_solder 데이터셋 (Roboflow export 299 images)
+**⭐ 2025-11-07 실제 측정**: YOLOv11l, batch=16, imgsz=640, SolDef_AI 데이터셋 (299 images)
 
 ### 왜 실제 VRAM 사용량이 더 높을까?
 
@@ -46,7 +46,7 @@
 실제 측정값 (2025-11-07):           11.4-11.8GB ✅
 ```
 
-**측정 조건**: custom_solder 데이터셋 (299 images), amp=True (FP16), AdamW optimizer
+**측정 조건**: SolDef_AI 데이터셋 (299 images), amp=True (FP16), AdamW optimizer
 
 ## CUDA Unified Memory (메모리 스와핑)
 
