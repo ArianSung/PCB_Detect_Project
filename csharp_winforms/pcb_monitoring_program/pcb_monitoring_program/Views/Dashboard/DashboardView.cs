@@ -89,7 +89,7 @@ namespace pcb_monitoring_program.Views.Dashboard
         }
 
 
-        // 0) 오늘 기준 시간별 데이터 다시 로드
+        // 0) 오늘 기준 시간별 데이터 다시 로드 (v3.0 스키마: 제품별 데이터 합산)
         private void ReloadHourlyDataFromDb()
         {
             // 0~23시 (길이 24) 초기화
@@ -108,8 +108,10 @@ namespace pcb_monitoring_program.Views.Dashboard
                     DateTime today = DateTime.Today;
                     DateTime tomorrow = today.AddDays(1);
 
-                    List<HourlyStatistics> stats = db.GetHourlyStatistics(today, tomorrow);
+                    // v3.0: 제품별로 데이터가 분리되어 있으므로 전체 조회 (productCode = null)
+                    List<HourlyStatistics> stats = db.GetHourlyStatistics(today, tomorrow, productCode: null);
 
+                    // v3.0: 같은 시간대에 여러 제품 데이터가 있을 수 있으므로 합산
                     foreach (var item in stats)
                     {
                         int h = item.StatDatetime.Hour;   // 0~23
@@ -117,10 +119,11 @@ namespace pcb_monitoring_program.Views.Dashboard
                         if (h < 0 || h > 23)
                             continue;
 
-                        _hourlyNormal[h] = item.NormalCount;
-                        _hourlyPartDefect[h] = item.ComponentDefectCount;
-                        _hourlySolderDefect[h] = item.SolderDefectCount;
-                        _hourlyScrap[h] = item.DiscardCount;
+                        // 시간대별로 모든 제품 데이터를 합산
+                        _hourlyNormal[h] += item.NormalCount;
+                        _hourlyPartDefect[h] += item.ComponentDefectCount;  // missing_count
+                        _hourlySolderDefect[h] += item.SolderDefectCount;  // position_error_count
+                        _hourlyScrap[h] += item.DiscardCount;
                     }
                 }
             }
