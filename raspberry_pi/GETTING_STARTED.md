@@ -167,7 +167,7 @@ EOF
 | 불량 분류 | GPIO 핀 | 물리 핀 | 용도 |
 |-----------|---------|---------|------|
 | **부품 불량** | GPIO 17 | Pin 11 | 릴레이 1 |
-| **납땜 불량** | GPIO 27 | Pin 13 | 릴레이 2 |
+| **위치 오류** | GPIO 27 | Pin 13 | 릴레이 2 |
 | **폐기** | GPIO 22 | Pin 15 | 릴레이 3 |
 | **정상** | GPIO 23 | Pin 16 | 릴레이 4 |
 
@@ -184,7 +184,7 @@ import time
 GPIO.setmode(GPIO.BCM)
 
 # 핀 설정
-pins = [17, 27, 22, 23]  # 부품불량, 납땜불량, 폐기, 정상
+pins = [17, 27, 22, 23]  # 부품 누락, 위치 오류, 폐기, 정상
 
 for pin in pins:
     GPIO.setup(pin, GPIO.OUT)
@@ -337,7 +337,7 @@ import RPi.GPIO as GPIO
 # GPIO 설정
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(17, GPIO.OUT)  # 부품 불량
-GPIO.setup(27, GPIO.OUT)  # 납땜 불량
+GPIO.setup(27, GPIO.OUT)  # 위치 오류
 GPIO.setup(22, GPIO.OUT)  # 폐기
 GPIO.setup(23, GPIO.OUT)  # 정상
 
@@ -389,8 +389,8 @@ GPIO_ENABLED=true          # 라즈베리파이 1: true, 라즈베리파이 2: f
 ```
 
 **GPIO 핀 매핑 (BCM 모드, 라즈베리파이 1만):**
-- GPIO 17: 부품 불량
-- GPIO 27: 납땜 불량
+- GPIO 17: 부품 누락
+- GPIO 27: 위치 오류
 - GPIO 22: 폐기
 - GPIO 23: 정상
 

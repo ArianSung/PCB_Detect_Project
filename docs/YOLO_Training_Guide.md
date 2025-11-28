@@ -1,4 +1,34 @@
-# 이중 YOLO 모델 학습 완전 가이드 ⭐
+# YOLOv11l 학습 가이드 (Backscan/Frontscan 아키텍처)
+
+> 2025-11-30 업데이트: 현재 프로덕션 파이프라인은 **단일 Component Model** + **Backscan OCR** 조합을 사용합니다. 기존 Solder Model 절차는 문서 하단에 아카이브되어 있으며 신규 개발자는 아래 요약만 따르면 됩니다.
+
+## 1. Component Model (Frontscan)
+1. 데이터 경로: `data/processed/pcb_components/` (`Dataset_Guide.md` 참고)
+2. 모델 학습
+   ```bash
+   yolo detect train \
+     data=data/processed/pcb_components/data.yaml \
+     model=yolo11l.pt \
+     epochs=150 \
+     batch=16 \
+     imgsz=640 \
+     device=0 \
+     project=runs/detect \
+     name=component_model_v3
+   ```
+3. 결과 검증 `yolo detect val ...` → `models/component_detector_v3.0.pt` 복사
+4. Flask 통합: `Flask_Server_Setup.md` 의 Frontscan API 절차를 따르고 ComponentVerifier 기준 데이터를 로드
+
+## 2. Backscan (Serial OCR + QR)
+- 데이터 수집: `docs/Serial_Number_Detection_Guide.md`
+- YOLO ROI + EasyOCR + pyzbar 파이프라인 → `/api/v3/backscan` 에서 처리
+- inspection_token 생성 후 Redis/MQTT를 통해 Frontscan 클라이언트에 전달
+
+> ⚠️ 아래 내용은 **v2.0 이중 모델** 문서를 아카이브 용도로 유지한 것입니다. 새 프로젝트에서는 참고만 하고, 실제 학습은 위 절차를 따르세요.
+
+---
+
+# [아카이브] 이중 YOLO 모델 학습 완전 가이드 ⭐
 
 **이중 전문 YOLO v11ll 모델 독립 학습 가이드**
 

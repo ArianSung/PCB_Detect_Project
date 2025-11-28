@@ -67,7 +67,7 @@ logger_socketio.setLevel(logging.INFO)
 
 # 로깅 설정
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,  # DEBUG로 변경하여 상세 로그 출력
     format='[%(asctime)s] [%(levelname)s] [Flask-Server] [%(module)s] - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -102,6 +102,9 @@ pcb_aligner_left = None
 pcb_aligner_right = None
 component_verifier_left = None
 component_verifier_right = None
+
+# 디버그 이미지 캐시 (실시간 뷰어용)
+latest_debug_image = None
 
 try:
     # 기준 데이터 로드 (좌측)
@@ -291,6 +294,9 @@ def predict_test():
 
             logger.info(f"[TEST] 프레임 수신 성공: {camera_id} (원본 shape: {frame.shape})")
 
+            # 원본 프레임 저장 (PCB 외곽선 검출용) ⭐
+            original_frame = frame.copy()
+
             # 중앙 크롭 (640x480 → 640x640) ⭐⭐⭐
             frame = crop_to_square(frame, target_size=640)
             logger.info(f"[TEST] 중앙 크롭 완료: {camera_id} (크롭 후 shape: {frame.shape})")
@@ -334,8 +340,59 @@ def predict_test():
                 # 결과가 없으면 한 번만 추론 실행 (초기화)
                 logger.info(f"⚠️  [{camera_id}] 정지 모드지만 기존 결과 없음 - 초기 추론 실행")
 
-        # 3. PCB ROI 감지 (비활성화 - 암막 준비 후 활성화 예정) ⭐⭐⭐
-        # roi_mask, pcb_bbox, roi_bbox = detect_pcb_roi(frame)
+        # 3. PCB 정렬 (Perspective Transform) ⭐⭐⭐
+        aligned_frame = frame
+        alignment_info = {'aligned': False}
+
+        # camera_id에 따라 적절한 aligner 선택
+        # PCB 외곽선 검출 - 엣지 기반 실시간 검출 ⭐⭐⭐
+        global latest_debug_image
+        pcb_aligner = pcb_aligner_left if camera_id == 'left' else pcb_aligner_right
+
+        if pcb_aligner is not None:
+            try:
+                import os
+                # 디버그 이미지 저장 경로 (temp_frames 폴더)
+                debug_save_path = os.path.join(os.path.dirname(__file__), '..', 'temp_frames')
+                os.makedirs(debug_save_path, exist_ok=True)
+
+                # ROI 기반 실시간 PCB 컨투어 검출 ⭐⭐⭐
+                pcb_corners, is_valid = pcb_aligner.detect_pcb_contour_realtime(
+                    original_frame,
+                    debug=True,
+                    debug_path=debug_save_path
+                )
+
+                # 디버그 이미지를 temp_frames/06_detected_contour.jpg에서 읽어오기
+                # (pcb_alignment.py에서 이미 ROI, 컨투어, 상태 메시지 모두 그려져 있음)
+                debug_img_path = os.path.join(debug_save_path, "06_detected_contour.jpg")
+                if os.path.exists(debug_img_path):
+                    latest_debug_image = cv2.imread(debug_img_path)
+                    logger.debug(f"📖 디버그 이미지 로드: {debug_img_path}")
+                else:
+                    latest_debug_image = original_frame.copy()
+
+                # 검출 결과 로깅
+                if pcb_corners is not None and is_valid:
+                    logger.info(f"✅ PCB 검출 성공 (검증 통과): {camera_id} - PCB READY")
+                elif pcb_corners is not None and not is_valid:
+                    logger.warning(f"⚠️  PCB 검출됨 (검증 실패): {camera_id} - NOT READY")
+                else:
+                    logger.warning(f"⚠️  PCB 컨투어 검출 실패: {camera_id} - NOT READY")
+            except Exception as e:
+                logger.error(f"PCB 외곽선 검출 중 오류: {e}")
+                import traceback
+                traceback.print_exc()
+                latest_debug_image = original_frame.copy()
+        else:
+            latest_debug_image = original_frame.copy()
+
+        # PCB 정렬은 skip (사용하지 않음)
+        alignment_info = {'aligned': False, 'message': 'PCB alignment disabled'}
+        aligned_frame = frame.copy()
+
+        # 3-1. PCB ROI 감지 (비활성화 - 암막 준비 후 활성화 예정) ⭐⭐⭐
+        # roi_mask, pcb_bbox, roi_bbox = detect_pcb_roi(aligned_frame)
         # if pcb_bbox is not None:
         #     logger.info(f"[TEST] PCB 감지 성공: {camera_id} → PCB {pcb_bbox}, ROI {roi_bbox}")
         # else:
@@ -344,11 +401,11 @@ def predict_test():
         # ROI 비활성화 - 전체 프레임 사용
         pcb_bbox, roi_bbox = None, None
 
-        # 4. AI 추론 (YOLO 모델, DB 저장 안 함)
+        # 4. AI 추론 (YOLO 모델, DB 저장 안 함) - 크롭된 원본 프레임으로 실행 ⭐
         boxes_data = []
         if yolo_model is not None:
             try:
-                # YOLO 추론 실행 (ROI 영역만 사용)
+                # YOLO 추론 실행 (원본 프레임 사용 - 보정 없이) ⭐
                 # 참고: ROI 마스크를 직접 적용하지 않고, 추론 후 필터링으로 처리
                 results = yolo_model(frame, verbose=False)
                 defect_type, confidence, raw_boxes_data = parse_yolo_results(results)
@@ -372,7 +429,7 @@ def predict_test():
                 # 검출 결과 평활화 (Temporal Smoothing)
                 smoothed_boxes = smooth_detections(camera_id, filtered_boxes)
 
-                # 평활화된 결과로 바운딩 박스 그리기 (PCB, ROI 박스도 함께 표시)
+                # 평활화된 결과로 바운딩 박스 그리기 (원본 프레임 사용 - 보정 없이) ⭐
                 annotated_frame = draw_bounding_boxes(frame.copy(), smoothed_boxes, pcb_bbox, roi_bbox)
 
                 logger.info(f"[TEST] YOLO 추론 완료: {camera_id} → 원본 {len(raw_boxes_data)}개 → 필터링 {len(filtered_boxes)}개 → 평활화 {len(smoothed_boxes)}개 객체")
@@ -503,13 +560,75 @@ def predict_single():
                 'error': f'Failed to decode image: {str(decode_error)}'
             }), 400
 
-        # 3. AI 추론 (YOLO 모델)
+        # 3. PCB 정렬 (Perspective Transform)
+        aligned_frame = frame
+        alignment_info = {'aligned': False}
+
+        # camera_id에 따라 적절한 aligner 선택
+        pcb_aligner = pcb_aligner_left if camera_id == 'left' else pcb_aligner_right
+
+        if pcb_aligner is not None:
+            try:
+                # process_frame() 사용: 구멍 검출 + 정렬 통합 처리
+                alignment_result = pcb_aligner.process_frame(frame, debug=True)
+
+                # 디버그 이미지 저장 (있으면, 없으면 원본 프레임)
+                global latest_debug_image
+                if 'debug_image' in alignment_result.get('debug_info', {}):
+                    latest_debug_image = alignment_result['debug_info']['debug_image']
+                else:
+                    # 정렬 실패 시 원본 프레임에 에러 메시지 표시
+                    debug_frame = frame.copy()
+                    error_msg = alignment_result.get('error', 'PCB 검출 실패')
+                    cv2.putText(debug_frame, f"Alignment Failed: {error_msg}", (10, 30),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                    cv2.putText(debug_frame, "Showing live frame from Raspberry Pi", (10, 60),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+                    latest_debug_image = debug_frame
+
+                if alignment_result['success']:
+                    aligned_frame = alignment_result['aligned_frame']
+                    alignment_info = {
+                        'aligned': True,
+                        'method': alignment_result['method'],
+                        'transform_matrix': alignment_result['transform_matrix'].tolist() if alignment_result['transform_matrix'] is not None else None,
+                        'debug_info': alignment_result.get('debug_info', {})
+                    }
+                    logger.info(f"PCB 정렬 성공 ({camera_id}): {alignment_result['method']} 방식")
+                else:
+                    logger.warning(f"PCB 정렬 실패 ({camera_id}): {alignment_result.get('error', '알 수 없는 오류')}")
+                    alignment_info = {
+                        'aligned': False,
+                        'error': alignment_result.get('error'),
+                        'debug_info': alignment_result.get('debug_info', {})
+                    }
+            except Exception as align_error:
+                logger.error(f"PCB 정렬 중 오류 ({camera_id}): {align_error}")
+                alignment_info = {'aligned': False, 'error': str(align_error)}
+        else:
+            logger.debug(f"PCB 정렬 비활성화 ({camera_id}): 기준 데이터 없음")
+
+        # 4. AI 추론 (YOLO 모델) - 정렬된 프레임으로 실행
+        detections = []  # YOLO 검출 결과 (컴포넌트 검증용)
         if yolo_model is not None:
             try:
-                # YOLO 추론 실행
-                results = yolo_model(frame, verbose=False)
+                # YOLO 추론 실행 (정렬된 프레임 사용!)
+                results = yolo_model(aligned_frame, verbose=False)
                 defect_type, confidence, boxes = parse_yolo_results(results)
-                logger.info(f"YOLO 추론 완료: {len(boxes)}개 객체 검출")
+
+                # 검출 결과를 컴포넌트 검증용 형식으로 변환
+                for box in boxes:
+                    x1, y1, x2, y2 = box['bbox']
+                    cx = (x1 + x2) / 2
+                    cy = (y1 + y2) / 2
+                    detections.append({
+                        'class_name': box['class_name'],
+                        'bbox': [x1, y1, x2, y2],
+                        'center': [cx, cy],
+                        'confidence': box['confidence']
+                    })
+
+                logger.info(f"YOLO 추론 완료 ({camera_id}): {len(detections)}개 컴포넌트 검출")
             except Exception as yolo_error:
                 logger.error(f"YOLO 추론 실패: {yolo_error}")
                 # 추론 실패 시 더미 값 사용
@@ -523,13 +642,47 @@ def predict_single():
             confidence = 0.95
             boxes = []
 
-        # 4. GPIO 핀 결정
+        # 5. 컴포넌트 위치 검증
+        verification_result = None
+        component_verifier = component_verifier_left if camera_id == 'left' else component_verifier_right
+
+        if component_verifier is not None and detections:
+            try:
+                verification_result = component_verifier.verify_components(detections, debug=False)
+
+                # 치명적 불량 판정
+                is_critical, reason = component_verifier.is_critical_defect(verification_result)
+
+                if is_critical:
+                    defect_type = "폐기"  # 치명적 불량
+                    logger.warning(f"치명적 불량 검출 ({camera_id}): {reason}")
+                elif verification_result['summary']['misplaced_count'] > 0:
+                    defect_type = "부품불량"  # 위치 오류
+                    logger.info(f"위치 오류 검출 ({camera_id}): {verification_result['summary']['misplaced_count']}개")
+                elif verification_result['summary']['missing_count'] > 0:
+                    defect_type = "부품불량"  # 누락
+                    logger.info(f"누락 컴포넌트 검출 ({camera_id}): {verification_result['summary']['missing_count']}개")
+                else:
+                    defect_type = "정상"
+                    logger.info(f"컴포넌트 검증 통과 ({camera_id}): 모두 정상")
+
+                # 검증 결과에 판정 정보 추가
+                verification_result['is_critical'] = is_critical
+                verification_result['reason'] = reason
+
+            except Exception as verify_error:
+                logger.error(f"컴포넌트 검증 중 오류 ({camera_id}): {verify_error}")
+                verification_result = {'error': str(verify_error)}
+        else:
+            logger.debug(f"컴포넌트 검증 비활성화 ({camera_id}): 기준 데이터 또는 검출 결과 없음")
+
+        # 6. GPIO 핀 결정
         gpio_pin = get_gpio_pin(defect_type)
 
-        # 5. 추론 시간 계산
+        # 7. 추론 시간 계산
         inference_time_ms = (time.time() - start_time) * 1000
 
-        # 6. 데이터베이스 저장
+        # 8. 데이터베이스 저장
         try:
             inspection_id = db.insert_inspection(
                 camera_id=camera_id,
@@ -544,7 +697,7 @@ def predict_single():
             logger.warning(f"데이터베이스 저장 실패 (추론은 계속 진행): {db_error}")
             # DB 저장 실패해도 추론 결과는 반환
 
-        # 7. 응답 생성
+        # 9. 응답 생성
         response = {
             'status': 'ok',
             'camera_id': camera_id,
@@ -554,6 +707,16 @@ def predict_single():
             'inference_time_ms': round(inference_time_ms, 2),
             'timestamp': datetime.now().isoformat()
         }
+
+        # 상세 정보 추가 (선택적)
+        if alignment_info:
+            response['alignment'] = alignment_info
+
+        if detections:
+            response['detections'] = detections
+
+        if verification_result:
+            response['verification'] = verification_result
 
         logger.info(f"추론 완료: {camera_id} → {defect_type} (confidence: {confidence:.2f}, GPIO: {gpio_pin}, time: {inference_time_ms:.1f}ms)")
         return jsonify(response)
@@ -594,6 +757,7 @@ def predict_dual():
             }
         }
     """
+    global latest_debug_image  # 디버그 이미지 캐시 (실시간 뷰어용)
     start_time = time.time()
 
     try:
@@ -653,41 +817,45 @@ def predict_dual():
         # 4. PCB 정렬 및 AI 추론
         alignment_time_start = time.time()
 
-        # 4-1. 좌측 PCB 정렬
-        left_aligned_frame = left_frame
-        left_alignment_info = {'method': 'none', 'success': False}
+        # 4-1. PCB 외곽선 검출 (마운팅 홀은 제외)
+        global latest_debug_image
 
+        # 좌측 PCB 외곽선 검출
         if pcb_aligner_left is not None:
-            left_align_result = pcb_aligner_left.process_frame(left_frame, debug=False)
+            try:
+                left_corners = pcb_aligner_left.detect_pcb_edges(left_frame, debug=True)
 
-            if left_align_result['success']:
-                left_aligned_frame = left_align_result['aligned_frame']
-                left_alignment_info = {
-                    'method': left_align_result['method'],
-                    'success': True
-                }
-                logger.info(f"좌측 PCB 정렬 성공 (방법: {left_align_result['method']})")
-            else:
-                logger.warning(f"좌측 PCB 정렬 실패: {left_align_result.get('error', 'Unknown')}")
-                left_alignment_info['error'] = left_align_result.get('error')
+                debug_frame = left_frame.copy()
+                if left_corners is not None:
+                    # 외곽선 그리기 (cyan)
+                    cv2.polylines(debug_frame, [left_corners], True, (255, 255, 0), 2)
 
-        # 4-2. 우측 PCB 정렬
+                    # 코너 포인트 그리기 (빨간색)
+                    for i, corner in enumerate(left_corners):
+                        cv2.circle(debug_frame, tuple(corner), 8, (0, 0, 255), -1)
+                        cv2.putText(debug_frame, f"{i+1}", (corner[0]+10, corner[1]+10),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+
+                    logger.info(f"✅ 좌측 PCB 외곽선 검출 성공")
+                else:
+                    logger.warning(f"⚠️  좌측 PCB 외곽선 검출 실패")
+                    cv2.putText(debug_frame, "Left PCB contour detection failed", (10, 30),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+                latest_debug_image = debug_frame
+            except Exception as e:
+                logger.error(f"좌측 PCB 외곽선 검출 중 오류: {e}")
+                latest_debug_image = left_frame.copy()
+        else:
+            latest_debug_image = left_frame.copy()
+
+        # 정렬 없이 원본 프레임 사용
+        left_aligned_frame = left_frame
+        left_alignment_info = {'method': 'disabled', 'success': False, 'message': 'PCB alignment disabled'}
+
+        # 4-2. 우측도 동일하게 처리
         right_aligned_frame = right_frame
-        right_alignment_info = {'method': 'none', 'success': False}
-
-        if pcb_aligner_right is not None:
-            right_align_result = pcb_aligner_right.process_frame(right_frame, debug=False)
-
-            if right_align_result['success']:
-                right_aligned_frame = right_align_result['aligned_frame']
-                right_alignment_info = {
-                    'method': right_align_result['method'],
-                    'success': True
-                }
-                logger.info(f"우측 PCB 정렬 성공 (방법: {right_align_result['method']})")
-            else:
-                logger.warning(f"우측 PCB 정렬 실패: {right_align_result.get('error', 'Unknown')}")
-                right_alignment_info['error'] = right_align_result.get('error')
+        right_alignment_info = {'method': 'disabled', 'success': False, 'message': 'PCB alignment disabled'}
 
         alignment_time = (time.time() - alignment_time_start) * 1000  # ms
         logger.info(f"PCB 정렬 완료 (소요 시간: {alignment_time:.2f}ms)")
@@ -1708,6 +1876,214 @@ def handle_frame_request(data):
     except Exception as e:
         logger.error(f"[WebSocket] 프레임 요청 처리 실패: {str(e)}", exc_info=True)
         emit('error', {'message': f'Frame request failed: {str(e)}'})
+
+
+# ============================================================
+# 디버그 뷰어 엔드포인트 (실시간 ROI 및 구멍 검출 시각화)
+# ============================================================
+
+@app.route('/debug_viewer')
+def debug_viewer():
+    """디버그 뷰어 HTML 페이지"""
+    html_content = """
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCB 정렬 디버그 뷰어</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #1a1a1a;
+            color: #fff;
+            font-family: 'Consolas', 'Monaco', monospace;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+        }
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        .image-container {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+        img {
+            width: 100%;
+            height: auto;
+            border: 3px solid #333;
+            border-radius: 5px;
+            display: block;
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            background: #2a2a2a;
+            border-radius: 5px;
+        }
+        .color-box {
+            width: 30px;
+            height: 30px;
+            border: 3px solid;
+            border-radius: 3px;
+        }
+        .info {
+            background: #2a2a2a;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+        .info p {
+            margin: 5px 0;
+        }
+        #status {
+            display: inline-block;
+            padding: 5px 15px;
+            background: #00ff00;
+            color: #000;
+            font-weight: bold;
+            border-radius: 3px;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        .no-image {
+            text-align: center;
+            padding: 100px 20px;
+            background: #2a2a2a;
+            border-radius: 10px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 PCB 정렬 디버그 뷰어</h1>
+            <p class="subtitle">실시간 ROI 경계 및 마운팅 홀 검출 시각화</p>
+        </header>
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="color-box" style="border-color: #00ff00;"></div>
+                <span><strong>녹색</strong>: ROI 경계 (코너 영역)</span>
+            </div>
+            <div class="legend-item">
+                <div class="color-box" style="border-color: #0000ff;"></div>
+                <span><strong>파란색</strong>: 검출된 원 (모든 후보)</span>
+            </div>
+            <div class="legend-item">
+                <div class="color-box" style="border-color: #ff0000;"></div>
+                <span><strong>빨간색</strong>: 선택된 원 (마운팅 홀)</span>
+            </div>
+        </div>
+
+        <div class="image-container">
+            <img id="debugImage" src="/debug_viewer/latest_debug_image" alt="디버그 이미지" onerror="this.style.display='none'; document.getElementById('noImage').style.display='block';">
+            <div id="noImage" class="no-image" style="display:none;">
+                <h2>📷 대기 중...</h2>
+                <p>PCB 프레임을 전송하면 여기에 디버그 이미지가 표시됩니다.</p>
+            </div>
+        </div>
+
+        <div class="info">
+            <p><strong>상태:</strong> <span id="status">자동 갱신 중</span></p>
+            <p><strong>갱신 주기:</strong> 1초</p>
+            <p id="timestamp">마지막 업데이트: 로딩 중...</p>
+            <p><strong>ROI 크기:</strong> 30% width, 35% height (축소하여 마운팅 홀만 검출)</p>
+        </div>
+    </div>
+
+    <script>
+        // 1초마다 이미지 갱신
+        setInterval(() => {
+            const img = document.getElementById('debugImage');
+            const noImg = document.getElementById('noImage');
+
+            // 캐시 방지용 타임스탬프 추가
+            img.src = '/debug_viewer/latest_debug_image?' + new Date().getTime();
+            img.style.display = 'block';
+            noImg.style.display = 'none';
+
+            // 타임스탬프 업데이트
+            document.getElementById('timestamp').textContent =
+                '마지막 업데이트: ' + new Date().toLocaleString('ko-KR');
+        }, 1000);
+    </script>
+</body>
+</html>
+    """
+    return html_content
+
+
+@app.route('/debug_viewer/latest_debug_image')
+def latest_debug_image_endpoint():
+    """최신 디버그 이미지 반환 (JPEG)"""
+    global latest_debug_image
+
+    if latest_debug_image is not None:
+        try:
+            # NumPy 배열을 JPEG로 인코딩
+            _, buffer = cv2.imencode('.jpg', latest_debug_image)
+
+            # bytes로 변환하여 반환
+            from flask import make_response
+            response = make_response(buffer.tobytes())
+            response.headers['Content-Type'] = 'image/jpeg'
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            return response
+
+        except Exception as e:
+            logger.error(f"디버그 이미지 인코딩 실패: {e}")
+            return "이미지 인코딩 실패", 500
+    else:
+        # 플레이스홀더 이미지 (640x480 회색 이미지)
+        import numpy as np
+        placeholder = np.full((480, 640, 3), 50, dtype=np.uint8)
+        cv2.putText(placeholder, "Waiting for frame...", (150, 240),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (200, 200, 200), 2)
+
+        _, buffer = cv2.imencode('.jpg', placeholder)
+        from flask import make_response
+        response = make_response(buffer.tobytes())
+        response.headers['Content-Type'] = 'image/jpeg'
+        return response
 
 
 if __name__ == '__main__':

@@ -1,296 +1,205 @@
-# 데이터베이스 설정 가이드
+# 데이터베이스 설정 가이드 (Product Verification Architecture)
 
-PCB 불량 검사 시스템 MySQL 데이터베이스 설정 및 사용 가이드
-
----
-
-## 📋 개요
-
-- **데이터베이스**: MySQL 8.0
-- **위치**: Windows PC (원격)
-- **연결 방식**: Tailscale VPN
-- **문자셋**: utf8mb4 (한글 지원)
+PCB 제품별 부품 위치 검증 시스템이 사용하는 **MySQL 8.0** 스키마 설명입니다. 모든 데이터는 Tailscale VPN 으로 연결된 Windows PC(MySQL 서버)에 저장합니다. 문자셋은 `utf8mb4` 입니다.
 
 ---
 
-## 🚀 초기 설정 (최초 1회만)
+## 🚀 초기 설정 절차
 
-### 1. 사용자 생성
+1. **사용자 생성**  
+   MySQL Workbench 에서 root 계정으로 접속한 뒤 `create_users.sql` 을 실행합니다.
 
-**MySQL Workbench**를 열고 **root 계정**으로 접속한 후, `create_users.sql` 실행:
+   | Username | Password | 권한 | 용도 |
+   |----------|----------|------|------|
+   | `pcb_admin`  | `1234` | ALL | 테이블/트리거 생성 및 유지보수 |
+   | `pcb_server` | `1234` | SELECT, INSERT, UPDATE | Flask 추론 서버 |
+   | `pcb_viewer` | `1234` | SELECT | C# WinForms 모니터링 앱 |
+   | `pcb_data`   | `1234` | SELECT, INSERT, UPDATE | 데이터 수집/검증 스크립트 |
+   | `pcb_test`   | `1234` | SELECT, INSERT | 테스트용 스크립트 |
+
+2. **스키마 생성**  
+   `pcb_admin` 계정으로 로그인하여 `schema.sql` (v3.0) 실행 → 제품 식별 + 부품 검증용 테이블이 모두 생성됩니다.
+
+3. **집계 트리거/이벤트**  
+   필요 시 `triggers_v3.0.sql` 과 `events_v3.0.sql` 을 실행하여 일/월별 통계를 자동 갱신합니다.
+
+---
+
+## 📦 생성되는 테이블
+
+1. `products` – 제품 기본 정보 및 시리얼/QR 템플릿
+2. `product_components` – 제품별 기준 부품 좌표
+3. `inspections` – 뒷면 식별 + 앞면 검증 결과 (메인 로그)
+4. `inspection_summary_hourly` – 시간 단위 집계
+5. `inspection_summary_daily` – 일 단위 집계
+6. `inspection_summary_monthly` – 월 단위 집계
+
+아래에서 주요 컬럼과 예시 조회 쿼리를 정리했습니다.
+
+---
+
+### 1. `products`
+제품 코드(FT/RS/BC 등)별 기본 정보를 보관합니다.
 
 ```sql
--- File → Open SQL Script → create_users.sql 선택
--- 실행: Ctrl+Shift+Enter
+product_code        VARCHAR(10) PK  -- FT, RS, BC
+product_name        VARCHAR(100)    -- 제품명
+serial_prefix       VARCHAR(4)      -- 시리얼 접두사 (예: MBFT)
+component_count     INT             -- 기준 부품 개수
+qr_url_template     VARCHAR(255)    -- QR 코드 템플릿 (예: http://.../{serial})
+description         TEXT            -- 설명
 ```
 
-**생성되는 사용자:**
-| Username | Password | 권한 | 용도 |
-|----------|----------|------|------|
-| `pcb_admin` | `1234` | ALL | 관리자 (테이블 생성/삭제) |
-| `pcb_server` | `1234` | SELECT, INSERT, UPDATE | Flask 서버 |
-| `pcb_viewer` | `1234` | SELECT only | C# 모니터링 앱 |
-| `pcb_data` | `1234` | SELECT, INSERT, UPDATE | AI 모델 팀 |
-| `pcb_test` | `1234` | SELECT, INSERT | 테스트용 |
-
----
-
-### 2. 데이터베이스 스키마 생성
-
-**MySQL Workbench**에서 **pcb_admin 계정**으로 접속한 후, `schema.sql` 실행:
-
+샘플 조회:
 ```sql
--- File → Open SQL Script → schema.sql 선택
--- 실행: Ctrl+Shift+Enter
-```
-
-**생성되는 테이블:**
-1. `inspection_history`: 검사 이력 (메인 테이블)
-2. `daily_statistics`: 일별 통계
-3. `defect_type_statistics`: 불량 유형별 통계
-4. `system_logs`: 시스템 로그 (선택)
-
----
-
-## 📊 테이블 구조
-
-### 1. inspection_history (검사 이력)
-
-PCB 검사 결과를 실시간으로 저장하는 메인 테이블
-
-**주요 컬럼:**
-```sql
-id                   BIGINT       - 고유 ID (자동 증가)
-camera_id            VARCHAR(10)  - 카메라 ID (left/right)
-timestamp            DATETIME     - 검사 시각
-classification       VARCHAR(20)  - 분류 결과 (normal/component_defect/solder_defect/discard)
-confidence           DECIMAL(5,4) - 신뢰도 (0.0000 ~ 1.0000)
-total_defects        INT          - 검출된 불량 개수
-defects_json         JSON         - 불량 상세 정보
-anomaly_score        DECIMAL(5,4) - 이상 탐지 점수
-inference_time_ms    DECIMAL(7,2) - 추론 시간 (ms)
-gpio_pin             INT          - GPIO 핀 번호
-image_path           VARCHAR(255) - 이미지 경로 (선택)
-```
-
-**샘플 조회:**
-```sql
-SELECT
-    id,
-    camera_id,
-    timestamp,
-    classification,
-    confidence,
-    total_defects,
-    inference_time_ms
-FROM inspection_history
-ORDER BY timestamp DESC
-LIMIT 10;
+SELECT product_code, product_name, component_count
+FROM products ORDER BY product_code;
 ```
 
 ---
 
-### 2. daily_statistics (일별 통계)
+### 2. `product_components`
+제품별 정상 부품 배치 (YOLO 기준) 좌표를 저장합니다.
 
-C# 모니터링 앱 대시보드용 일별 집계 데이터
-
-**주요 컬럼:**
 ```sql
-date                      DATE         - 통계 날짜
-total_inspections         INT          - 전체 검사 수
-normal_count              INT          - 정상 개수
-component_defect_count    INT          - 부품 불량 개수
-solder_defect_count       INT          - 납땜 불량 개수
-discard_count             INT          - 폐기 개수
-defect_rate               DECIMAL(5,4) - 불량률
-avg_inference_time_ms     DECIMAL(7,2) - 평균 추론 시간
+product_code        VARCHAR(10) FK → products
+component_class     VARCHAR(50)    -- resistor, ic_socket 등
+center_x, center_y  FLOAT          -- 기준 중심 좌표 (px)
+bbox_x1 ~ bbox_y2   FLOAT          -- 기준 바운딩 박스 (px)
+tolerance_px        FLOAT          -- 허용 오차 (기본 20px)
 ```
 
-**샘플 조회:**
+특정 제품 좌표 확인:
 ```sql
-SELECT
-    date,
-    total_inspections,
-    normal_count,
-    solder_defect_count,
-    defect_rate
-FROM daily_statistics
-ORDER BY date DESC
-LIMIT 7;  -- 최근 7일
+SELECT component_class, center_x, center_y
+FROM product_components
+WHERE product_code = 'FT';
 ```
 
 ---
 
-### 3. defect_type_statistics (불량 유형별 통계)
+### 3. `inspections`
+뒷면 시리얼·QR 식별 결과와 앞면 부품 검증 요약을 모두 저장합니다. `decision` 필드는 `normal / missing / position_error / discard` 중 하나입니다.
 
-불량 유형별 발생 빈도 및 심각도 분석
-
-**주요 컬럼:**
 ```sql
-date                   DATE         - 통계 날짜
-defect_type            VARCHAR(50)  - 불량 유형 (cold_joint, solder_bridge, etc.)
-count                  INT          - 발생 횟수
-low_severity_count     INT          - 낮은 심각도
-medium_severity_count  INT          - 중간 심각도
-high_severity_count    INT          - 높은 심각도
+id                      BIGINT PK AUTO_INCREMENT
+serial_number           VARCHAR(20)   -- MBFT12345678
+product_code            VARCHAR(10)
+qr_data                 TEXT          -- QR payload (선택)
+qr_detected             BOOLEAN
+serial_detected         BOOLEAN
+
+decision                VARCHAR(20)
+missing_count           INT
+position_error_count    INT
+extra_count             INT
+correct_count           INT
+missing_components      JSON          -- 누락 상세
+position_errors         JSON          -- 위치 오차 상세
+extra_components        JSON          -- 기준 외 부품
+
+yolo_detections         JSON          -- 원본 YOLO 출력
+inference_time_ms       FLOAT
+verification_time_ms    FLOAT
+total_time_ms           FLOAT
+left_image_path         VARCHAR(255)
+right_image_path        VARCHAR(255)
+inspection_time         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ```
 
-**불량 유형 목록:**
-- `cold_joint`: Cold Joint (차가운 납땜)
-- `solder_bridge`: Solder Bridge (땜납 다리)
-- `insufficient_solder`: 불충분한 납땜
-- `excess_solder`: 과도한 납땜
-- `missing_component`: 부품 누락
-- `misalignment`: 부품 위치 불량
-- `wrong_component`: 잘못된 부품
-- `damaged_component`: 손상된 부품
-- `trace_damage`: 회로 선로 손상
-- `pad_damage`: 패드 손상
-- `scratch`: 스크래치
+마지막 20건 확인:
+```sql
+SELECT serial_number, product_code, decision,
+       missing_count, position_error_count,
+       inspection_time
+FROM inspections
+ORDER BY inspection_time DESC
+LIMIT 20;
+```
+
+누락/위치 오류 합산이 7개 이상이면 `decision = 'discard'` 가 됩니다 (Flask 서버 로직과 동일하게 정의됨).
 
 ---
 
-## 🔌 연결 방법
+### 4~6. 집계 테이블
+세 집계 테이블은 구조가 동일하며 기준 열만 다릅니다.
 
-### Flask 서버 (Python)
+| 테이블 | 기준 열 | 설명 |
+|--------|---------|------|
+| `inspection_summary_hourly`  | `hour_timestamp` (YYYY-MM-DD HH:00:00) | 제품별 시간당 실적 |
+| `inspection_summary_daily`   | `date` (YYYY-MM-DD)                    | 일별 집계 |
+| `inspection_summary_monthly` | `year`, `month`                        | 월별 집계 |
 
-**`server/.env` 파일:**
-```bash
-DB_HOST=100.x.x.x          # Windows PC의 Tailscale IP
+공통 컬럼:
+```sql
+total_inspections INT
+normal_count INT
+missing_count INT
+position_error_count INT
+discard_count INT
+avg_inference_time_ms FLOAT
+avg_total_time_ms FLOAT
+avg_detection_count FLOAT
+avg_confidence FLOAT
+defect_rate FLOAT (생성 열)
+```
+
+예시 – 최근 7일 제품별 통계:
+```sql
+SELECT date, product_code,
+       total_inspections,
+       missing_count,
+       position_error_count,
+       defect_rate
+FROM inspection_summary_daily
+ORDER BY date DESC, product_code
+LIMIT 21;  -- 3개 제품 × 7일
+```
+
+---
+
+## 🔌 애플리케이션 연결
+
+### Flask 서버 (`server/.env`)
+```env
+DB_HOST=100.x.x.x
 DB_PORT=3306
 DB_NAME=pcb_inspection
 DB_USER=pcb_server
 DB_PASSWORD=1234
 ```
 
-**연결 코드 예시:**
+### Python 예시
 ```python
 import pymysql
 
 conn = pymysql.connect(
-    host='100.x.x.x',
+    host="100.x.x.x",
     port=3306,
-    user='pcb_server',
-    password='1234',
-    database='pcb_inspection',
-    charset='utf8mb4'
+    user="pcb_server",
+    password="1234",
+    database="pcb_inspection",
+    charset="utf8mb4",
+    cursorclass=pymysql.cursors.DictCursor,
 )
 
-cursor = conn.cursor()
-cursor.execute("SELECT * FROM inspection_history LIMIT 1")
-print(cursor.fetchone())
+with conn.cursor() as cursor:
+    cursor.execute(
+        "SELECT decision, missing_count FROM inspections ORDER BY inspection_time DESC LIMIT 5"
+    )
+    print(cursor.fetchall())
 ```
 
----
-
-### C# WinForms (모니터링 앱)
-
-**연결 문자열:**
+### C# WinForms 연결 문자열
 ```csharp
-string connectionString = "Server=100.x.x.x;Port=3306;Database=pcb_inspection;Uid=pcb_viewer;Pwd=1234;";
-
-using (MySqlConnection conn = new MySqlConnection(connectionString))
-{
-    conn.Open();
-    MySqlCommand cmd = new MySqlCommand("SELECT COUNT(*) FROM inspection_history", conn);
-    int count = Convert.ToInt32(cmd.ExecuteScalar());
-    Console.WriteLine($"Total records: {count}");
-}
+string cs = "Server=100.x.x.x;Port=3306;Database=pcb_inspection;Uid=pcb_viewer;Pwd=1234;";
 ```
+집계 API 없이도 `inspection_summary_daily` 를 직접 조회해 차트를 그릴 수 있습니다.
 
 ---
 
-### MySQL Workbench (팀원)
-
-**연결 정보:**
-- **Connection Name**: PCB Inspection (본인 이름)
-- **Hostname**: `100.x.x.x` (Windows PC의 Tailscale IP)
-- **Port**: `3306`
-- **Username**: 팀별 계정 (위 표 참조)
-- **Password**: 팀별 비밀번호
-
----
-
-## 📝 자주 사용하는 SQL 쿼리
-
-### 검사 이력 조회
-
-```sql
--- 최근 100개 검사 이력
-SELECT * FROM inspection_history
-ORDER BY timestamp DESC
-LIMIT 100;
-
--- 불량만 조회
-SELECT * FROM inspection_history
-WHERE classification != 'normal'
-ORDER BY timestamp DESC;
-
--- 특정 날짜 조회
-SELECT * FROM inspection_history
-WHERE DATE(timestamp) = '2025-10-25'
-ORDER BY timestamp DESC;
-```
-
-### 통계 조회
-
-```sql
--- 오늘 통계
-SELECT * FROM daily_statistics
-WHERE date = CURDATE();
-
--- 불량률 높은 날짜 TOP 10
-SELECT date, total_inspections, defect_rate
-FROM daily_statistics
-ORDER BY defect_rate DESC
-LIMIT 10;
-
--- 불량 유형별 발생 빈도 (최근 7일)
-SELECT
-    defect_type,
-    SUM(count) AS total_count
-FROM defect_type_statistics
-WHERE date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-GROUP BY defect_type
-ORDER BY total_count DESC;
-```
-
----
-
-## 🔧 유지보수
-
-### 데이터 백업
-
-```bash
-# MySQL Workbench: Server → Data Export
-# 또는 명령줄:
-mysqldump -h 100.x.x.x -u pcb_admin -p pcb_inspection > backup_$(date +%Y%m%d).sql
-```
-
-### 데이터 복원
-
-```bash
-mysql -h 100.x.x.x -u pcb_admin -p pcb_inspection < backup_20251025.sql
-```
-
-### 오래된 데이터 삭제 (선택)
-
-```sql
--- 30일 이전 데이터 삭제
-DELETE FROM inspection_history
-WHERE timestamp < DATE_SUB(NOW(), INTERVAL 30 DAY);
-```
-
----
-
-## ⚠️ 주의사항
-
-1. **비밀번호 변경 권장**: 프로덕션 환경에서는 반드시 강력한 비밀번호로 변경
-2. **백업 주기**: 주 1회 이상 백업 권장
-3. **용량 관리**: `inspection_history` 테이블은 빠르게 증가하므로 주기적으로 정리
-4. **인덱스 최적화**: 대용량 데이터 조회 시 인덱스 추가 고려
-
----
-
-**마지막 업데이트**: 2025-10-25
-**담당**: Flask 팀 + 전체 팀
+## ✅ 운영 체크리스트
+- `products`, `product_components` 는 제품 Golden Sample 변경 시 반드시 업데이트
+- `inspections` 는 10년 보관 기준, 주기적 백업 권장 (mysqldump)
+- 요약 테이블은 `events_v3.0.sql` 의 Event Scheduler 로 자동 관리 가능
+- 테이블 구조 변경 시 Flask 서버 `db_manager.py` 의 컬럼 매핑도 함께 수정

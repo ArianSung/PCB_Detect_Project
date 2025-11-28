@@ -1,18 +1,18 @@
-# 라즈베리파이 4 PCB 검사 시스템 설정 가이드 ⭐ (이중 모델 아키텍처)
+# 라즈베리파이 4 PCB 검사 시스템 설정 가이드 ⭐ (제품별 검증 아키텍처 v3.0)
 
 ## 개요
 
-이 가이드는 라즈베리파이 4를 사용하여 **양면 동시 웹캠 캡처**, GPIO 제어, OHT 시스템 제어를 수행하는 방법을 설명합니다.
+이 가이드는 라즈베리파이 4를 사용하여 **뒷면 제품 식별 → 앞면 부품 검증** 순차 파이프라인과 GPIO/OHT 제어를 구성하는 방법을 설명합니다.
 
-**⭐ 이중 모델 아키텍처**:
-- **Component Model (부품 검출)**: 좌측 카메라 → FPIC-Component 모델 (25 클래스)
-- **Solder Model (납땜 불량)**: 우측 카메라 → SolDef_AI 모델 (5-6 클래스)
-- **Result Fusion (결과 융합)**: Flask 서버에서 두 결과를 융합하여 최종 판정
+**⭐ 제품별 검증 파이프라인**:
+- **뒷면 식별 (Backscan)**: 우측 카메라 → 시리얼 넘버 OCR + QR 코드 스캔 → 제품 코드 및 기준 데이터 결정
+- **앞면 검증 (Frontscan)**: 좌측 카메라 → YOLO 부품 검출 + ComponentVerifier → missing/position_error/extra 판단
+- **최종 판정**: normal / missing / position_error / discard → GPIO + 로봇팔 제어
 
 **시스템 구성**:
-- **라즈베리파이 1 (Tailscale: 100.64.1.2)**: 좌측 웹캠 + GPIO 출력 (분류 게이트, LED 제어) ⭐ 양면 동시 전송
-- **라즈베리파이 2 (Tailscale: 100.64.1.3)**: 우측 웹캠 전용 (GPIO 제어 없음)
-- **라즈베리파이 3번 (Tailscale: 100.64.1.4, HW: Raspberry Pi 4 Model B)**: OHT 시스템 전용 제어기 ⭐
+- **라즈베리파이 1 (Tailscale: 100.64.1.2)**: 좌측 웹캠(앞면) + GPIO 출력 + 로봇팔/릴레이 제어. 라즈베리파이 2에서 전달받은 제품 코드로 앞면 검증을 수행하고 최종 응답을 수신합니다.
+- **라즈베리파이 2 (Tailscale: 100.64.1.3)**: 우측 웹캠(뒷면) 전용. 시리얼/QR을 읽어 Flask 서버의 Backscan API를 호출한 뒤, 발급된 `inspection_token` 을 라즈베리파이 1에 전달합니다.
+- **라즈베리파이 3 (Tailscale: 100.64.1.4)**: OHT/레일 전용 제어기 ⭐ (pigpio 기반 스텝모터 + 서보 컨트롤)
 
 ---
 
@@ -195,7 +195,7 @@ python3 test_camera.py 0
 
 **⭐ 이중 모델 아키텍처에서의 GPIO 제어**:
 - Flask 서버가 **양면(좌측+우측) 동시 검사** 후 두 모델 결과를 융합 (Result Fusion)
-- 최종 판정 (normal, component_defect, solder_defect, discard)을 라즈베리파이 1에 전송
+- 최종 판정 (normal, missing, position_error, discard)을 라즈베리파이 1에 전송
 - GPIO 제어는 **융합 결과(fusion_result)**에 따라 실행
 
 **중요**: GPIO 제어는 **라즈베리파이 1 (100.64.1.2)에만** 적용됩니다.
@@ -223,7 +223,7 @@ python3 test_camera.py 0
 
 [불량 분류용 GPIO 핀]
 - GPIO 17 (BCM 11) → 부품 불량 (릴레이 채널 1)
-- GPIO 27 (BCM 13) → 납땜 불량 (릴레이 채널 2)
+- GPIO 27 (BCM 13) → 위치 오류 (릴레이 채널 2)
 - GPIO 22 (BCM 15) → 폐기 (릴레이 채널 3)
 - GPIO 23 (BCM 16) → 정상 (릴레이 채널 4)
 ```
@@ -250,7 +250,7 @@ import time
 
 # GPIO 핀 정의 (BCM 모드)
 PIN_COMPONENT_DEFECT = 17  # 부품 불량
-PIN_SOLDER_DEFECT = 27     # 납땜 불량
+PIN_SOLDER_DEFECT = 27     # 위치 오류
 PIN_DISCARD = 22           # 폐기
 PIN_NORMAL = 23            # 정상
 
@@ -279,7 +279,7 @@ if __name__ == '__main__':
         trigger_gpio(PIN_COMPONENT_DEFECT, 500)
         time.sleep(1)
 
-        print("\n2. 납땜 불량 신호 (GPIO 27)")
+        print("\n2. 위치 오류 신호 (GPIO 27)")
         trigger_gpio(PIN_SOLDER_DEFECT, 500)
         time.sleep(1)
 
@@ -305,7 +305,70 @@ sudo python3 test_gpio.py
 
 ---
 
-## Phase 5: Flask Client 및 GPIO 통합
+## Phase 5: Backscan + Frontscan 파이프라인 (v3.0)
+
+라즈베리파이 2(우측)는 **Backscan** 전용, 라즈베리파이 1(좌측)은 **Frontscan + GPIO 제어** 전용으로 동작합니다. 두 디바이스는 `inspection_token` 으로 동일한 PCB를 식별합니다.
+
+### 5-1. Backscan 클라이언트 (라즈베리파이 2)
+
+1. 우측 카메라에서 프레임를 촬영하고 640x480으로 리사이즈합니다.
+2. `base64` 로 인코딩한 뒤 Flask 서버 `POST /api/v3/backscan` (세부 사항은 `docs/Flask_Server_Setup.md`) 로 전송합니다.
+3. 서버는 Serial OCR + QR 디코딩을 수행하고 다음 정보를 반환합니다.
+   ```json
+   {
+     "inspection_token": "20251130-FT-000123",
+     "product_code": "FT",
+     "serial_number": "MBFT00012345",
+     "backscan_status": "ok"
+   }
+   ```
+4. 라즈베리파이 2는 이 응답을 로컬 메시지 큐/Redis/파일(`tmp/latest_backscan.json`)에 저장하고 라즈베리파이 1에 전달합니다.
+
+```python
+payload = {
+    \"camera_id\": \"right\",
+    \"frame\": encode_frame(frame),
+    \"request_id\": str(uuid.uuid4())
+}
+r = requests.post(f\"{SERVER_URL}/api/v3/backscan\", json=payload, timeout=5)
+result = r.json()
+token = result[\"inspection_token\"]
+publish_token(token, result[\"product_code\"], result[\"serial_number\"])
+```
+
+### 5-2. Frontscan + GPIO (라즈베리파이 1)
+
+1. 메시지 큐에서 `inspection_token` 이 도착하면 좌측 카메라에서 앞면을 촬영합니다.
+2. 캡처된 프레임과 token, product_code 를 `POST /api/v3/frontscan` 으로 전송합니다.
+3. Flask 서버는 YOLOv11l 부품 검출 + ComponentVerifier 로 missing/position_error/extra 부품을 계산하고 최종 판정을 반환합니다.
+4. 라즈베리파이 1은 응답을 기준으로 GPIO/로봇팔을 제어합니다.
+
+```python
+front_payload = {
+    \"inspection_token\": token,
+    \"product_code\": product_code,
+    \"frame\": encode_frame(front_frame),
+    \"camera_id\": \"left\",
+    \"gpio_enabled\": True
+}
+r = requests.post(f\"{SERVER_URL}/api/v3/frontscan\", json=front_payload, timeout=5)
+decision = r.json()[\"decision\"]  # normal/missing/position_error/discard
+gpio_controller.trigger(decision, duration_ms=500)
+```
+
+### 5-3. inspection_token 전달 전략
+
+- **Redis Pub/Sub**: 가장 권장. 라즈베리파이 2가 `backscan:token` 채널로 발행 → 라즈베리파이 1이 구독.
+- **파일 기반**: 간단한 테스트용. `/tmp/backscan_token.json` 에 쓰고 `inotify` 로 감지.
+- **MQTT**: 이미 MQTT 브로커가 있다면 `pcb/backscan` 토픽 사용.
+
+토큰에는 최소한 `inspection_token`, `product_code`, `serial_number`, `timestamp` 를 포함시키고, 30초 내 소비되지 않으면 만료 처리합니다.
+
+> 📌 **Legacy 이중 모델 자료**는 아래 [아카이브 섹션](#아카이브-phase-5-dual-model-architecture) 에 남겨 두었습니다.
+
+---
+
+## [아카이브] Phase 5: Flask Client 및 GPIO 통합
 
 ### 5-1. 프로젝트 구조 (이중 모델 아키텍처)
 
@@ -321,7 +384,7 @@ sudo python3 test_gpio.py
 **⭐ 주요 변경사항**:
 - `camera_client.py` (단일 카메라) → `dual_camera_client.py` (양면 동시 캡처)
 - API 엔드포인트: `/predict` → `/predict_dual`
-- GPIO 제어: 단일 모델 결과 → 융합 결과 (normal, component_defect, solder_defect, discard)
+- GPIO 제어: 단일 모델 결과 → 융합 결과 (normal, missing, position_error, discard)
 
 ### 5-2. GPIO 제어 모듈
 
@@ -340,17 +403,17 @@ class GPIOController:
 
     # GPIO 핀 매핑 (Flask API 융합 결과와 매칭)
     PIN_MAP = {
-        'normal': 23,              # 정상
-        'component_defect': 17,    # 부품 불량
-        'solder_defect': 27,       # 납땜 불량
-        'discard': 22              # 폐기
+        'normal': 23,            # 정상
+        'missing': 17,           # 부품 누락
+        'position_error': 27,    # 위치 오류
+        'discard': 22            # 폐기
     }
 
     # 한글 매핑 (호환성)
     PIN_MAP_KR = {
         '정상': 23,
-        '부품불량': 17,
-        '납땜불량': 27,
+        '부품 누락': 17,
+        '위치 오류': 27,
         '폐기': 22
     }
 
@@ -371,8 +434,8 @@ class GPIOController:
         불량 유형에 따라 GPIO 신호 출력 (이중 모델 융합 결과 기반)
 
         Args:
-            defect_type: 'normal', 'component_defect', 'solder_defect', 'discard'
-                        또는 한글: '정상', '부품불량', '납땜불량', '폐기'
+            defect_type: 'normal', 'missing', 'position_error', 'discard'
+                        또는 한글: '정상', '부품 누락', '위치 오류', '폐기'
             duration_ms: 신호 지속 시간 (밀리초)
         """
         # 영문 키 우선, 한글 키 호환
@@ -445,7 +508,7 @@ class DualCameraClient:
         if not self.cap_left.isOpened():
             raise RuntimeError(f"좌측 카메라 {left_camera_index} 열기 실패")
 
-        # 우측 웹캠 초기화 (납땜 검출용)
+        # 우측 웹캠 초기화 (제품 식별용)
         self.cap_right = cv2.VideoCapture(right_camera_index)
         if not self.cap_right.isOpened():
             raise RuntimeError(f"우측 카메라 {right_camera_index} 열기 실패")
@@ -461,7 +524,7 @@ class DualCameraClient:
 
         logger.info(f"양면 카메라 클라이언트 초기화 완료")
         logger.info(f"  - 좌측 카메라: {left_camera_index} (부품 검출)")
-        logger.info(f"  - 우측 카메라: {right_camera_index} (납땜 검출)")
+        logger.info(f"  - 우측 카메라: {right_camera_index} (제품 식별)")
         logger.info(f"  - Flask 서버: {server_url}")
 
     def encode_frame(self, frame):
@@ -475,7 +538,7 @@ class DualCameraClient:
 
         Args:
             left_frame: 좌측 카메라 프레임 (부품면)
-            right_frame: 우측 카메라 프레임 (납땜면)
+            right_frame: 우측 카메라 프레임 (뒷면)
 
         Returns:
             dict: Flask 서버 응답 (fusion_result, component_result, solder_result)
@@ -517,7 +580,7 @@ class DualCameraClient:
 
                 logger.info(
                     f"[이중 모델 결과] 판정: {decision} "
-                    f"(부품불량: {component_count}개, 납땜불량: {solder_count}개)"
+                    f"(부품불량: {component_count}개, 위치 오류: {solder_count}개)"
                 )
 
                 # GPIO 신호 출력 (융합 결과 기반)
@@ -618,7 +681,7 @@ sudo nano /etc/systemd/system/dual-camera-client.service
 내용:
 ```ini
 [Unit]
-Description=PCB Dual Camera Client - Component + Solder Detection
+Description=PCB Sequential Camera Client - Backside ID + Front Verification
 After=network.target
 
 [Service]
@@ -636,7 +699,7 @@ WantedBy=multi-user.target
 
 **파라미터 설명**:
 - `0`: 좌측 카메라 인덱스 (부품 검출용, /dev/video0)
-- `1`: 우측 카메라 인덱스 (납땜 검출용, /dev/video1)
+- `1`: 우측 카메라 인덱스 (제품 식별용, /dev/video1)
 - `$FLASK_SERVER_URL`: Flask 서버 URL (Tailscale VPN: 100.64.1.1:5000)
 - `10`: FPS (초당 10프레임 전송)
 
@@ -666,11 +729,11 @@ sudo journalctl -u dual-camera-client.service -n 100
 ```
 양면 카메라 클라이언트 초기화 완료
   - 좌측 카메라: 0 (부품 검출)
-  - 우측 카메라: 1 (납땜 검출)
+  - 우측 카메라: 1 (제품 식별)
   - Flask 서버: http://100.64.1.1:5000
 양면 카메라 클라이언트 시작
-[이중 모델 결과] 판정: component_defect (부품불량: 2개, 납땜불량: 0개)
-GPIO 신호 출력: component_defect (핀 17, 500ms)
+[이중 모델 결과] 판정: missing (부품 누락: 2개, 위치 오류: 0개)
+GPIO 신호 출력: missing (핀 17, 500ms)
 전송 프레임 수: 100
 ```
 
@@ -853,9 +916,9 @@ python3 dual_camera_client.py 0 1 http://100.64.1.1:5000 10
 # 출력에서 네트워크 지연 및 융합 결과 확인:
 # 양면 카메라 클라이언트 초기화 완료
 #   - 좌측 카메라: 0 (부품 검출)
-#   - 우측 카메라: 1 (납땜 검출)
-# [이중 모델 결과] 판정: solder_defect (부품불량: 0개, 납땜불량: 3개)
-# GPIO 신호 출력: solder_defect (핀 27, 500ms)
+#   - 우측 카메라: 1 (제품 식별)
+# [이중 모델 결과] 판정: position_error (부품 누락: 0개, 위치 오류: 3개)
+# GPIO 신호 출력: position_error (핀 27, 500ms)
 # Total latency: 125ms  ← 전체 처리 시간 (목표 300ms 이내) ✅
 ```
 
@@ -881,7 +944,7 @@ sudo nano /etc/systemd/system/dual-camera-client.service
 
 ```ini
 [Unit]
-Description=PCB Dual Camera Client - Component + Solder (Tailscale)
+Description=PCB Sequential Camera Client - Backside ID + Front Verification (Tailscale)
 After=network.target tailscaled.service
 Wants=tailscaled.service
 
@@ -900,7 +963,7 @@ WantedBy=multi-user.target
 
 **파라미터 설명**:
 - `0`: 좌측 카메라 (부품 검출, /dev/video0)
-- `1`: 우측 카메라 (납땜 검출, /dev/video1)
+- `1`: 우측 카메라 (제품 식별, /dev/video1)
 - `http://100.64.1.1:5000`: Flask 서버 Tailscale IP
 - `10`: FPS
 
@@ -1407,14 +1470,15 @@ OHT 시스템의 상세한 하드웨어 사양, 제어 로직, API 설계는 다
 ---
 
 **작성일**: 2025-10-28
-**최종 수정일**: 2025-10-31
-**버전**: 2.0 ⭐ (이중 모델 아키텍처)
+**최종 수정일**: 2025-11-30
+**버전**: 3.0 ⭐ (제품별 검증 아키텍처)
 **하드웨어**: Raspberry Pi 4 Model B
 **OS**: Raspberry Pi OS 64-bit (Bullseye/Bookworm)
 **주요 변경사항**:
-- **2.0 (2025-10-31)**: 이중 YOLO 모델 아키텍처 적용
-  - 양면 동시 캡처 클라이언트 (`dual_camera_client.py`)
-  - API 엔드포인트 변경: `/predict` → `/predict_dual`
-  - GPIO 제어: 융합 결과 기반 (normal, component_defect, solder_defect, discard)
-  - Component Model (FPIC-Component, 25 클래스) + Solder Model (SolDef_AI, 5-6 클래스)
+- **3.0 (2025-11-30)**: 뒷면 Backscan + 앞면 Frontscan 순차 구조로 전환
+  - 우측 카메라: 시리얼 넘버 OCR + QR 코드 스캔 후 제품 코드/inspection_token 발급
+  - 좌측 카메라: YOLOv11l 부품 검출 + ComponentVerifier로 missing/position_error 계산
+  - GPIO 제어 기준을 normal/missing/position_error/discard 로 통일
+  - Backscan/Frontscan API와 inspection_token 전달 절차 문서화
+- **2.0 (2025-10-31)**: 양면 동시 캡처 테스트 (아카이브)
 - **1.1 (2025-10-23)**: Tailscale VPN 원격 연결 섹션 추가

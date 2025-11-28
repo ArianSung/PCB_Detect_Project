@@ -38,49 +38,102 @@ def detect_mounting_holes(image, debug=False):
     """
     # 그레이스케일 변환
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    h, w = gray.shape[:2]
 
     # 가우시안 블러 (노이즈 제거)
     blurred = cv2.GaussianBlur(gray, (9, 9), 2)
 
-    # Hough Circle Transform
-    circles = cv2.HoughCircles(
-        blurred,
-        cv2.HOUGH_GRADIENT,
-        dp=1,
-        minDist=50,  # 구멍 간 최소 거리
-        param1=50,   # Canny edge detection threshold
-        param2=30,   # Circle detection threshold
-        minRadius=5,  # 최소 반지름
-        maxRadius=20  # 최대 반지름
-    )
+    # ROI 기반 구멍 검출 (각 코너 영역에서 개별 검출)
+    # 코너 ROI 크기: 30% width, 35% height (축소하여 마운팅 홀만 검출)
+    roi_w = int(w * 0.30)  # 192 pixels for 640
+    roi_h = int(h * 0.35)  # 168 pixels for 480
 
-    if circles is None:
+    # 4개 코너 영역 정의 (name, x1, y1, x2, y2)
+    corner_rois = [
+        ('top_left', 0, 0, roi_w, roi_h),
+        ('top_right', w - roi_w, 0, w, roi_h),
+        ('bottom_right', w - roi_w, h - roi_h, w, h),
+        ('bottom_left', 0, h - roi_h, roi_w, h)
+    ]
+
+    detected_holes = []
+
+    for name, x1, y1, x2, y2 in corner_rois:
+        # ROI 추출
+        roi = blurred[y1:y2, x1:x2]
+
+        # Hough Circle Transform
+        circles = cv2.HoughCircles(
+            roi,
+            cv2.HOUGH_GRADIENT,
+            dp=1,
+            minDist=30,   # ROI 내에서는 더 가까워도 OK
+            param1=50,
+            param2=20,    # 더 완화하여 약한 원도 검출 (28→20)
+            minRadius=5,  # 원래 값
+            maxRadius=20  # 원래 값
+        )
+
+        if circles is None:
+            if debug:
+                print(f"[WARNING] {name} ROI에서 구멍 검출 실패")
+            return None
+
+        circles = np.uint16(np.around(circles))
+
+        # 해당 코너에 가장 가까운 원 선택
+        # 각 ROI의 목표 코너 좌표 (ROI 내부 좌표계)
+        roi_h_local = y2 - y1
+        roi_w_local = x2 - x1
+
+        if name == 'top_left':
+            target_x, target_y = 0, 0
+        elif name == 'top_right':
+            target_x, target_y = roi_w_local, 0
+        elif name == 'bottom_right':
+            target_x, target_y = roi_w_local, roi_h_local
+        elif name == 'bottom_left':
+            target_x, target_y = 0, roi_h_local
+
+        # 모든 검출된 원 중에서 목표 코너에 가장 가까운 원 찾기
+        min_dist = float('inf')
+        best_circle = None
+
+        for circle in circles[0]:
+            cx, cy, r = circle
+            # 유클리드 거리 계산
+            dist = np.sqrt((cx - target_x)**2 + (cy - target_y)**2)
+            if dist < min_dist:
+                min_dist = dist
+                best_circle = circle
+
+        if best_circle is None:
+            if debug:
+                print(f"[WARNING] {name} ROI에서 적절한 원을 찾지 못함")
+            return None
+
+        cx, cy, r = best_circle
+
+        # 전체 이미지 좌표로 변환
+        global_x = int(x1 + cx)
+        global_y = int(y1 + cy)
+
+        detected_holes.append((global_x, global_y))
+
         if debug:
-            print("[WARNING] 나사 구멍을 검출할 수 없습니다.")
+            print(f"[DEBUG] {name}: ROI({x1},{y1},{x2},{y2}) → 구멍({global_x},{global_y})")
+            print(f"[DEBUG]   검출된 원 개수: {len(circles[0])}개")
+            print(f"[DEBUG]   목표 코너: ({target_x},{target_y}), 선택된 원까지 거리: {min_dist:.1f}px")
+
+    if len(detected_holes) != 4:
+        if debug:
+            print(f"[WARNING] 4개 구멍 검출 실패: {len(detected_holes)}개")
         return None
 
-    circles = np.uint16(np.around(circles))
-    holes = [(int(x), int(y)) for x, y, r in circles[0, :]]
+    # 구멍을 일관된 순서로 정렬 (좌상, 우상, 우하, 좌하)
+    sorted_holes = sort_holes(detected_holes, debug=debug)
 
-    if debug:
-        print(f"[DEBUG] 검출된 원형 객체: {len(holes)}개")
-        for i, (x, y) in enumerate(holes):
-            print(f"  [{i+1}] x={x}, y={y}")
-
-    # 4개 코너 구멍 선택 (가장 외곽에 있는 4점)
-    if len(holes) < 4:
-        if debug:
-            print("[WARNING] 4개 미만의 구멍이 검출되었습니다.")
-        return None
-
-    corner_holes = select_corner_holes(holes, debug=debug)
-
-    if len(corner_holes) != 4:
-        if debug:
-            print("[WARNING] 4개의 코너 구멍을 선택할 수 없습니다.")
-        return None
-
-    return corner_holes
+    return sorted_holes
 
 
 def select_corner_holes(holes, debug=False):
@@ -123,6 +176,64 @@ def select_corner_holes(holes, debug=False):
         print(f"  Bottom-Left: {corner_holes[3]}")
 
     return corner_holes
+
+
+def sort_holes(holes, debug=False):
+    """
+    검출된 구멍을 일관된 순서로 정렬
+
+    PCB가 이동하거나 회전해도 항상 같은 순서를 보장:
+    1. 왼쪽 상단 (top-left)
+    2. 오른쪽 상단 (top-right)
+    3. 오른쪽 하단 (bottom-right)
+    4. 왼쪽 하단 (bottom-left)
+
+    Args:
+        holes (list): 4개 구멍의 (x, y) 좌표 리스트
+        debug (bool): 디버그 정보 출력
+
+    Returns:
+        list: 정렬된 구멍 좌표 리스트
+    """
+    if len(holes) != 4:
+        if debug:
+            print(f"[WARNING] 구멍 정렬 실패: 4개가 아닌 {len(holes)}개 구멍")
+        return holes
+
+    # y좌표 중앙값 계산
+    y_coords = [h[1] for h in holes]
+    y_median = np.median(y_coords)
+
+    # 상단(top)과 하단(bottom) 분리
+    top_holes = [h for h in holes if h[1] < y_median]
+    bottom_holes = [h for h in holes if h[1] >= y_median]
+
+    # 예외 처리: 상/하단에 각각 2개씩 있어야 함
+    if len(top_holes) != 2 or len(bottom_holes) != 2:
+        if debug:
+            print(f"[WARNING] 구멍 배치 비정상: 상단 {len(top_holes)}개, 하단 {len(bottom_holes)}개")
+        # fallback: y좌표로만 정렬
+        sorted_holes = sorted(holes, key=lambda h: (h[1], h[0]))
+        return sorted_holes
+
+    # 각 그룹 내에서 x좌표로 정렬 (좌 → 우)
+    top_holes.sort(key=lambda h: h[0])
+    bottom_holes.sort(key=lambda h: h[0])
+
+    # 최종 순서: 좌상, 우상, 우하, 좌하
+    sorted_holes = [
+        top_holes[0],      # 왼쪽 상단
+        top_holes[1],      # 오른쪽 상단
+        bottom_holes[1],   # 오른쪽 하단
+        bottom_holes[0]    # 왼쪽 하단
+    ]
+
+    if debug:
+        print("[DEBUG] 구멍 정렬 완료:")
+        print(f"  원본: {holes}")
+        print(f"  정렬: {sorted_holes}")
+
+    return sorted_holes
 
 
 def calculate_hole_distances(holes):

@@ -41,16 +41,16 @@
 4. `docs/Team_Collaboration_Guide.md` - 팀 협업 가이드 (팀 구성, 역할, 워크플로우)
 
 **시스템 구성:**
-- 추론 서버: GPU PC (원격지) - Flask + YOLO v11l + MySQL
-- 웹캠 클라이언트: 라즈베리파이 4 (2대) - 좌/우 카메라
+- 추론 서버: GPU PC (원격지) - Flask + YOLO v11l + ComponentVerifier + MySQL
+- 웹캠 클라이언트: 라즈베리파이 4 (2대) - **우측 Backscan**(시리얼/QR) + **좌측 Frontscan**(부품 검증 + GPIO)
 - **디팔렛타이저**: Arduino Mega 2560 + 5-6축 로봇팔 - PCB 픽업 및 박스 분류 (2.5초/PCB)
-- OHT 제어: 라즈베리파이 4 (1대) - 가득 찬 박스 운반 (GPIO 제어)
-- 박스 시스템: 3개 박스 × 5개 슬롯 (정상/부품불량/납땜불량)
+- OHT 제어: 라즈베리파이 4 (1대) - 가득 찬 박스 교체 (HTTP/Pigpio)
+- 박스 시스템: 3개 박스 × 5개 슬롯 (정상/부품 누락/위치 오류) + 폐기 슈트
 - 모니터링 앱: Windows PC - C# WinForms (박스 상태, OHT 제어, 사용자 관리)
 - 네트워크: Tailscale VPN (100.x.x.x)
 
 위 문서들을 읽고, 다음 질문에 답변해줘:
-1. 이 시스템의 전체 데이터 흐름은 어떻게 되는가? (라즈베리파이 → Flask → Arduino 디팔렛타이저 → 박스 → OHT)
+1. 이 시스템의 전체 데이터 흐름은 어떻게 되는가? (Backscan 라즈베리파이 → Flask Backscan → Frontscan 라즈베리파이 → GPIO/로봇팔 → 박스 → OHT)
 2. 각 팀(Flask, AI 모델, 라즈베리파이, Arduino, C# 앱)의 주요 책임은 무엇인가?
 3. 프로젝트의 주요 디렉토리(`server/`, `yolo/`, `database/`, `raspberry_pi/`, `arduino/`, `csharp_winforms/`)는 각각 어떤 역할을 하는가?
 4. **디팔렛타이저(Arduino 로봇팔)의 역할과 2.5초 동작 시간 제약**은 무엇인가?
@@ -262,8 +262,8 @@ ARDUINO_BAUD=9600          # 시리얼 통신 속도
 ```
 
 **GPIO 핀 매핑 (BCM 모드, 라즈베리파이 3 전용):**
-- GPIO 17: 부품 불량 게이트
-- GPIO 27: 납땜 불량 게이트
+- GPIO 17: 부품 누락 게이트
+- GPIO 27: 위치 오류 게이트
 - GPIO 22: 폐기 게이트
 - GPIO 23: 정상 게이트
 
