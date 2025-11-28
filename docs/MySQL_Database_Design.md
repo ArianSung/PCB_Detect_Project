@@ -1,13 +1,23 @@
-# MySQL 데이터베이스 설계 - PCB 검사 시스템 ⭐ (이중 모델 아키텍처)
+# MySQL 데이터베이스 설계 - PCB 검사 시스템 v3.0 ⭐ (제품별 부품 위치 검증)
 
 ## 개요
 
-PCB 불량 검사 시스템의 **양면 동시 검사 이력**, 통계, 시스템 로그를 저장하는 MySQL 데이터베이스 스키마 설계입니다.
+PCB 불량 검사 시스템의 **제품별 부품 위치 검증**, 검사 이력, 통계를 저장하는 MySQL 데이터베이스 스키마 설계입니다.
 
-**⭐ 이중 모델 아키텍처 특징**:
-- **Component Model (부품 검출)**: FPIC-Component, 25 클래스
-- **Solder Model (납땜 불량)**: SolDef_AI, 5-6 클래스
-- **Result Fusion (결과 융합)**: Flask 서버에서 두 모델 결과를 융합하여 최종 판정 (normal, component_defect, solder_defect, discard)
+**⭐ v3.0 Product Verification Architecture 특징**:
+- **제품 식별**: 시리얼 넘버 OCR + QR 코드 스캔
+- **제품별 부품 배치 검증**: 제품 코드별 기준 위치와 비교
+- **4단계 판정**: normal (정상) / missing (부품 누락) / position_error (위치 오류) / discard (폐기)
+- **시간별/일별/월별 집계**: 트리거를 통한 자동 업데이트
+- **10년 데이터 보관**: 이벤트 스케줄러를 통한 자동 정리
+
+**주요 변경사항 (v2.0 → v3.0)**:
+- 이중 YOLO 모델 아키텍처 → 제품별 부품 위치 검증
+- 융합 판정 (4가지) → 검증 판정 (4가지)
+- component_defects, solder_defects → missing_components, position_errors, extra_components
+- 시간별 집계 추가, 월별 집계 추가
+- 트리거 기반 자동 집계 시스템
+- 10년 자동 데이터 정리 시스템
 
 ---
 
@@ -15,193 +25,524 @@ PCB 불량 검사 시스템의 **양면 동시 검사 이력**, 통계, 시스�
 
 ```sql
 CREATE DATABASE IF NOT EXISTS pcb_inspection
-CHARACTER SET utf8mb4
-COLLATE utf8mb4_unicode_ci;
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_unicode_ci;
 
 USE pcb_inspection;
 ```
+
+**문자 인코딩**: UTF-8 (utf8mb4) - 한글 및 이모지 지원
 
 ---
 
 ## 테이블 스키마
 
-### 1. inspections (양면 동시 검사 결과 이력) ⭐ 이중 모델
+### 1. products (제품 정보)
+
+제품 코드별 기본 정보를 저장하는 마스터 테이블입니다.
+
+```sql
+CREATE TABLE products (
+    product_code VARCHAR(10) PRIMARY KEY COMMENT '제품 코드 (예: FT, RS, BC)',
+    product_name VARCHAR(100) NOT NULL COMMENT '제품명',
+    description TEXT NULL COMMENT '제품 설명',
+    serial_prefix VARCHAR(4) NOT NULL COMMENT '시리얼 넘버 접두사 (예: MBFT, MBRS)',
+    component_count INT NOT NULL DEFAULT 0 COMMENT '기준 부품 개수',
+    qr_url_template VARCHAR(255) NULL COMMENT 'QR 코드 URL 템플릿',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '생성일',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
+
+    INDEX idx_serial_prefix (serial_prefix),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='제품 정보 테이블 (3개 제품 타입)';
+```
+
+**샘플 데이터**:
+```sql
+INSERT INTO products (product_code, product_name, description, serial_prefix, component_count, qr_url_template) VALUES
+('FT', 'Fast Type PCB', '고속 처리용 PCB (25개 부품)', 'MBFT', 25, 'http://localhost:8080/product/{serial}'),
+('RS', 'Reliable Stable PCB', '안정성 중심 PCB (30개 부품)', 'MBRS', 30, 'http://localhost:8080/product/{serial}'),
+('BC', 'Budget Compact PCB', '저가형 소형 PCB (18개 부품)', 'MBBC', 18, 'http://localhost:8080/product/{serial}');
+```
+
+**설명**:
+- `product_code`: 제품 코드 (FT, RS, BC 등), 시리얼 넘버 3-4번째 문자에서 추출
+- `serial_prefix`: 시리얼 넘버 접두사 (MBFT12345678 → MBFT)
+- `component_count`: 정상 부품 개수 (검증 기준)
+- `qr_url_template`: QR 코드 URL 템플릿 (C# 로컬 웹 서버)
+
+---
+
+### 2. product_components (제품별 부품 배치 기준)
+
+제품별 정상 부품 배치 위치 정보를 저장하는 기준 데이터 테이블입니다.
+
+```sql
+CREATE TABLE product_components (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '고유 ID',
+    product_code VARCHAR(10) NOT NULL COMMENT '제품 코드 (FK)',
+    component_class VARCHAR(50) NOT NULL COMMENT '부품 클래스명 (예: capacitor, resistor)',
+    center_x FLOAT NOT NULL COMMENT '부품 중심 X 좌표 (픽셀)',
+    center_y FLOAT NOT NULL COMMENT '부품 중심 Y 좌표 (픽셀)',
+    bbox_x1 FLOAT NOT NULL COMMENT '바운딩 박스 좌상단 X',
+    bbox_y1 FLOAT NOT NULL COMMENT '바운딩 박스 좌상단 Y',
+    bbox_x2 FLOAT NOT NULL COMMENT '바운딩 박스 우하단 X',
+    bbox_y2 FLOAT NOT NULL COMMENT '바운딩 박스 우하단 Y',
+    tolerance_px FLOAT NOT NULL DEFAULT 20.0 COMMENT '위치 허용 오차 (픽셀, 기본 20px)',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '생성일',
+
+    FOREIGN KEY (product_code) REFERENCES products(product_code)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    INDEX idx_product_code (product_code),
+    INDEX idx_component_class (component_class),
+    INDEX idx_center_coords (center_x, center_y)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='제품별 부품 배치 기준 테이블 (기준 위치 정보)';
+```
+
+**설명**:
+- `product_code`: 어떤 제품의 기준 위치인지
+- `component_class`: 부품 클래스명 (YOLO 검출 클래스와 매칭)
+- `center_x`, `center_y`: 정상 위치의 중심 좌표
+- `bbox_x1`, `bbox_y1`, `bbox_x2`, `bbox_y2`: 바운딩 박스 좌표
+- `tolerance_px`: 위치 허용 오차 (기본 20px, 이 범위 내면 정상)
+
+**사용 예시**:
+```sql
+-- 제품 FT의 부품 배치 기준 조회
+SELECT component_class, center_x, center_y, tolerance_px
+FROM product_components
+WHERE product_code = 'FT'
+ORDER BY component_class;
+
+-- 특정 부품 클래스의 기준 위치 조회
+SELECT product_code, center_x, center_y
+FROM product_components
+WHERE component_class = 'capacitor';
+```
+
+---
+
+### 3. inspections (메인 검사 이력)
+
+모든 PCB 검사 데이터를 저장하는 메인 테이블입니다. **10년 보관 정책** 적용.
 
 ```sql
 CREATE TABLE inspections (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '검사 ID',
 
-    -- 융합 결과 (최종 판정)
-    fusion_decision VARCHAR(50) NOT NULL COMMENT '융합 결과 판정 (normal/component_defect/solder_defect/discard)',
-    fusion_severity_level INT NOT NULL DEFAULT 0 COMMENT '융합 심각도 레벨 (0-3)',
+    -- 제품 식별 정보 (뒷면)
+    serial_number VARCHAR(20) NOT NULL COMMENT '시리얼 넘버 (MBXX12345678)',
+    product_code VARCHAR(10) NOT NULL COMMENT '제품 코드 (시리얼에서 추출)',
+    qr_data TEXT NULL COMMENT 'QR 코드 데이터 (URL 또는 JSON)',
+    qr_detected BOOLEAN DEFAULT FALSE COMMENT 'QR 코드 검출 성공 여부',
+    serial_detected BOOLEAN DEFAULT FALSE COMMENT '시리얼 넘버 검출 성공 여부',
 
-    -- Component Model 결과 (좌측 카메라, 부품 검출)
-    component_defects JSON NULL COMMENT '부품 불량 목록 (JSON 배열)',
-    component_defect_count INT NOT NULL DEFAULT 0 COMMENT '부품 불량 개수',
-    component_inference_time_ms DECIMAL(6,2) NULL COMMENT 'Component 모델 추론 시간 (밀리초)',
+    -- 검사 결과 (앞면)
+    decision VARCHAR(20) NOT NULL COMMENT '최종 판정 (normal/missing/position_error/discard)',
+    missing_count INT NOT NULL DEFAULT 0 COMMENT '누락 부품 개수',
+    position_error_count INT NOT NULL DEFAULT 0 COMMENT '위치 오류 부품 개수',
+    extra_count INT NOT NULL DEFAULT 0 COMMENT '추가 부품 개수 (기준에 없음)',
+    correct_count INT NOT NULL DEFAULT 0 COMMENT '정상 부품 개수',
 
-    -- Solder Model 결과 (우측 카메라, 납땜 검출)
-    solder_defects JSON NULL COMMENT '납땜 불량 목록 (JSON 배열)',
-    solder_defect_count INT NOT NULL DEFAULT 0 COMMENT '납땜 불량 개수',
-    solder_inference_time_ms DECIMAL(6,2) NULL COMMENT 'Solder 모델 추론 시간 (밀리초)',
+    -- 상세 결과 (JSON)
+    missing_components JSON NULL COMMENT '누락 부품 상세 (class_name, expected_position)',
+    position_errors JSON NULL COMMENT '위치 오류 상세 (class_name, expected, actual, offset)',
+    extra_components JSON NULL COMMENT '추가 부품 상세 (class_name, position)',
 
-    -- 검사 메타데이터
-    inspection_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '검사 시간',
-    total_inference_time_ms DECIMAL(6,2) NULL COMMENT '전체 추론 시간 (양면 병렬)',
+    -- YOLO 검출 결과
+    yolo_detections JSON NULL COMMENT 'YOLO 전체 검출 결과 (bbox, confidence, class)',
+    detection_count INT NOT NULL DEFAULT 0 COMMENT '총 검출 부품 개수',
+    avg_confidence FLOAT NULL COMMENT '평균 신뢰도',
+
+    -- 처리 성능
+    inference_time_ms FLOAT NULL COMMENT 'AI 추론 시간 (밀리초)',
+    verification_time_ms FLOAT NULL COMMENT '검증 처리 시간 (밀리초)',
+    total_time_ms FLOAT NULL COMMENT '총 처리 시간 (밀리초)',
 
     -- 이미지 정보
-    left_image_path VARCHAR(500) NULL COMMENT '좌측 카메라 이미지 경로 (부품면)',
-    right_image_path VARCHAR(500) NULL COMMENT '우측 카메라 이미지 경로 (납땜면)',
+    left_image_path VARCHAR(255) NULL COMMENT '좌측 카메라 이미지 경로',
+    right_image_path VARCHAR(255) NULL COMMENT '우측 카메라 이미지 경로',
+    image_width INT NULL COMMENT '이미지 너비',
+    image_height INT NULL COMMENT '이미지 높이',
 
-    -- GPIO 제어 정보
-    gpio_pin INT NULL COMMENT '활성화된 GPIO 핀 번호',
-    gpio_duration_ms INT NULL COMMENT 'GPIO 신호 지속 시간 (밀리초)',
+    -- 시스템 정보
+    camera_id VARCHAR(20) NULL COMMENT '카메라 ID (left/right)',
+    client_ip VARCHAR(50) NULL COMMENT '클라이언트 IP (라즈베리파이)',
+    server_version VARCHAR(20) NULL COMMENT '서버 버전',
 
-    -- 사용자 및 비고
-    user_id INT NULL COMMENT '작업자 ID',
-    notes TEXT NULL COMMENT '비고',
+    -- 시간 정보
+    inspection_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '검사 시간',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '레코드 생성 시간',
 
+    -- 인덱스
+    INDEX idx_serial_number (serial_number),
+    INDEX idx_product_code (product_code),
+    INDEX idx_decision (decision),
     INDEX idx_inspection_time (inspection_time),
-    INDEX idx_fusion_decision (fusion_decision),
-    INDEX idx_component_defect_count (component_defect_count),
-    INDEX idx_solder_defect_count (solder_defect_count),
-    INDEX idx_user_id (user_id)
+    INDEX idx_created_at (created_at),
+    INDEX idx_product_time (product_code, inspection_time),
+    INDEX idx_decision_time (decision, inspection_time),
+
+    FOREIGN KEY (product_code) REFERENCES products(product_code)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
+
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='PCB 양면 동시 검사 결과 이력 (이중 YOLO 모델 아키텍처)';
+COMMENT='메인 검사 이력 테이블 (10년 보관)';
 ```
 
 **JSON 데이터 구조 예시**:
 
-**component_defects** (부품 불량):
+**missing_components** (누락 부품):
 ```json
 [
   {
-    "type": "missing_component",
-    "confidence": 0.95,
-    "bbox": [120, 85, 150, 110],
-    "class_id": 3,
-    "class_name": "resistor"
+    "class_name": "capacitor",
+    "expected_position": {
+      "center": [120, 85],
+      "bbox": [100, 70, 140, 100]
+    }
   },
   {
-    "type": "misalignment",
-    "confidence": 0.88,
-    "bbox": [200, 150, 230, 175],
-    "class_id": 7,
-    "class_name": "capacitor"
+    "class_name": "resistor",
+    "expected_position": {
+      "center": [200, 150],
+      "bbox": [180, 135, 220, 165]
+    }
   }
 ]
 ```
 
-**solder_defects** (납땜 불량):
+**position_errors** (위치 오류):
 ```json
 [
   {
-    "type": "cold_joint",
-    "confidence": 0.92,
-    "bbox": [310, 220, 335, 245],
-    "class_id": 1,
-    "class_name": "solder_joint"
-  },
-  {
-    "type": "insufficient_solder",
-    "confidence": 0.87,
-    "bbox": [405, 180, 425, 200],
-    "class_id": 2,
-    "class_name": "solder_pad"
-  },
-  {
-    "type": "solder_bridge",
-    "confidence": 0.93,
-    "bbox": [125, 95, 160, 115],
-    "class_id": 3,
-    "class_name": "solder_bridge"
+    "class_name": "capacitor",
+    "expected": {"center": [120, 85]},
+    "actual": {"center": [145, 90]},
+    "offset": 25.5
   }
 ]
 ```
 
-### 2. defect_images (불량 이미지 메타데이터)
-
-```sql
-CREATE TABLE defect_images (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    inspection_id INT NOT NULL COMMENT '검사 ID (FK)',
-    image_path VARCHAR(500) NOT NULL COMMENT '이미지 파일 경로',
-    image_size_bytes INT NULL COMMENT '파일 크기 (바이트)',
-    image_width INT NULL COMMENT '이미지 너비',
-    image_height INT NULL COMMENT '이미지 높이',
-    upload_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '업로드 시간',
-
-    FOREIGN KEY (inspection_id) REFERENCES inspections(id)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE,
-
-    INDEX idx_inspection_id (inspection_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='불량 이미지 파일 정보';
+**extra_components** (추가 부품 - 기준에 없음):
+```json
+[
+  {
+    "class_name": "resistor",
+    "position": {"center": [310, 220]},
+    "confidence": 0.92
+  }
+]
 ```
 
-### 3. statistics_daily (일별 통계) ⭐ 이중 모델 융합 결과 기반
+**설명**:
+- `decision`: 최종 판정
+  - `normal`: 정상 (모든 부품 정상 위치)
+  - `missing`: 부품 누락 (3개 이상 누락)
+  - `position_error`: 위치 오류 (5개 이상 위치 오류)
+  - `discard`: 폐기 (누락 + 위치 오류 합계 7개 이상)
+- `missing_count`, `position_error_count`, `extra_count`, `correct_count`: 각 카테고리 개수
+- JSON 필드: 상세 정보 저장 (WinForms에서 상세 조회 시 사용)
+
+---
+
+### 4. inspection_summary_hourly (시간별 집계)
+
+시간 단위 검사 집계 테이블입니다. **10년 보관 정책** 적용.
 
 ```sql
-CREATE TABLE statistics_daily (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    stat_date DATE NOT NULL UNIQUE COMMENT '통계 날짜',
+CREATE TABLE inspection_summary_hourly (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '집계 ID',
 
-    -- 검사 통계 (융합 결과 기반)
-    total_inspections INT NOT NULL DEFAULT 0 COMMENT '총 검사 수 (양면 동시)',
-    normal_count INT NOT NULL DEFAULT 0 COMMENT '정상 개수 (fusion_decision=normal)',
-    component_defect_count INT NOT NULL DEFAULT 0 COMMENT '부품 불량 개수 (fusion_decision=component_defect)',
-    solder_defect_count INT NOT NULL DEFAULT 0 COMMENT '납땜 불량 개수 (fusion_decision=solder_defect)',
-    discard_count INT NOT NULL DEFAULT 0 COMMENT '폐기 개수 (fusion_decision=discard)',
+    -- 집계 기준
+    hour_timestamp DATETIME NOT NULL COMMENT '시간 (YYYY-MM-DD HH:00:00)',
+    product_code VARCHAR(10) NOT NULL COMMENT '제품 코드',
+
+    -- 집계 데이터
+    total_inspections INT NOT NULL DEFAULT 0 COMMENT '총 검사 수',
+    normal_count INT NOT NULL DEFAULT 0 COMMENT '정상 수',
+    missing_count INT NOT NULL DEFAULT 0 COMMENT '부품 누락 수',
+    position_error_count INT NOT NULL DEFAULT 0 COMMENT '위치 오류 수',
+    discard_count INT NOT NULL DEFAULT 0 COMMENT '폐기 수',
+
+    -- 통계
+    avg_inference_time_ms FLOAT NULL COMMENT '평균 추론 시간',
+    avg_total_time_ms FLOAT NULL COMMENT '평균 총 처리 시간',
+    avg_detection_count FLOAT NULL COMMENT '평균 검출 부품 수',
+    avg_confidence FLOAT NULL COMMENT '평균 신뢰도',
 
     -- 불량률 (자동 계산)
-    defect_rate DECIMAL(5,2) GENERATED ALWAYS AS (
+    defect_rate FLOAT GENERATED ALWAYS AS (
         CASE
-            WHEN total_inspections > 0 THEN
-                (component_defect_count + solder_defect_count + discard_count) * 100.0 / total_inspections
+            WHEN total_inspections > 0
+            THEN ((missing_count + position_error_count + discard_count) / total_inspections * 100)
             ELSE 0
         END
-    ) STORED COMMENT '불량률 (%, 자동 계산)',
+    ) STORED COMMENT '불량률 (%)',
 
-    -- 평균 추론 시간
-    avg_component_inference_ms DECIMAL(6,2) NULL COMMENT 'Component 모델 평균 추론 시간 (밀리초)',
-    avg_solder_inference_ms DECIMAL(6,2) NULL COMMENT 'Solder 모델 평균 추론 시간 (밀리초)',
-    avg_total_inference_ms DECIMAL(6,2) NULL COMMENT '전체 평균 추론 시간 (밀리초)',
+    -- 시간 정보
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '집계 생성 시간',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '마지막 업데이트',
 
-    -- 타임스탬프
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    -- 유니크 제약조건 (시간 + 제품코드)
+    UNIQUE KEY uk_hour_product (hour_timestamp, product_code),
 
-    INDEX idx_stat_date (stat_date)
+    -- 인덱스
+    INDEX idx_hour_timestamp (hour_timestamp),
+    INDEX idx_product_code (product_code),
+    INDEX idx_hour_product (hour_timestamp, product_code),
+
+    FOREIGN KEY (product_code) REFERENCES products(product_code)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='일별 검사 통계 (이중 모델 융합 결과 기반)';
+COMMENT='시간별 검사 집계 테이블 (10년 보관)';
 ```
 
-### 4. statistics_hourly (시간별 통계) ⭐ 이중 모델 융합 결과 기반
+**쿼리 예시**:
+```sql
+-- 오늘 시간별 통계 조회
+SELECT hour_timestamp, product_code, total_inspections,
+       normal_count, missing_count, position_error_count, discard_count, defect_rate
+FROM inspection_summary_hourly
+WHERE DATE(hour_timestamp) = CURDATE()
+ORDER BY hour_timestamp DESC;
+
+-- 특정 제품의 최근 24시간 통계
+SELECT hour_timestamp, total_inspections, defect_rate
+FROM inspection_summary_hourly
+WHERE product_code = 'FT'
+  AND hour_timestamp >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+ORDER BY hour_timestamp ASC;
+```
+
+---
+
+### 5. inspection_summary_daily (일별 집계)
+
+일 단위 검사 집계 테이블입니다. **10년 보관 정책** 적용.
 
 ```sql
-CREATE TABLE statistics_hourly (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    stat_datetime DATETIME NOT NULL COMMENT '통계 시간 (YYYY-MM-DD HH:00:00)',
+CREATE TABLE inspection_summary_daily (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '집계 ID',
 
-    -- 검사 통계 (융합 결과 기반)
+    -- 집계 기준
+    date DATE NOT NULL COMMENT '날짜 (YYYY-MM-DD)',
+    product_code VARCHAR(10) NOT NULL COMMENT '제품 코드',
+
+    -- 집계 데이터
     total_inspections INT NOT NULL DEFAULT 0 COMMENT '총 검사 수',
-    normal_count INT NOT NULL DEFAULT 0 COMMENT '정상 개수 (fusion_decision=normal)',
-    component_defect_count INT NOT NULL DEFAULT 0 COMMENT '부품 불량 개수 (fusion_decision=component_defect)',
-    solder_defect_count INT NOT NULL DEFAULT 0 COMMENT '납땜 불량 개수 (fusion_decision=solder_defect)',
-    discard_count INT NOT NULL DEFAULT 0 COMMENT '폐기 개수 (fusion_decision=discard)',
+    normal_count INT NOT NULL DEFAULT 0 COMMENT '정상 수',
+    missing_count INT NOT NULL DEFAULT 0 COMMENT '부품 누락 수',
+    position_error_count INT NOT NULL DEFAULT 0 COMMENT '위치 오류 수',
+    discard_count INT NOT NULL DEFAULT 0 COMMENT '폐기 수',
 
-    -- 타임스탬프
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    -- 통계
+    avg_inference_time_ms FLOAT NULL COMMENT '평균 추론 시간',
+    avg_total_time_ms FLOAT NULL COMMENT '평균 총 처리 시간',
+    avg_detection_count FLOAT NULL COMMENT '평균 검출 부품 수',
+    avg_confidence FLOAT NULL COMMENT '평균 신뢰도',
 
-    UNIQUE KEY uk_stat_datetime (stat_datetime),
-    INDEX idx_stat_datetime (stat_datetime)
+    -- 불량률 (자동 계산)
+    defect_rate FLOAT GENERATED ALWAYS AS (
+        CASE
+            WHEN total_inspections > 0
+            THEN ((missing_count + position_error_count + discard_count) / total_inspections * 100)
+            ELSE 0
+        END
+    ) STORED COMMENT '불량률 (%)',
+
+    -- 시간 정보
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '집계 생성 시간',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '마지막 업데이트',
+
+    -- 유니크 제약조건 (날짜 + 제품코드)
+    UNIQUE KEY uk_date_product (date, product_code),
+
+    -- 인덱스
+    INDEX idx_date (date),
+    INDEX idx_product_code (product_code),
+    INDEX idx_date_product (date, product_code),
+
+    FOREIGN KEY (product_code) REFERENCES products(product_code)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='시간별 검사 통계 (이중 모델 융합 결과 기반)';
+COMMENT='일별 검사 집계 테이블 (10년 보관)';
 ```
 
-### 5. system_logs (시스템 로그)
+**쿼리 예시**:
+```sql
+-- 최근 30일 일별 통계 조회
+SELECT date, product_code, total_inspections, defect_rate
+FROM inspection_summary_daily
+WHERE date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+ORDER BY date DESC, product_code;
+
+-- 월별 집계 (일별 데이터에서 계산)
+SELECT YEAR(date) as year, MONTH(date) as month, product_code,
+       SUM(total_inspections) as total,
+       AVG(defect_rate) as avg_defect_rate
+FROM inspection_summary_daily
+WHERE date >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+GROUP BY YEAR(date), MONTH(date), product_code
+ORDER BY year DESC, month DESC;
+```
+
+---
+
+### 6. inspection_summary_monthly (월별 집계)
+
+월 단위 검사 집계 테이블입니다. **10년 보관 정책** 적용.
+
+```sql
+CREATE TABLE inspection_summary_monthly (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '집계 ID',
+
+    -- 집계 기준
+    year INT NOT NULL COMMENT '년도',
+    month INT NOT NULL COMMENT '월 (1-12)',
+    product_code VARCHAR(10) NOT NULL COMMENT '제품 코드',
+
+    -- 집계 데이터
+    total_inspections INT NOT NULL DEFAULT 0 COMMENT '총 검사 수',
+    normal_count INT NOT NULL DEFAULT 0 COMMENT '정상 수',
+    missing_count INT NOT NULL DEFAULT 0 COMMENT '부품 누락 수',
+    position_error_count INT NOT NULL DEFAULT 0 COMMENT '위치 오류 수',
+    discard_count INT NOT NULL DEFAULT 0 COMMENT '폐기 수',
+
+    -- 통계
+    avg_inference_time_ms FLOAT NULL COMMENT '평균 추론 시간',
+    avg_total_time_ms FLOAT NULL COMMENT '평균 총 처리 시간',
+    avg_detection_count FLOAT NULL COMMENT '평균 검출 부품 수',
+    avg_confidence FLOAT NULL COMMENT '평균 신뢰도',
+
+    -- 불량률 (자동 계산)
+    defect_rate FLOAT GENERATED ALWAYS AS (
+        CASE
+            WHEN total_inspections > 0
+            THEN ((missing_count + position_error_count + discard_count) / total_inspections * 100)
+            ELSE 0
+        END
+    ) STORED COMMENT '불량률 (%)',
+
+    -- 시간 정보
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '집계 생성 시간',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '마지막 업데이트',
+
+    -- 유니크 제약조건 (년월 + 제품코드)
+    UNIQUE KEY uk_year_month_product (year, month, product_code),
+
+    -- 인덱스
+    INDEX idx_year_month (year, month),
+    INDEX idx_product_code (product_code),
+    INDEX idx_year_month_product (year, month, product_code),
+
+    FOREIGN KEY (product_code) REFERENCES products(product_code)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='월별 검사 집계 테이블 (10년 보관)';
+```
+
+**쿼리 예시**:
+```sql
+-- 최근 12개월 월별 통계
+SELECT year, month, product_code, total_inspections, defect_rate
+FROM inspection_summary_monthly
+WHERE (year = YEAR(CURDATE()) AND month <= MONTH(CURDATE()))
+   OR (year = YEAR(CURDATE()) - 1 AND month > MONTH(CURDATE()))
+ORDER BY year DESC, month DESC, product_code;
+
+-- 연도별 통계 (월별 데이터에서 계산)
+SELECT year, product_code,
+       SUM(total_inspections) as total,
+       AVG(defect_rate) as avg_defect_rate
+FROM inspection_summary_monthly
+GROUP BY year, product_code
+ORDER BY year DESC;
+```
+
+---
+
+## 트리거 (자동 집계)
+
+`inspections` 테이블에 새로운 검사 결과가 INSERT될 때 자동으로 3개의 집계 테이블을 업데이트하는 트리거가 설정되어 있습니다.
+
+**트리거 목록**:
+1. `update_hourly_summary`: 시간별 집계 자동 업데이트
+2. `update_daily_summary`: 일별 집계 자동 업데이트
+3. `update_monthly_summary`: 월별 집계 자동 업데이트
+
+**트리거 확인**:
+```sql
+-- 트리거 목록 확인
+SHOW TRIGGERS FROM pcb_inspection;
+
+-- 트리거 상세 정보
+SHOW CREATE TRIGGER update_hourly_summary;
+SHOW CREATE TRIGGER update_daily_summary;
+SHOW CREATE TRIGGER update_monthly_summary;
+```
+
+**동작 방식**:
+- UPSERT 패턴 사용 (INSERT ... ON DUPLICATE KEY UPDATE)
+- 기존 레코드가 있으면 UPDATE, 없으면 INSERT
+- 평균값은 누적합 방식으로 재계산
+
+**트리거 파일**: `database/triggers_v3.0.sql`
+
+---
+
+## 이벤트 스케줄러 (자동 데이터 정리)
+
+**10년 이상 된 데이터를 자동으로 삭제**하는 이벤트 스케줄러가 설정되어 있습니다.
+
+**이벤트 목록**:
+1. `cleanup_old_inspections`: 검사 이력 정리 (매일 02:10)
+2. `cleanup_old_hourly_summary`: 시간별 집계 정리 (매일 02:20)
+3. `cleanup_old_daily_summary`: 일별 집계 정리 (매일 02:30)
+4. `cleanup_old_monthly_summary`: 월별 집계 정리 (매일 02:40)
+
+**이벤트 스케줄러 활성화**:
+```sql
+-- 이벤트 스케줄러 활성화 (서버 설정)
+SET GLOBAL event_scheduler = ON;
+
+-- 상태 확인
+SELECT @@event_scheduler;
+```
+
+**이벤트 확인**:
+```sql
+-- 이벤트 목록 확인
+SHOW EVENTS FROM pcb_inspection;
+
+-- 이벤트 상세 정보
+SHOW CREATE EVENT cleanup_old_inspections;
+```
+
+**이벤트 파일**: `database/events_v3.0.sql`
+
+**my.cnf 설정 (서버 재시작 시 자동 활성화)**:
+```ini
+[mysqld]
+event_scheduler = ON
+```
+
+---
+
+## 기타 테이블
+
+### 7. system_logs (시스템 로그)
 
 ```sql
 CREATE TABLE system_logs (
@@ -219,7 +560,9 @@ CREATE TABLE system_logs (
 COMMENT='시스템 로그';
 ```
 
-### 6. system_config (시스템 설정)
+---
+
+### 8. system_config (시스템 설정)
 
 ```sql
 CREATE TABLE system_config (
@@ -235,7 +578,20 @@ CREATE TABLE system_config (
 COMMENT='시스템 설정';
 ```
 
-### 7. users (사용자/작업자)
+**초기 설정 값**:
+```sql
+INSERT INTO system_config (config_key, config_value, description) VALUES
+('server_url', 'http://100.64.1.1:5000', 'Flask 서버 URL'),
+('fps', '10', '카메라 FPS'),
+('jpeg_quality', '85', 'JPEG 압축 품질'),
+('position_threshold', '20.0', '위치 오차 허용 임계값 (픽셀)'),
+('gpio_duration_ms', '500', 'GPIO 신호 지속 시간 (밀리초)'),
+('max_image_retention_days', '90', '불량 이미지 보관 기간 (일)');
+```
+
+---
+
+### 9. users (사용자/작업자)
 
 ```sql
 CREATE TABLE users (
@@ -254,304 +610,7 @@ CREATE TABLE users (
 COMMENT='사용자 계정';
 ```
 
-### 8. alerts (알람/알림)
-
-```sql
-CREATE TABLE alerts (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    alert_type ENUM('defect_rate_high', 'system_error', 'camera_offline', 'server_offline', 'box_full') NOT NULL,
-    severity ENUM('low', 'medium', 'high', 'critical') NOT NULL DEFAULT 'medium',
-    message TEXT NOT NULL COMMENT '알람 메시지',
-    details JSON NULL COMMENT '상세 정보',
-    is_resolved BOOLEAN NOT NULL DEFAULT FALSE COMMENT '해결 여부',
-    resolved_at DATETIME NULL COMMENT '해결 시간',
-    resolved_by INT NULL COMMENT '해결한 사용자 ID',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    INDEX idx_alert_type (alert_type),
-    INDEX idx_severity (severity),
-    INDEX idx_is_resolved (is_resolved),
-    INDEX idx_created_at (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='알람 및 알림 (box_full 추가)';
-```
-
-### 9. box_status (로봇팔 박스 상태 관리) ⭐ 신규
-
-```sql
-CREATE TABLE box_status (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-
-    -- 박스 정보
-    box_id VARCHAR(20) NOT NULL UNIQUE COMMENT '박스 ID (NORMAL, COMPONENT_DEFECT, SOLDER_DEFECT)',
-    category VARCHAR(50) NOT NULL COMMENT '분류 카테고리 (normal/component_defect/solder_defect)',
-
-    -- 슬롯 상태
-    current_slot INT NOT NULL DEFAULT 0 COMMENT '현재 사용 중인 슬롯 번호 (0-2, 수평 3슬롯)',
-    max_slots INT NOT NULL DEFAULT 3 COMMENT '최대 슬롯 개수 (3개, 수평 배치)',
-    is_full BOOLEAN NOT NULL DEFAULT FALSE COMMENT '박스 가득참 여부',
-
-    -- 통계
-    total_pcb_count INT NOT NULL DEFAULT 0 COMMENT '박스에 저장된 총 PCB 개수',
-
-    -- 타임스탬프
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '박스 생성 시각',
-    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '마지막 업데이트 시각',
-
-    -- 인덱스
-    INDEX idx_category (category),
-    INDEX idx_is_full (is_full)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='로봇팔 박스 슬롯 상태 관리 테이블 (3개 박스 × 3개 슬롯 = 9개 슬롯, 폐기는 슬롯 관리 안 함)';
-```
-
-**설명**:
-- **총 3개 박스**: 정상, 부품불량, 납땜불량
-- **각 박스: 3개 슬롯** (수평 배치, slot 0~2)
-- **총 9개 슬롯** = 3 카테고리 × 3 슬롯
-- **DISCARD 처리**: 슬롯 관리 없이 고정 위치에 떨어뜨리기 (프로젝트 데모용)
-- **슬롯 할당 로직**:
-  1. 각 박스는 slot 0부터 2까지 순차 채움
-  2. 사용률은 WinForms + Flask 서버에서 0/3 → 3/3로 표시
-  3. 박스가 가득 차면(3/3): LED 알림 + WinForms 알림 + OHT 자동 호출(`trigger_reason='box_full'`)
-
-**박스 ID 구조**:
-- `NORMAL`: 정상 PCB (3개 슬롯)
-- `COMPONENT_DEFECT`: 부품 불량 (3개 슬롯)
-- `SOLDER_DEFECT`: 납땜 불량 (3개 슬롯)
-- `DISCARD`: 폐기 (슬롯 관리 안 함, box_status 테이블에 저장 안 함)
-
-### 10. oht_operations (OHT 운영 이력) ⭐ 신규
-
-```sql
-CREATE TABLE oht_operations (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-
-    -- 요청 정보
-    operation_id VARCHAR(36) NOT NULL UNIQUE COMMENT 'OHT 운영 UUID',
-    category ENUM('NORMAL', 'COMPONENT_DEFECT', 'SOLDER_DEFECT') NOT NULL COMMENT 'PCB 카테고리',
-
-    -- 사용자 정보
-    user_id INT NULL COMMENT '요청한 사용자 ID (NULL이면 시스템 자동)',
-    user_role ENUM('Admin', 'Operator', 'System') NOT NULL COMMENT '사용자 역할',
-    is_auto BOOLEAN NOT NULL DEFAULT FALSE COMMENT '자동 호출 여부',
-    trigger_reason VARCHAR(50) NULL COMMENT '트리거 사유 (box_full 등)',
-
-    -- 상태
-    status ENUM('pending', 'processing', 'completed', 'failed') NOT NULL DEFAULT 'pending' COMMENT '운영 상태',
-
-    -- 타임스탬프
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '요청 생성 시간',
-    started_at DATETIME NULL COMMENT '운영 시작 시간',
-    completed_at DATETIME NULL COMMENT '운영 완료 시간',
-
-    -- 결과
-    pcb_count INT NOT NULL DEFAULT 0 COMMENT '수거한 PCB 개수',
-    success BOOLEAN NULL COMMENT '성공 여부',
-    error_message TEXT NULL COMMENT '오류 메시지',
-    execution_time_seconds DECIMAL(5, 2) NULL COMMENT '실행 시간 (초)',
-
-    -- 인덱스
-    INDEX idx_operation_id (operation_id),
-    INDEX idx_category (category),
-    INDEX idx_status (status),
-    INDEX idx_is_auto (is_auto),
-    INDEX idx_created_at (created_at),
-
-    -- 외래 키
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='OHT (Overhead Hoist Transport) 운영 이력 테이블';
-```
-
-**설명**:
-- **operation_id**: UUID 형식의 고유 식별자
-- **category**: 수거할 PCB 카테고리 (정상/부품불량/납땜불량)
-- **user_role**: Admin/Operator (수동 호출) 또는 System (자동 호출)
-- **is_auto**: true = 박스 꽉 참 자동 호출, false = WinForms 수동 호출
-- **trigger_reason**: 자동 호출 사유 (예: 'box_full')
-- **status**: pending (대기) → processing (진행 중) → completed/failed (완료/실패)
-- **execution_time_seconds**: 창고 → 분류박스 → 적재 → 창고 전체 시간
-
-**쿼리 예시**:
-```sql
--- 최근 OHT 운영 이력 (최근 10건)
-SELECT operation_id, category, user_role, is_auto, status,
-       created_at, execution_time_seconds
-FROM oht_operations
-ORDER BY created_at DESC
-LIMIT 10;
-
--- 자동 호출 통계
-SELECT category, COUNT(*) as auto_calls
-FROM oht_operations
-WHERE is_auto = TRUE
-GROUP BY category;
-
--- 평균 실행 시간
-SELECT category, AVG(execution_time_seconds) as avg_time
-FROM oht_operations
-WHERE status = 'completed'
-GROUP BY category;
-
--- 실패 이력
-SELECT operation_id, category, error_message, created_at
-FROM oht_operations
-WHERE status = 'failed'
-ORDER BY created_at DESC;
-```
-
----
-
-### 11. user_logs (사용자 활동 로그) ⭐ 신규
-
-```sql
-CREATE TABLE user_logs (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-
-    -- 사용자 정보
-    user_id INT NOT NULL COMMENT '사용자 ID',
-    username VARCHAR(50) NOT NULL COMMENT '사용자명 (참조용)',
-    user_role ENUM('Admin', 'Operator', 'Viewer') NOT NULL COMMENT '사용자 권한',
-
-    -- 활동 정보
-    action_type ENUM(
-        'login',
-        'logout',
-        'create_user',
-        'update_user',
-        'delete_user',
-        'reset_password',
-        'call_oht',
-        'export_data',
-        'view_inspection',
-        'change_settings',
-        'other'
-    ) NOT NULL COMMENT '활동 유형',
-    action_description VARCHAR(255) NULL COMMENT '활동 상세 설명',
-
-    -- 시스템 정보
-    ip_address VARCHAR(45) NULL COMMENT 'IP 주소 (IPv4/IPv6)',
-    user_agent VARCHAR(255) NULL COMMENT 'User Agent (브라우저/클라이언트 정보)',
-
-    -- 상세 정보
-    details JSON NULL COMMENT '추가 상세 정보 (JSON 형식)',
-
-    -- 타임스탬프
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '활동 발생 시간',
-
-    -- 인덱스
-    INDEX idx_user_id (user_id),
-    INDEX idx_action_type (action_type),
-    INDEX idx_created_at (created_at),
-    INDEX idx_user_action (user_id, action_type),
-
-    -- 외래 키
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='사용자 활동 이력 로그 테이블';
-```
-
-**설명**:
-- **user_id**: 활동을 수행한 사용자 ID
-- **username**: 사용자명 (users 테이블 변경 시에도 이력 유지)
-- **action_type**: 활동 유형 (로그인, 사용자 관리, OHT 호출, 데이터 내보내기 등)
-- **action_description**: 활동에 대한 상세 설명 (예: "사용자 'operator2' 생성")
-- **ip_address**: 클라이언트 IP 주소 (IPv4/IPv6 지원)
-- **user_agent**: 클라이언트 정보 (WinForms 앱, 브라우저 등)
-- **details**: JSON 형식의 추가 정보 (예: 변경 전/후 값, OHT 카테고리 등)
-- **created_at**: 활동 발생 시간
-
-**쿼리 예시**:
-```sql
--- 특정 사용자의 최근 활동 이력 (최근 20건)
-SELECT action_type, action_description, ip_address, created_at
-FROM user_logs
-WHERE user_id = 1
-ORDER BY created_at DESC
-LIMIT 20;
-
--- 로그인 이력 조회
-SELECT username, ip_address, created_at
-FROM user_logs
-WHERE action_type = 'login'
-ORDER BY created_at DESC;
-
--- OHT 호출 이력 조회 (수동 호출만)
-SELECT username, user_role, action_description, details, created_at
-FROM user_logs
-WHERE action_type = 'call_oht'
-ORDER BY created_at DESC;
-
--- 사용자 관리 활동 이력
-SELECT username, action_type, action_description, created_at
-FROM user_logs
-WHERE action_type IN ('create_user', 'update_user', 'delete_user', 'reset_password')
-ORDER BY created_at DESC;
-
--- 날짜 범위별 활동 통계
-SELECT action_type, COUNT(*) as count
-FROM user_logs
-WHERE created_at BETWEEN '2025-10-01' AND '2025-10-31'
-GROUP BY action_type
-ORDER BY count DESC;
-
--- 데이터 내보내기 이력
-SELECT username, user_role, action_description, created_at
-FROM user_logs
-WHERE action_type = 'export_data'
-ORDER BY created_at DESC;
-```
-
-**details 필드 JSON 예시**:
-```json
-// 사용자 생성
-{
-  "new_username": "operator2",
-  "new_role": "Operator",
-  "created_by": "admin"
-}
-
-// 비밀번호 초기화
-{
-  "target_username": "operator1",
-  "reset_to": "temp1234"
-}
-
-// OHT 호출
-{
-  "category": "NORMAL",
-  "is_auto": false,
-  "operation_id": "550e8400-e29b-41d4-a716-446655440000"
-}
-
-// 데이터 내보내기
-{
-  "export_type": "excel",
-  "date_range": "2025-10-01 ~ 2025-10-22",
-  "row_count": 1523
-}
-```
-
----
-
-## 초기 데이터 삽입
-
-### 시스템 설정 기본값
-
-```sql
-INSERT INTO system_config (config_key, config_value, description) VALUES
-('server_url', 'http://100.64.1.1:5000', 'Flask 서버 URL'),
-('fps', '10', '카메라 FPS'),
-('jpeg_quality', '85', 'JPEG 압축 품질'),
-('defect_threshold', '0.70', '불량 판정 임계값 (신뢰도)'),
-('gpio_duration_ms', '500', 'GPIO 신호 지속 시간 (밀리초)'),
-('max_image_retention_days', '90', '불량 이미지 보관 기간 (일)'),
-('alert_defect_rate_threshold', '10.0', '알람 발생 불량률 임계값 (%)');
-```
-
-### 기본 사용자 생성
-
+**샘플 데이터**:
 ```sql
 -- 비밀번호: admin123 (실제로는 해시 사용)
 INSERT INTO users (username, password_hash, full_name, role) VALUES
@@ -560,308 +619,57 @@ INSERT INTO users (username, password_hash, full_name, role) VALUES
 ('viewer1', '$2b$12$examplehashedpassword', '조회자1', 'viewer');
 ```
 
-### 박스 상태 초기화 ⭐ 신규
-
-```sql
--- 3개 박스 초기 데이터 삽입 (DISCARD는 제외)
-INSERT INTO box_status (box_id, category, max_slots) VALUES
-    ('NORMAL', 'normal', 5),
-    ('COMPONENT_DEFECT', 'component_defect', 5),
-    ('SOLDER_DEFECT', 'solder_defect', 5);
-```
-
-**박스 상태 확인 쿼리**:
-```sql
--- 전체 박스 상태 조회
-SELECT box_id, category, current_slot, max_slots, is_full, total_pcb_count
-FROM box_status
-ORDER BY box_id;
-
--- 가득 찬 박스 조회
-SELECT box_id, category, total_pcb_count
-FROM box_status
-WHERE is_full = TRUE;
-
--- 특정 카테고리의 박스 상태 조회
-SELECT box_id, current_slot, max_slots, is_full
-FROM box_status
-WHERE category = 'normal';
-```
-
 ---
 
-## 뷰 (View) 정의
+## 뷰 (View)
 
-### 실시간 통계 뷰 ⭐ 이중 모델 융합 결과 기반
+### 실시간 통계 뷰
 
 ```sql
 CREATE VIEW v_realtime_statistics AS
 SELECT
     DATE(inspection_time) AS stat_date,
     HOUR(inspection_time) AS stat_hour,
+    product_code,
     COUNT(*) AS total_inspections,
-    SUM(CASE WHEN fusion_decision = 'normal' THEN 1 ELSE 0 END) AS normal_count,
-    SUM(CASE WHEN fusion_decision = 'component_defect' THEN 1 ELSE 0 END) AS component_defect_count,
-    SUM(CASE WHEN fusion_decision = 'solder_defect' THEN 1 ELSE 0 END) AS solder_defect_count,
-    SUM(CASE WHEN fusion_decision = 'discard' THEN 1 ELSE 0 END) AS discard_count,
+    SUM(CASE WHEN decision = 'normal' THEN 1 ELSE 0 END) AS normal_count,
+    SUM(CASE WHEN decision = 'missing' THEN 1 ELSE 0 END) AS missing_count,
+    SUM(CASE WHEN decision = 'position_error' THEN 1 ELSE 0 END) AS position_error_count,
+    SUM(CASE WHEN decision = 'discard' THEN 1 ELSE 0 END) AS discard_count,
     ROUND(
-        (SUM(CASE WHEN fusion_decision != 'normal' THEN 1 ELSE 0 END) * 100.0 / COUNT(*)),
+        (SUM(CASE WHEN decision != 'normal' THEN 1 ELSE 0 END) * 100.0 / COUNT(*)),
         2
     ) AS defect_rate,
-    AVG(component_inference_time_ms) AS avg_component_inference_ms,
-    AVG(solder_inference_time_ms) AS avg_solder_inference_ms,
-    AVG(total_inference_time_ms) AS avg_total_inference_ms
+    AVG(inference_time_ms) AS avg_inference_ms,
+    AVG(total_time_ms) AS avg_total_ms
 FROM inspections
 WHERE inspection_time >= CURDATE()
-GROUP BY stat_date, stat_hour
+GROUP BY stat_date, stat_hour, product_code
 ORDER BY stat_date DESC, stat_hour DESC;
 ```
 
-**뷰 사용 예시**:
+**사용 예시**:
 ```sql
 -- 오늘 실시간 통계 조회
 SELECT * FROM v_realtime_statistics
 WHERE stat_date = CURDATE();
 
--- 최근 1시간 통계
+-- 특정 제품의 실시간 통계
 SELECT * FROM v_realtime_statistics
-WHERE stat_date = CURDATE()
-AND stat_hour = HOUR(NOW());
-```
-
----
-
-## 저장 프로시저
-
-### 1. 일별 통계 업데이트 ⭐ 이중 모델 융합 결과 기반
-
-```sql
-DELIMITER $$
-
-CREATE PROCEDURE update_daily_statistics(IN target_date DATE)
-BEGIN
-    INSERT INTO statistics_daily (
-        stat_date,
-        total_inspections,
-        normal_count,
-        component_defect_count,
-        solder_defect_count,
-        discard_count,
-        avg_component_inference_ms,
-        avg_solder_inference_ms,
-        avg_total_inference_ms
-    )
-    SELECT
-        DATE(inspection_time) AS stat_date,
-        COUNT(*) AS total_inspections,
-        SUM(CASE WHEN fusion_decision = 'normal' THEN 1 ELSE 0 END) AS normal_count,
-        SUM(CASE WHEN fusion_decision = 'component_defect' THEN 1 ELSE 0 END) AS component_defect_count,
-        SUM(CASE WHEN fusion_decision = 'solder_defect' THEN 1 ELSE 0 END) AS solder_defect_count,
-        SUM(CASE WHEN fusion_decision = 'discard' THEN 1 ELSE 0 END) AS discard_count,
-        AVG(component_inference_time_ms) AS avg_component_inference_ms,
-        AVG(solder_inference_time_ms) AS avg_solder_inference_ms,
-        AVG(total_inference_time_ms) AS avg_total_inference_ms
-    FROM inspections
-    WHERE DATE(inspection_time) = target_date
-    GROUP BY DATE(inspection_time)
-    ON DUPLICATE KEY UPDATE
-        total_inspections = VALUES(total_inspections),
-        normal_count = VALUES(normal_count),
-        component_defect_count = VALUES(component_defect_count),
-        solder_defect_count = VALUES(solder_defect_count),
-        discard_count = VALUES(discard_count),
-        avg_component_inference_ms = VALUES(avg_component_inference_ms),
-        avg_solder_inference_ms = VALUES(avg_solder_inference_ms),
-        avg_total_inference_ms = VALUES(avg_total_inference_ms),
-        updated_at = CURRENT_TIMESTAMP;
-END$$
-
-DELIMITER ;
-```
-
-### 2. 불량률 알람 체크
-
-```sql
-DELIMITER $$
-
-CREATE PROCEDURE check_defect_rate_alert(IN target_date DATE)
-BEGIN
-    DECLARE current_defect_rate DECIMAL(5,2);
-    DECLARE threshold DECIMAL(5,2);
-
-    -- 현재 불량률 조회
-    SELECT defect_rate INTO current_defect_rate
-    FROM statistics_daily
-    WHERE stat_date = target_date
-    LIMIT 1;
-
-    -- 임계값 조회
-    SELECT CAST(config_value AS DECIMAL(5,2)) INTO threshold
-    FROM system_config
-    WHERE config_key = 'alert_defect_rate_threshold'
-    LIMIT 1;
-
-    -- 불량률이 임계값 초과 시 알람 생성
-    IF current_defect_rate > threshold THEN
-        INSERT INTO alerts (alert_type, severity, message, details)
-        VALUES (
-            'defect_rate_high',
-            'high',
-            CONCAT('불량률이 임계값을 초과했습니다: ', current_defect_rate, '%'),
-            JSON_OBJECT(
-                'defect_rate', current_defect_rate,
-                'threshold', threshold,
-                'date', target_date
-            )
-        );
-    END IF;
-END$$
-
-DELIMITER ;
-```
-
----
-
-## 트리거
-
-### 검사 결과 삽입 시 시간별 통계 업데이트 ⭐ 이중 모델 융합 결과 기반
-
-```sql
-DELIMITER $$
-
-CREATE TRIGGER after_inspection_insert
-AFTER INSERT ON inspections
-FOR EACH ROW
-BEGIN
-    DECLARE stat_hour DATETIME;
-
-    -- 시간 단위로 반올림 (예: 2025-10-31 14:35:20 → 2025-10-31 14:00:00)
-    SET stat_hour = DATE_FORMAT(NEW.inspection_time, '%Y-%m-%d %H:00:00');
-
-    -- 시간별 통계 업데이트 (융합 결과 기반)
-    INSERT INTO statistics_hourly (
-        stat_datetime,
-        total_inspections,
-        normal_count,
-        component_defect_count,
-        solder_defect_count,
-        discard_count
-    ) VALUES (
-        stat_hour,
-        1,
-        CASE WHEN NEW.fusion_decision = 'normal' THEN 1 ELSE 0 END,
-        CASE WHEN NEW.fusion_decision = 'component_defect' THEN 1 ELSE 0 END,
-        CASE WHEN NEW.fusion_decision = 'solder_defect' THEN 1 ELSE 0 END,
-        CASE WHEN NEW.fusion_decision = 'discard' THEN 1 ELSE 0 END
-    )
-    ON DUPLICATE KEY UPDATE
-        total_inspections = total_inspections + 1,
-        normal_count = normal_count + CASE WHEN NEW.fusion_decision = 'normal' THEN 1 ELSE 0 END,
-        component_defect_count = component_defect_count + CASE WHEN NEW.fusion_decision = 'component_defect' THEN 1 ELSE 0 END,
-        solder_defect_count = solder_defect_count + CASE WHEN NEW.fusion_decision = 'solder_defect' THEN 1 ELSE 0 END,
-        discard_count = discard_count + CASE WHEN NEW.fusion_decision = 'discard' THEN 1 ELSE 0 END,
-        updated_at = CURRENT_TIMESTAMP;
-END$$
-
-DELIMITER ;
-```
-
----
-
-## 인덱스 최적화
-
-### 복합 인덱스 ⭐ 이중 모델 융합 결과 기반
-
-```sql
--- 날짜 범위 조회용 (융합 결과 기반)
-CREATE INDEX idx_inspection_time_fusion
-ON inspections (inspection_time, fusion_decision);
-
--- 불량 개수 기반 검색
-CREATE INDEX idx_component_solder_counts
-ON inspections (component_defect_count, solder_defect_count, inspection_time);
-
--- 성능 분석용
-CREATE INDEX idx_inference_times
-ON inspections (total_inference_time_ms, inspection_time);
-```
-
----
-
-## 데이터 정리 (자동 삭제)
-
-### 오래된 로그 삭제 이벤트
-
-```sql
--- 이벤트 스케줄러 활성화
-SET GLOBAL event_scheduler = ON;
-
--- 90일 이상 된 시스템 로그 자동 삭제 (매일 새벽 2시)
-CREATE EVENT IF NOT EXISTS delete_old_system_logs
-ON SCHEDULE EVERY 1 DAY
-STARTS '2025-10-23 02:00:00'
-DO
-    DELETE FROM system_logs
-    WHERE created_at < DATE_SUB(NOW(), INTERVAL 90 DAY);
-
--- 설정된 기간 이상 된 불량 이미지 메타데이터 삭제
-CREATE EVENT IF NOT EXISTS delete_old_defect_images
-ON SCHEDULE EVERY 1 DAY
-STARTS '2025-10-23 02:30:00'
-DO
-    DELETE di FROM defect_images di
-    INNER JOIN inspections i ON di.inspection_id = i.id
-    WHERE i.inspection_time < DATE_SUB(NOW(), INTERVAL (
-        SELECT CAST(config_value AS UNSIGNED)
-        FROM system_config
-        WHERE config_key = 'max_image_retention_days'
-    ) DAY);
-```
-
----
-
-## 백업 전략
-
-### mysqldump 사용
-
-```bash
-#!/bin/bash
-# backup_database.sh
-
-DATE=$(date +%Y%m%d_%H%M%S)
-BACKUP_DIR="/home/backup/mysql"
-DB_NAME="pcb_inspection"
-DB_USER="root"
-DB_PASS="your_password"
-
-mkdir -p $BACKUP_DIR
-
-# 전체 데이터베이스 백업
-mysqldump -u$DB_USER -p$DB_PASS $DB_NAME > $BACKUP_DIR/pcb_inspection_$DATE.sql
-
-# 7일 이상 된 백업 파일 삭제
-find $BACKUP_DIR -name "*.sql" -mtime +7 -delete
-
-echo "Backup completed: pcb_inspection_$DATE.sql"
-```
-
-cron 등록 (매일 새벽 1시):
-```bash
-crontab -e
-
-# 추가
-0 1 * * * /home/pi/backup_database.sh
+WHERE product_code = 'FT'
+  AND stat_date = CURDATE();
 ```
 
 ---
 
 ## Python 연결 예제
 
-### PyMySQL 사용 ⭐ 이중 모델 융합 결과 기반
+### PyMySQL 사용
 
 ```python
 import pymysql
 import json
+from datetime import datetime
 
 # 연결
 conn = pymysql.connect(
@@ -875,58 +683,86 @@ conn = pymysql.connect(
 
 try:
     with conn.cursor() as cursor:
-        # 양면 동시 검사 결과 삽입 (이중 모델 융합)
+        # 검사 결과 삽입
         sql = """INSERT INTO inspections
-                 (fusion_decision, fusion_severity_level,
-                  component_defects, component_defect_count, component_inference_time_ms,
-                  solder_defects, solder_defect_count, solder_inference_time_ms,
-                  total_inference_time_ms,
+                 (serial_number, product_code, qr_data,
+                  qr_detected, serial_detected,
+                  decision, missing_count, position_error_count,
+                  extra_count, correct_count,
+                  missing_components, position_errors, extra_components,
+                  yolo_detections, detection_count, avg_confidence,
+                  inference_time_ms, verification_time_ms, total_time_ms,
                   left_image_path, right_image_path,
-                  gpio_pin, gpio_duration_ms)
-                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+                  image_width, image_height,
+                  camera_id, client_ip)
+                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                         %s, %s, %s, %s, %s)"""
 
-        # Component Model 결과
-        component_defects = json.dumps([
-            {"type": "missing_component", "confidence": 0.95, "bbox": [120, 85, 150, 110], "class_name": "resistor"}
+        # JSON 데이터 준비
+        missing_components = json.dumps([
+            {
+                "class_name": "capacitor",
+                "expected_position": {
+                    "center": [120, 85],
+                    "bbox": [100, 70, 140, 100]
+                }
+            }
         ])
 
-        # Solder Model 결과
-        solder_defects = json.dumps([
-            {"type": "cold_joint", "confidence": 0.92, "bbox": [310, 220, 335, 245], "class_name": "solder_joint"}
+        position_errors = json.dumps([
+            {
+                "class_name": "resistor",
+                "expected": {"center": [200, 150]},
+                "actual": {"center": [225, 155]},
+                "offset": 25.5
+            }
         ])
 
         cursor.execute(sql, (
-            'component_defect',  # fusion_decision
-            2,                    # fusion_severity_level
-            component_defects,    # component_defects (JSON)
-            1,                    # component_defect_count
-            65.5,                 # component_inference_time_ms
-            solder_defects,       # solder_defects (JSON)
-            1,                    # solder_defect_count
-            45.2,                 # solder_inference_time_ms
-            85.3,                 # total_inference_time_ms
+            'MBFT12345678',      # serial_number
+            'FT',                # product_code
+            'http://localhost:8080/product/MBFT12345678',  # qr_data
+            True,                # qr_detected
+            True,                # serial_detected
+            'position_error',    # decision
+            1,                   # missing_count
+            1,                   # position_error_count
+            0,                   # extra_count
+            23,                  # correct_count
+            missing_components,  # missing_components (JSON)
+            position_errors,     # position_errors (JSON)
+            None,                # extra_components
+            None,                # yolo_detections
+            24,                  # detection_count
+            0.89,                # avg_confidence
+            45.2,                # inference_time_ms
+            12.3,                # verification_time_ms
+            65.5,                # total_time_ms
             '/images/left/pcb_001.jpg',   # left_image_path
             '/images/right/pcb_001.jpg',  # right_image_path
-            17,                   # gpio_pin (component_defect = GPIO 17)
-            500                   # gpio_duration_ms
+            640, 480,            # image_width, image_height
+            'left',              # camera_id
+            '100.64.1.2'         # client_ip
         ))
     conn.commit()
 
-    # 검사 이력 조회 (융합 결과 기반)
+    # 검사 이력 조회
     with conn.cursor() as cursor:
-        sql = """SELECT id, fusion_decision,
-                        component_defect_count, solder_defect_count,
-                        total_inference_time_ms, inspection_time
+        sql = """SELECT id, serial_number, product_code, decision,
+                        missing_count, position_error_count,
+                        total_time_ms, inspection_time
                  FROM inspections
                  ORDER BY inspection_time DESC
                  LIMIT 10"""
         cursor.execute(sql)
         results = cursor.fetchall()
         for row in results:
-            print(f"ID: {row['id']}, Decision: {row['fusion_decision']}, "
-                  f"Component: {row['component_defect_count']}, "
-                  f"Solder: {row['solder_defect_count']}, "
-                  f"Time: {row['total_inference_time_ms']}ms")
+            print(f"ID: {row['id']}, Serial: {row['serial_number']}, "
+                  f"Product: {row['product_code']}, Decision: {row['decision']}, "
+                  f"Missing: {row['missing_count']}, "
+                  f"Position Error: {row['position_error_count']}, "
+                  f"Time: {row['total_time_ms']}ms")
 
 finally:
     conn.close()
@@ -936,11 +772,12 @@ finally:
 
 ## C# 연결 예제
 
-### MySql.Data 사용 ⭐ 이중 모델 융합 결과 기반
+### MySql.Data 사용
 
 ```csharp
 using MySql.Data.MySqlClient;
 using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 
 string connStr = "server=localhost;user=root;database=pcb_inspection;password=your_password;";
@@ -950,68 +787,96 @@ try
 {
     conn.Open();
 
-    // Component Model 결과 (JSON)
-    var componentDefects = new List<object>
+    // JSON 데이터 준비
+    var missingComponents = new List<object>
     {
-        new { type = "missing_component", confidence = 0.95, bbox = new[] { 120, 85, 150, 110 }, class_name = "resistor" }
+        new {
+            class_name = "capacitor",
+            expected_position = new {
+                center = new[] { 120, 85 },
+                bbox = new[] { 100, 70, 140, 100 }
+            }
+        }
     };
 
-    // Solder Model 결과 (JSON)
-    var solderDefects = new List<object>
+    var positionErrors = new List<object>
     {
-        new { type = "cold_joint", confidence = 0.92, bbox = new[] { 310, 220, 335, 245 }, class_name = "solder_joint" }
+        new {
+            class_name = "resistor",
+            expected = new { center = new[] { 200, 150 } },
+            actual = new { center = new[] { 225, 155 } },
+            offset = 25.5
+        }
     };
 
-    // 양면 동시 검사 결과 삽입 (이중 모델 융합)
+    // 검사 결과 삽입
     string sql = @"INSERT INTO inspections
-                   (fusion_decision, fusion_severity_level,
-                    component_defects, component_defect_count, component_inference_time_ms,
-                    solder_defects, solder_defect_count, solder_inference_time_ms,
-                    total_inference_time_ms,
+                   (serial_number, product_code, qr_data,
+                    qr_detected, serial_detected,
+                    decision, missing_count, position_error_count,
+                    extra_count, correct_count,
+                    missing_components, position_errors,
+                    detection_count, avg_confidence,
+                    inference_time_ms, verification_time_ms, total_time_ms,
                     left_image_path, right_image_path,
-                    gpio_pin, gpio_duration_ms)
-                   VALUES (@fusion_decision, @fusion_severity_level,
-                           @component_defects, @component_defect_count, @component_inference_time_ms,
-                           @solder_defects, @solder_defect_count, @solder_inference_time_ms,
-                           @total_inference_time_ms,
+                    image_width, image_height,
+                    camera_id, client_ip)
+                   VALUES (@serial_number, @product_code, @qr_data,
+                           @qr_detected, @serial_detected,
+                           @decision, @missing_count, @position_error_count,
+                           @extra_count, @correct_count,
+                           @missing_components, @position_errors,
+                           @detection_count, @avg_confidence,
+                           @inference_time_ms, @verification_time_ms, @total_time_ms,
                            @left_image_path, @right_image_path,
-                           @gpio_pin, @gpio_duration_ms)";
+                           @image_width, @image_height,
+                           @camera_id, @client_ip)";
 
     MySqlCommand cmd = new MySqlCommand(sql, conn);
-    cmd.Parameters.AddWithValue("@fusion_decision", "component_defect");
-    cmd.Parameters.AddWithValue("@fusion_severity_level", 2);
-    cmd.Parameters.AddWithValue("@component_defects", JsonConvert.SerializeObject(componentDefects));
-    cmd.Parameters.AddWithValue("@component_defect_count", 1);
-    cmd.Parameters.AddWithValue("@component_inference_time_ms", 65.5);
-    cmd.Parameters.AddWithValue("@solder_defects", JsonConvert.SerializeObject(solderDefects));
-    cmd.Parameters.AddWithValue("@solder_defect_count", 1);
-    cmd.Parameters.AddWithValue("@solder_inference_time_ms", 45.2);
-    cmd.Parameters.AddWithValue("@total_inference_time_ms", 85.3);
+    cmd.Parameters.AddWithValue("@serial_number", "MBFT12345678");
+    cmd.Parameters.AddWithValue("@product_code", "FT");
+    cmd.Parameters.AddWithValue("@qr_data", "http://localhost:8080/product/MBFT12345678");
+    cmd.Parameters.AddWithValue("@qr_detected", true);
+    cmd.Parameters.AddWithValue("@serial_detected", true);
+    cmd.Parameters.AddWithValue("@decision", "position_error");
+    cmd.Parameters.AddWithValue("@missing_count", 1);
+    cmd.Parameters.AddWithValue("@position_error_count", 1);
+    cmd.Parameters.AddWithValue("@extra_count", 0);
+    cmd.Parameters.AddWithValue("@correct_count", 23);
+    cmd.Parameters.AddWithValue("@missing_components", JsonConvert.SerializeObject(missingComponents));
+    cmd.Parameters.AddWithValue("@position_errors", JsonConvert.SerializeObject(positionErrors));
+    cmd.Parameters.AddWithValue("@detection_count", 24);
+    cmd.Parameters.AddWithValue("@avg_confidence", 0.89);
+    cmd.Parameters.AddWithValue("@inference_time_ms", 45.2);
+    cmd.Parameters.AddWithValue("@verification_time_ms", 12.3);
+    cmd.Parameters.AddWithValue("@total_time_ms", 65.5);
     cmd.Parameters.AddWithValue("@left_image_path", "/images/left/pcb_001.jpg");
     cmd.Parameters.AddWithValue("@right_image_path", "/images/right/pcb_001.jpg");
-    cmd.Parameters.AddWithValue("@gpio_pin", 17);  // component_defect = GPIO 17
-    cmd.Parameters.AddWithValue("@gpio_duration_ms", 500);
+    cmd.Parameters.AddWithValue("@image_width", 640);
+    cmd.Parameters.AddWithValue("@image_height", 480);
+    cmd.Parameters.AddWithValue("@camera_id", "left");
+    cmd.Parameters.AddWithValue("@client_ip", "100.64.1.2");
 
     cmd.ExecuteNonQuery();
 
-    // 검사 이력 조회 (융합 결과 기반)
-    string selectSql = @"SELECT id, fusion_decision,
-                                component_defect_count, solder_defect_count,
-                                total_inference_time_ms, inspection_time
-                         FROM inspections
-                         ORDER BY inspection_time DESC
-                         LIMIT 10";
+    // 시간별 집계 조회 (WinForms 필터링)
+    string selectSql = @"SELECT hour_timestamp, product_code,
+                                total_inspections, normal_count,
+                                missing_count, position_error_count,
+                                discard_count, defect_rate
+                         FROM inspection_summary_hourly
+                         WHERE DATE(hour_timestamp) = CURDATE()
+                         ORDER BY hour_timestamp DESC";
 
     MySqlCommand selectCmd = new MySqlCommand(selectSql, conn);
     using (MySqlDataReader reader = selectCmd.ExecuteReader())
     {
         while (reader.Read())
         {
-            Console.WriteLine($"ID: {reader["id"]}, " +
-                            $"Decision: {reader["fusion_decision"]}, " +
-                            $"Component: {reader["component_defect_count"]}, " +
-                            $"Solder: {reader["solder_defect_count"]}, " +
-                            $"Time: {reader["total_inference_time_ms"]}ms");
+            Console.WriteLine($"Time: {reader["hour_timestamp"]}, " +
+                            $"Product: {reader["product_code"]}, " +
+                            $"Total: {reader["total_inspections"]}, " +
+                            $"Defect Rate: {reader["defect_rate"]}%");
         }
     }
 }
@@ -1027,11 +892,7 @@ finally
 
 ### 사용자 계정 및 권한 관리
 
-**중요**: 프로덕션 환경에서는 root 계정을 직접 사용하지 말고, 각 서비스별로 전용 계정을 생성하여 최소 권한 원칙을 적용해야 합니다.
-
 #### 1. Flask 서버용 MySQL 사용자 생성 (읽기/쓰기)
-
-Flask 서버는 검사 결과를 데이터베이스에 저장하고 조회할 수 있어야 합니다.
 
 ```sql
 -- Flask 서버 전용 사용자 생성
@@ -1044,13 +905,7 @@ GRANT SELECT, INSERT, UPDATE ON pcb_inspection.* TO 'flask_server'@'100.64.1.1';
 FLUSH PRIVILEGES;
 ```
 
-**참고**:
-- `100.64.1.1`은 Flask 서버의 IP 주소
-- 실제 사용 시 `STRONG_PASSWORD_HERE`를 강력한 비밀번호로 변경
-
 #### 2. C# WinForms 모니터링 앱용 MySQL 사용자 생성 (읽기 전용)
-
-모니터링 앱은 검사 이력 및 통계 조회만 필요하므로 읽기 전용 권한 부여.
 
 ```sql
 -- C# WinForms 앱 전용 사용자 생성
@@ -1063,13 +918,7 @@ GRANT SELECT ON pcb_inspection.* TO 'winforms_app'@'100.64.1.5';
 FLUSH PRIVILEGES;
 ```
 
-**참고**:
-- `100.64.1.5`은 Windows PC의 IP 주소
-- 권한 수준별 사용자 (Admin/Operator/Viewer)는 C# 앱 내부에서 관리
-
 #### 3. 관리자용 사용자 (전체 권한)
-
-데이터베이스 관리 및 백업/복구를 위한 관리자 계정.
 
 ```sql
 -- 관리자 계정 생성
@@ -1082,24 +931,11 @@ GRANT ALL PRIVILEGES ON pcb_inspection.* TO 'pcb_admin'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-#### 4. 사용자 계정 확인
-
-```sql
--- 현재 생성된 사용자 목록 확인
-SELECT User, Host FROM mysql.user WHERE User LIKE 'flask%' OR User LIKE 'winforms%' OR User LIKE 'pcb%';
-
--- 특정 사용자의 권한 확인
-SHOW GRANTS FOR 'flask_server'@'100.64.1.1';
-SHOW GRANTS FOR 'winforms_app'@'100.64.1.5';
-```
-
 ---
 
 ### 네트워크 보안 설정
 
-#### 1. MySQL 외부 접속 허용 설정
-
-기본적으로 MySQL은 localhost만 허용하므로, 네트워크 접속을 활성화해야 합니다.
+#### MySQL 외부 접속 허용 설정
 
 ```bash
 # MySQL 설정 파일 편집 (Ubuntu/Debian)
@@ -1107,16 +943,16 @@ sudo nano /etc/mysql/mysql.conf.d/mysqld.cnf
 
 # [mysqld] 섹션에서 bind-address 수정
 # 변경 전: bind-address = 127.0.0.1
-# 변경 후: bind-address = 0.0.0.0  # 모든 IP 허용 (또는 100.64.1.1 등 특정 IP만)
+# 변경 후: bind-address = 0.0.0.0
 
 # MySQL 재시작
 sudo systemctl restart mysql
 ```
 
-#### 2. 방화벽 설정 (Ubuntu/Debian)
+#### 방화벽 설정 (Ubuntu/Debian)
 
 ```bash
-# MySQL 포트 (3306) 개방 - 특정 IP만 허용 권장
+# MySQL 포트 (3306) 개방 - 특정 IP만 허용
 sudo ufw allow from 100.64.1.1 to any port 3306 comment 'Flask Server'
 sudo ufw allow from 100.64.1.5 to any port 3306 comment 'Windows PC'
 
@@ -1126,66 +962,57 @@ sudo ufw status
 
 ---
 
-### 비밀번호 정책
+## 백업 전략
 
-**권장 비밀번호 규칙**:
-- 최소 12자 이상
-- 대소문자, 숫자, 특수문자 조합
-- 주기적 변경 (3-6개월)
-- 기본 비밀번호 사용 금지
+### 정기 백업 (cron 사용)
 
-**비밀번호 변경**:
-```sql
--- 사용자 비밀번호 변경
-ALTER USER 'flask_server'@'100.64.1.1' IDENTIFIED BY 'NEW_STRONG_PASSWORD';
-FLUSH PRIVILEGES;
-```
-
----
-
-### 백업 및 복구 전략
-
-#### 1. 정기 백업 (cron 사용)
-
-```bash
-# 백업 스크립트 생성
-sudo nano /home/pcb_user/backup_mysql.sh
-```
-
-내용:
 ```bash
 #!/bin/bash
-BACKUP_DIR="/home/pcb_user/mysql_backups"
+# backup_database.sh
+
 DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="/home/backup/mysql"
+DB_NAME="pcb_inspection"
+DB_USER="pcb_admin"
+DB_PASS="your_password"
+
 mkdir -p $BACKUP_DIR
 
-# 데이터베이스 백업
-mysqldump -u pcb_admin -p'ADMIN_PASSWORD' pcb_inspection > $BACKUP_DIR/pcb_inspection_$DATE.sql
+# 전체 데이터베이스 백업
+mysqldump -u$DB_USER -p$DB_PASS $DB_NAME > $BACKUP_DIR/pcb_inspection_$DATE.sql
 
-# 7일 이상 된 백업 파일 자동 삭제
+# 7일 이상 된 백업 파일 삭제
 find $BACKUP_DIR -name "*.sql" -mtime +7 -delete
 
 echo "Backup completed: pcb_inspection_$DATE.sql"
 ```
 
-실행 권한 부여:
-```bash
-chmod +x /home/pcb_user/backup_mysql.sh
-```
-
-cron 등록 (매일 새벽 2시 백업):
+**cron 등록 (매일 새벽 1시)**:
 ```bash
 crontab -e
 
 # 추가
-0 2 * * * /home/pcb_user/backup_mysql.sh >> /home/pcb_user/backup.log 2>&1
+0 1 * * * /home/backup/backup_database.sh
 ```
 
-#### 2. 복구 방법
+---
+
+## 스키마 설치
+
+### 전체 스키마 설치 순서
 
 ```bash
-# SQL 파일로부터 복구
-mysql -u pcb_admin -p pcb_inspection < /home/pcb_user/mysql_backups/pcb_inspection_20251023_020000.sql
+# 1. 스키마 생성 (테이블)
+mysql -u root -p pcb_inspection < database/schema_v3.0_product_verification.sql
+
+# 2. 트리거 생성
+mysql -u root -p pcb_inspection < database/triggers_v3.0.sql
+
+# 3. 이벤트 스케줄러 생성
+mysql -u root -p pcb_inspection < database/events_v3.0.sql
+
+# 4. 사용자 계정 생성 (보안 설정)
+mysql -u root -p pcb_inspection < database/create_users.sql
 ```
 
 ---
@@ -1196,28 +1023,27 @@ mysql -u pcb_admin -p pcb_inspection < /home/pcb_user/mysql_backups/pcb_inspecti
 
 1. **PCB_Defect_Detection_Project.md** - 전체 시스템 아키텍처 및 프로젝트 개요
 2. **Flask_Server_Setup.md** - Flask 서버에서 MySQL 연동 (PyMySQL)
-3. **CSharp_WinForms_Guide.md** - C# WinForms에서 MySQL 연동 (MySql.Data)
+3. **CSharp_WinForms_Design_Specification.md** - C# WinForms에서 MySQL 연동 (집계 테이블 조회)
 4. **RaspberryPi_Setup.md** - 라즈베리파이 클라이언트 (간접적으로 Flask 서버를 통해 연동)
 
 각 문서에서 이 데이터베이스 스키마를 참조하여 시스템 통합을 구현합니다.
 
 ---
 
-**작성일**: 2025-10-28
-**최종 수정일**: 2025-10-31
-**버전**: 2.0 ⭐ (이중 모델 아키텍처)
+**작성일**: 2025-11-28
+**버전**: 3.0 ⭐ (Product Verification Architecture)
 **데이터베이스**: MySQL 8.0
 **문자 인코딩**: UTF-8 (utf8mb4)
+
 **주요 변경사항**:
-- **2.0 (2025-10-31)**: 이중 YOLO 모델 아키텍처 적용
-  - inspections 테이블 완전 재설계: 양면 동시 검사 결과 저장
-  - 융합 결과 기반 통계 (fusion_decision: normal/component_defect/solder_defect/discard)
-  - Component Model (부품 검출) + Solder Model (납땜 검출) 결과 분리 저장
-  - JSON 필드 추가: component_defects, solder_defects
-  - 추론 시간 필드 추가: component_inference_time_ms, solder_inference_time_ms, total_inference_time_ms
-  - 이미지 경로 분리: left_image_path (부품면), right_image_path (납땜면)
-  - 통계 테이블, 뷰, 프로시저, 트리거 모두 융합 결과 기반으로 업데이트
-  - Python/C# 연결 예제 업데이트 (이중 모델 데이터 삽입/조회)
-- **1.1 (2025-10-23)**: 보안 설정 섹션 추가 (사용자 계정 관리, 권한 설정)
-  - 네트워크 보안 및 방화벽 설정 추가
-  - 백업 및 복구 전략 추가
+- **3.0 (2025-11-28)**: Product Verification Architecture 적용
+  - 제품 식별 시스템 (시리얼 넘버 + QR 코드)
+  - 제품별 부품 배치 검증
+  - products, product_components 테이블 신규 추가
+  - inspections 테이블 완전 재설계
+  - 시간별/일별/월별 집계 테이블 추가
+  - 트리거 기반 자동 집계 시스템
+  - 이벤트 스케줄러 기반 10년 자동 정리 시스템
+  - 4단계 판정: normal/missing/position_error/discard
+  - JSON 필드: missing_components, position_errors, extra_components
+  - Python/C# 연결 예제 완전 업데이트

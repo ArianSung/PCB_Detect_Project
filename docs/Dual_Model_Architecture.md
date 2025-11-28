@@ -1,6 +1,26 @@
-# 이중 모델 아키텍처 설계
+# 이중 모델 아키텍처 설계 📦 [DEPRECATED - v2.0]
 
-## 시스템 흐름
+> ⚠️ **이 문서는 v2.0 아키텍처를 설명하며, v3.0부터는 사용되지 않습니다.**
+>
+> **v3.0 변경사항 (2025-11-28)**:
+> - **이중 YOLO 모델** (부품 검출 + 납땜 불량) → **단일 YOLO 모델 + 제품별 위치 검증**
+> - **공개 데이터셋** (FPIC-Component, SolDef_AI) → **커스텀 데이터셋** (FT, RS, BC 제품)
+> - **결과 융합 로직** → **ComponentVerifier (부품 위치 검증)**
+> - **4단계 판정**: component_defect/solder_defect → missing/position_error
+>
+> **v3.0 문서**:
+> - 시스템 아키텍처: `PCB_Defect_Detection_Project.md`
+> - Flask 서버: `Flask_Server_Setup.md`
+> - 데이터셋: `Dataset_Guide.md` (커스텀 데이터셋)
+> - 데이터베이스: `MySQL_Database_Design.md` (제품별 기준 데이터)
+>
+> ---
+>
+> **아래 내용은 v2.0 참고용으로 보관됩니다.**
+
+---
+
+## 시스템 흐름 (v2.0)
 
 ```
 [좌측 카메라] ──→ [부품 검출 모델] ──→ [결과A]

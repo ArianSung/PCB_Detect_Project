@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **PCB 불량 검사 시스템 (졸업 프로젝트)**
 
-컨베이어 벨트를 통해 들어오는 PCB의 양면을 실시간으로 검사하여 불량을 자동 검출하고 분류하는 AI 시스템입니다.
+컨베이어 벨트를 통해 들어오는 PCB의 양면을 실시간으로 검사하여 제품별 부품 배치를 검증하고 불량을 자동 판정하는 AI 시스템입니다.
 
 ### 핵심 기능
 - 웹캠 2대(좌측/우측)를 통한 PCB 양면 촬영 (컨베이어 벨트 좌우 배치)
@@ -16,20 +16,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - 양방향 실시간 통신
   - 클라이언트 요청 시 프레임 전송 (백프레셔 제어)
   - C# WinForms: SocketIOClient 사용
-- **이중 전문 YOLO v11l 모델**:
-  - **모델 1**: FPIC-Component (부품 검출, 25개 클래스)
-  - **모델 2**: SolDef_AI (납땜 불량, 5-6개 클래스)
-- 불량 유형에 따른 자동 분류 (부품불량/납땜불량/폐기/정상)
+- **뒷면 제품 식별 시스템**:
+  - **시리얼 넘버 OCR**: 제품 코드 자동 인식 (MB + 제품코드 + 8자리 숫자)
+  - **QR 코드 스캔**: 로컬 웹 기반 제품 정보 확인
+- **앞면 부품 검증 시스템**:
+  - **YOLO v11l 부품 검출**: 커스텀 데이터셋 기반 부품 위치 검출
+  - **제품별 부품 배치 검증**: 시리얼 넘버로 식별된 제품의 기준 배치와 비교
+- 검증 결과에 따른 자동 판정 (정상/부품누락/위치오류/폐기)
 
 ### 시스템 구성
 - **추론 서버 (GPU PC)**:
   - 위치: 원격지 (같은 도시 내)
   - 연결: Tailscale VPN (100.x.x.x)
-  - Flask 서버 + 이중 YOLO v11l 모델 + MySQL 데이터베이스 + REST API
-  - 모델 1: FPIC-Component (부품 검출)
-  - 모델 2: SolDef_AI (납땜 불량 검출)
+  - Flask 서버 + YOLO v11l 부품 검출 모델 + MySQL 데이터베이스 (제품별 부품 배치 저장) + REST API
+  - QR 코드 검출 (pyzbar)
+  - 시리얼 넘버 OCR (YOLO + EasyOCR)
+  - 제품 데이터베이스 (3종 제품, 제품별 부품 기준 배치 정보)
 - **라즈베리파이 4 (3대)**: 좌/우 웹캠 + OHT 제어 (RPi.GPIO, 모터 제어)
-- **Windows PC**: C# WinForms 모니터링 앱 (.NET 6+)
+- **Windows PC**: C# WinForms 모니터링 앱 (.NET 6+), 로컬 웹 서버 (제품 정보 표시)
 - **네트워크**:
   - 로컬: Tailscale 100.64.1.x(로컬 예비: 192.168.0.x) (선택)
   - 원격: Tailscale VPN 메시 네트워크 (프로젝트 환경)
@@ -81,24 +85,20 @@ mysql -u root -p pcb_inspection
 
 ### YOLO 모델 학습
 ```bash
-# 부품 검출 모델 학습
-python yolo/train_component_model.py --data data/fpic_component/data.yaml --epochs 100 --batch 16
+# 부품 검출 모델 학습 (커스텀 데이터셋 사용)
+python yolo/train_component_model.py --data data/custom_pcb/data.yaml --epochs 100 --batch 16
 
-# 납땜 불량 모델 학습
-python yolo/train_solder_model.py --data data/soldef_ai/data.yaml --epochs 100 --batch 16
+# 시리얼 넘버 영역 검출 모델 학습 (선택 사항)
+python yolo/train_serial_detector.py --data data/serial_number/data.yaml --epochs 50 --batch 16
 
 # 또는 스크립트 사용
 bash scripts/train_component_model.sh
-bash scripts/train_solder_model.sh
 ```
 
 ### 모델 평가
 ```bash
 # 부품 검출 모델 평가
-python yolo/evaluate_yolo.py --model models/fpic_component_best.pt
-
-# 납땜 불량 모델 평가
-python yolo/evaluate_yolo.py --model models/soldef_ai_best.pt
+python yolo/evaluate_yolo.py --model models/component_detector_best.pt
 
 # 또는
 bash scripts/evaluate.sh
@@ -109,33 +109,50 @@ bash scripts/evaluate.sh
 # 단위 테스트 실행
 pytest tests/
 
-# 특정 테스트 파일
-pytest tests/test_dual_model.py
+# 특정 테스트 파일 예시
+pytest tests/test_component_verification.py
+pytest tests/test_serial_detector.py
 ```
 
 ## Code Architecture
 
 ### High-Level Structure
 
-**실시간 PCB 양면 검사 시스템 아키텍처**
+**실시간 PCB 양면 검사 및 제품별 검증 시스템 아키텍처**
 
 ```
-[라즈베리파이 1] 웹캠(좌측) ──┐
-                             ├→ HTTP POST → [Flask 추론 서버 (GPU PC)]
-[라즈베리파이 2] 웹캠(우측) ──┘     (left_frame + right_frame)
+[라즈베리파이 2] 웹캠(우측 - 뒷면) ──┐
+                                     ├→ HTTP POST → [Flask 추론 서버 (GPU PC)]
+[라즈베리파이 1] 웹캠(좌측 - 앞면) ──┘     (right_frame + left_frame)
                                          │
-                                         ├→ 이중 모델 병렬 추론
-                                         │  ├─ 모델 1: 부품 검출 (FPIC)
-                                         │  └─ 모델 2: 납땜 검출 (SolDef)
+                                         ├→ [1단계] 뒷면 처리 (제품 식별)
+                                         │   ├─ 시리얼 넘버 OCR (YOLO + EasyOCR)
+                                         │   │   └→ MBXX12345678 파싱
+                                         │   │        ├─ MB: 브랜드
+                                         │   │        ├─ XX: 제품코드 (FT/RS 등)
+                                         │   │        └─ 12345678: 일련번호
+                                         │   │
+                                         │   ├─ QR 코드 스캔 (pyzbar)
+                                         │   │   └→ 로컬 웹 URL 획득
+                                         │   │
+                                         │   └─ 제품 DB 조회 (제품 코드 기반)
+                                         │        └→ 해당 제품의 부품 배치 기준 로드
                                          │
-                                         ├→ 결과 융합 (Fusion Logic)
-                                         ├→ 최종 판정 (4가지)
-                                         ├→ MySQL 저장
+                                         ├→ [2단계] 앞면 처리 (부품 검증)
+                                         │   ├─ YOLO 부품 검출 (커스텀 데이터셋)
+                                         │   ├─ PCB 정렬 (pcb_alignment.py)
+                                         │   └─ 부품 위치 검증 (component_verification.py)
+                                         │        ├─ 검출 위치 vs 기준 위치 비교
+                                         │        ├─ 위치 오류 판정 (threshold: 20px)
+                                         │        └─ 누락 컴포넌트 판정
+                                         │
+                                         ├→ 최종 판정 (정상/부품누락/위치오류/폐기)
+                                         ├→ MySQL 저장 (제품 정보 포함)
                                          ├→ GPIO 제어 신호 응답
                                          └→ REST API 제공
                                                 │
                                                 ↓
-                              [부품불량/납땜불량/폐기/정상]
+                              [정상/부품누락/위치오류/폐기]
                                       │              │
                                       ↓              ↓
                            GPIO 핀 제어 (라즈베리파이 1)
@@ -143,9 +160,12 @@ pytest tests/test_dual_model.py
                                       │
                                       ↓
                               MySQL DB 저장
+                              (제품별 검증 이력)
                                       ↓
                               C# WinForms
                            모니터링 대시보드
+                           + 로컬 웹 서버
+                           (QR 제품 정보 표시)
                               ↑ WebSocket ⭐
                               │ (SocketIOClient)
                               │ request_frame (100ms 간격)
@@ -157,6 +177,9 @@ pytest tests/test_dual_model.py
 - **딥러닝**: PyTorch, YOLO v11l (Ultralytics)
 - **웹 서버**: Flask, Flask-CORS, **Flask-SocketIO** ⭐
 - **컴퓨터 비전**: OpenCV, Pillow
+- **OCR 및 코드 인식**:
+  - **pyzbar** - QR 코드 디코딩
+  - **EasyOCR** - 시리얼 넘버 텍스트 인식
 - **통신**:
   - Requests (HTTP) - 추론 API
   - **WebSocket (SocketIO)** - 실시간 프레임 스트리밍 ⭐
@@ -164,62 +187,97 @@ pytest tests/test_dual_model.py
 - **데이터베이스**: MySQL 8.0, PyMySQL (Python), MySql.Data (C#)
 - **GPIO 제어**: RPi.GPIO (라즈베리파이 4)
 - **C# UI**: .NET 6+ WinForms, LiveCharts, Newtonsoft.Json, **SocketIOClient** ⭐
-- **데이터 처리**: NumPy, Pandas
+- **로컬 웹 서버**: Flask (제품 정보 표시용)
+- **데이터 처리**: NumPy, Pandas, scipy (거리 계산)
 
 ### 주요 디렉토리 역할
 - `docs/`: 프로젝트 문서 (모든 MD 파일)
 - `server/`: Flask 추론 서버 (GPU PC에서 실행)
+  - `qr_detector.py`: QR 코드 검출 모듈
+  - `serial_number_detector.py`: 시리얼 넘버 OCR 모듈
+  - `product_database.py`: 제품별 부품 배치 관리
+  - `component_verification.py`: 부품 위치 검증
+  - `pcb_alignment.py`: PCB 정렬 기능
 - `models/`: AI 모델 정의 및 학습된 모델 파일
-  - `fpic_component_best.pt`: 부품 검출 모델 (25개 클래스)
-  - `soldef_ai_best.pt`: 납땜 불량 모델 (5-6개 클래스)
+  - `component_detector_best.pt`: 부품 검출 모델 (커스텀 데이터셋)
+  - `serial_detector_best.pt`: 시리얼 넘버 영역 검출 모델 (선택)
 - `yolo/`: 모델 학습 스크립트
 - `raspberry_pi/`: 라즈베리파이 클라이언트 (웹캠 + GPIO)
   - `dual_camera_client.py`: 양면 동시 촬영 클라이언트
-- `csharp_winforms/`: C# WinForms 모니터링 앱
+- `csharp_winforms/`: C# WinForms 모니터링 앱 + 로컬 웹 서버
 - `database/`: MySQL 데이터베이스 스키마 및 백업
+  - `products`: 제품 정보 테이블
+  - `product_components`: 제품별 부품 배치 테이블
 - `data/`: 데이터셋 (raw, processed)
-  - `fpic_component/`: FPIC-Component 데이터셋 (6,260 이미지)
-  - `soldef_ai/`: SolDef_AI 데이터셋 (1,150 이미지)
+  - `custom_pcb/`: 커스텀 PCB 부품 데이터셋
+  - `serial_number/`: 시리얼 넘버 영역 데이터셋 (선택)
 - `configs/`: 설정 파일 (YAML)
 
 ### 데이터 흐름
 1. **라즈베리파이 1, 2**: 양면 웹캠에서 동시 프레임 캡처 (OpenCV)
 2. **라즈베리파이**: JPEG 인코딩 → Base64 변환
 3. **라즈베리파이**: HTTP POST로 양면 프레임을 Flask 서버에 전송
-4. **Flask 서버**: 디코딩 → 이중 모델 병렬 AI 추론
-   - 좌측 프레임 → 부품 검출 모델 (FPIC-Component)
-   - 우측 프레임 → 납땜 불량 모델 (SolDef_AI)
-5. **Flask 서버**: 결과 융합 로직으로 최종 판정 (부품불량/납땜불량/폐기/정상)
-6. **Flask 서버**: MySQL에 검사 이력 저장
-7. **Flask 서버**: 최종 판정과 함께 JSON 응답 반환
-8. **라즈베리파이 1**: GPIO 핀 제어 (릴레이 모듈 → 분류 게이트)
-9. **C# WinForms**: REST API 호출하여 검사 이력 조회 및 통계 표시
+4. **Flask 서버 - 1단계 (뒷면 처리)**:
+   - 시리얼 넘버 OCR (YOLO + EasyOCR)
+   - 시리얼 넘버 파싱: MBXX12345678 → 제품 코드(XX) 추출
+   - QR 코드 스캔 (pyzbar) → 로컬 웹 URL 획득
+   - 제품 DB 조회 → 제품별 부품 배치 기준 로드
+5. **Flask 서버 - 2단계 (앞면 처리)**:
+   - YOLO 부품 검출 (커스텀 데이터셋)
+   - PCB 정렬 (pcb_alignment.py)
+   - 부품 위치 검증 (component_verification.py)
+     - 검출 위치 vs 기준 위치 비교
+     - 위치 오류 판정 (20px 임계값)
+     - 누락 컴포넌트 판정
+6. **Flask 서버**: 최종 판정 (정상/부품누락/위치오류/폐기)
+7. **Flask 서버**: MySQL에 검증 이력 저장 (제품 정보 포함)
+8. **Flask 서버**: 최종 판정과 함께 JSON 응답 반환
+9. **라즈베리파이 1**: GPIO 핀 제어 (릴레이 모듈 → 분류 게이트)
+10. **C# WinForms**: REST API 호출하여 검증 이력 조회 및 통계 표시
+11. **로컬 웹 서버**: QR 코드 스캔 시 제품 정보 페이지 제공
 
 ### Key Components
 
 **1. Flask 추론 서버 (`server/app.py`)**
 - API 엔드포인트: `/predict_dual`, `/health`
 - 양면 프레임 수신 및 디코딩
-- 이중 모델 병렬 AI 추론
-- 결과 융합 및 최종 판정
-- 결과 반환
+- 뒷면: 시리얼 넘버 + QR 코드 처리
+- 앞면: YOLO 부품 검출 + 위치 검증
+- 최종 판정 및 결과 반환
 
-**2. AI 추론 엔진 (`server/dual_inference.py`)**
-- 이중 YOLO 모델 로드
-- 병렬 추론 실행
-- 결과 융합 로직
-- 불량 분류 알고리즘
+**2. QR 코드 검출기 (`server/qr_detector.py`)**
+- pyzbar를 이용한 QR 코드 디코딩
+- 로컬 웹 URL 파싱
+- 제품 정보 추출
 
-**3. 웹캠 클라이언트 (`raspberry_pi/dual_camera_client.py`)**
+**3. 시리얼 넘버 검출기 (`server/serial_number_detector.py`)**
+- YOLO 기반 시리얼 넘버 영역 검출
+- EasyOCR을 이용한 텍스트 인식
+- 시리얼 넘버 파싱: MBXX12345678
+  - MB: 브랜드, XX: 제품코드, 12345678: 일련번호
+- 정규식 기반 유효성 검증
+
+**4. 제품 데이터베이스 (`server/product_database.py`)**
+- 제품별 부품 배치 정보 관리
+- 제품 코드 기반 조회
+- 3종 제품 지원 (FT, RS 등)
+
+**5. 부품 위치 검증 (`server/component_verification.py`)**
+- YOLO 검출 결과와 기준 위치 비교
+- 유클리드 거리 기반 위치 오류 판정
+- 누락 컴포넌트 검출
+- 추가 컴포넌트 검출
+
+**6. PCB 정렬 (`server/pcb_alignment.py`)**
+- 나사 구멍 기반 PCB 정렬
+- 회전 및 위치 보정
+- 정렬된 프레임 반환
+
+**7. 웹캠 클라이언트 (`raspberry_pi/dual_camera_client.py`)**
 - 양면 웹캠 동시 프레임 캡처
 - 프레임 인코딩 (Base64)
 - HTTP POST 전송
 - 결과 수신 및 GPIO 제어
-
-**4. 결과 융합 로직 (`server/fusion.py`)**
-- 부품 검출 + 납땜 불량 결과 통합
-- 심각도 계산
-- 최종 판정 (정상/부품불량/납땜불량/폐기)
 
 ### Important Conventions
 
@@ -260,9 +318,15 @@ port: 5000
 debug: false
 device: cuda  # 또는 cpu
 
-# 이중 모델 경로
-component_model_path: models/fpic_component_best.pt  # 부품 검출 모델
-solder_model_path: models/soldef_ai_best.pt          # 납땜 불량 모델
+# 모델 경로
+component_model_path: models/component_detector_best.pt  # 부품 검출 모델
+serial_model_path: models/serial_detector_best.pt        # 시리얼 넘버 영역 검출 (선택)
+
+# 제품 데이터베이스
+product_database_path: server/product_data/products.json
+
+# OCR 설정
+ocr_languages: ['en']  # EasyOCR 언어 설정
 ```
 
 **`configs/camera_config.yaml`** (웹캠 클라이언트)
@@ -286,7 +350,7 @@ jpeg_quality: 85
 **`configs/component_training.yaml`** (부품 검출 모델 학습)
 ```yaml
 model: yolo11l.pt
-data: data/fpic_component/data.yaml
+data: data/custom_pcb/data.yaml  # 커스텀 데이터셋
 epochs: 100
 batch_size: 16
 image_size: 640
@@ -297,18 +361,18 @@ weight_decay: 0.0005
 patience: 30
 ```
 
-**`configs/solder_training.yaml`** (납땜 불량 모델 학습)
+**`configs/serial_training.yaml`** (시리얼 넘버 영역 검출 모델 학습 - 선택)
 ```yaml
-model: yolo11l.pt
-data: data/soldef_ai/data.yaml
-epochs: 100
+model: yolo11n.pt  # Nano 모델 (영역 검출만 하므로 가벼운 모델)
+data: data/serial_number/data.yaml
+epochs: 50
 batch_size: 16
 image_size: 640
 device: 0
 optimizer: AdamW
 lr0: 0.001
 weight_decay: 0.0005
-patience: 30
+patience: 20
 ```
 
 ## Additional Notes
@@ -317,33 +381,31 @@ patience: 30
 
 **핵심 통합 문서**
 - **전체 로드맵**: `docs/PCB_Defect_Detection_Project.md` (시스템 아키텍처 및 통합 문서)
-- **이중 모델 아키텍처**: `docs/Dual_Model_Architecture.md` ⭐ (이중 모델 설계 상세)
 - **프로젝트 구조**: `docs/Project_Structure.md` (폴더 구조 및 문서 목록)
 
 **개발 가이드**
-- **Flask 서버 구축**: `docs/Flask_Server_Setup.md` ⭐ (이중 모델 추론 시스템)
-- **MySQL 데이터베이스**: `docs/MySQL_Database_Design.md` (스키마 설계)
+- **Flask 서버 구축**: `docs/Flask_Server_Setup.md` ⭐ (제품별 부품 검증 시스템)
+- **MySQL 데이터베이스**: `docs/MySQL_Database_Design.md` (스키마 설계, 제품 정보 포함)
 - **C# WinForms 기본**: `docs/CSharp_WinForms_Guide.md` (모니터링 앱 기본 개발)
 - **C# WinForms UI 설계**: `docs/CSharp_WinForms_Design_Specification.md` ⭐ (권한 시스템, 7개 화면, Excel 내보내기)
 - **라즈베리파이**: `docs/RaspberryPi_Setup.md` (양면 웹캠 + GPIO)
+- **시리얼 넘버 검출**: `docs/Serial_Number_Detection_Guide.md` ⭐ (YOLO + OCR 방식)
 
 **학습 관련**
-- **데이터셋 가이드**: `docs/Dataset_Guide.md` ⭐ (FPIC-Component + SolDef_AI)
-- **YOLO 학습 가이드**: `docs/YOLO_Training_Guide.md` (이중 모델 학습)
+- **데이터셋 가이드**: `docs/Dataset_Guide.md` (커스텀 데이터셋 수집 및 라벨링)
+- **YOLO 학습 가이드**: `docs/YOLO_Training_Guide.md` (부품 검출 모델 학습)
 - **YOLO 환경 구축**: `docs/Phase1_YOLO_Setup.md`
 - **로깅 전략**: `docs/Logging_Strategy.md` (통합 로깅 및 오류 추적)
 
 ### 중요 사항
 1. **하드웨어 사양**:
    - GPU: NVIDIA RTX 4080 Super (16GB VRAM)
-   - AI 모델: 이중 YOLOv11l (Large) 모델
-     - 모델 1: FPIC-Component (부품 검출, 25개 클래스)
-     - 모델 2: SolDef_AI (납땜 불량, 5-6개 클래스)
+   - AI 모델: YOLOv11l (Large) 부품 검출 모델 + OCR (EasyOCR)
    - **학습 시 VRAM (실제 측정)**:
-     - batch=16, imgsz=640: **12-14GB** (권장 ✅)
-     - batch=32, imgsz=640: **18GB** (스와핑 발생 → 매우 느림 ❌)
+     - batch=16, imgsz=640: **10-12GB** (권장 ✅)
+     - batch=32, imgsz=640: **16GB+** (스와핑 가능)
      - ⚠️ 주의: 이론상 예상치보다 실제 사용량이 1.5배 높음 (optimizer state, gradient, 활성화 맵)
-   - 추론 시 VRAM: 6-8GB (두 모델 동시 로드)
+   - 추론 시 VRAM: 4-5GB (단일 모델 + OCR)
 2. **네트워크 설정**:
    - **로컬 네트워크** (선택): 모든 장비 동일 네트워크 (Tailscale 100.64.1.x(로컬 예비: 192.168.0.x))
    - **원격 네트워크** (프로젝트 환경): Tailscale VPN 메시 네트워크
@@ -372,49 +434,68 @@ patience: 30
      - VRAM: 12GB 유지, 성능: 배치 32와 유사
 6. **실시간 성능**:
    - 목표: < 300ms (디팔렛타이저 분류 시간 고려, 2.5초 허용)
-   - 예상 성능 (YOLOv11l 기준): 60-100ms
-     - 부품 모델: 30-50ms (예상)
-     - 납땜 모델: 30-50ms (예상, 병렬 처리)
-     - 결과 융합: <5ms
-   - 여유 시간: 2.4초 이상 (디팔렛타이저 동작)
+   - 예상 성능:
+     - 뒷면 처리 (시리얼+QR): 50-80ms
+       - 시리얼 넘버 OCR: 30-50ms
+       - QR 코드 스캔: 10-20ms
+       - DB 조회: 5-10ms
+     - 앞면 처리 (부품 검증): 40-60ms
+       - YOLO 부품 검출: 30-50ms
+       - 위치 검증: 5-10ms
+     - 총 처리 시간: 100-150ms (목표 달성 ✅)
+   - 여유 시간: 2.3초 이상 (디팔렛타이저 동작)
 7. **GPIO 핀 매핑** (BCM 모드, **라즈베리파이 1 전용**):
-   - 부품 불량: GPIO 17
-   - 납땜 불량: GPIO 27
+   - 부품 누락: GPIO 17
+   - 위치 오류: GPIO 27
    - 폐기: GPIO 22
    - 정상: GPIO 23
    - **참고**: 라즈베리파이 2는 카메라 전용이며 GPIO 제어 없음
 8. **데이터베이스**: MySQL 8.0, utf8mb4 인코딩 사용
+   - products 테이블: 제품 정보 (3종)
+   - product_components 테이블: 제품별 부품 배치 기준
 
-### 불량 분류 기준
+### 검증 기준 및 판정
 
-**부품 불량 (Component Defects)** - FPIC-Component 모델
-- Missing Component (부품 누락)
-- Wrong Component (잘못된 부품)
-- Misalignment (위치 오류)
-- 25개 부품 클래스 검출
+**제품 식별 (뒷면)**:
+- **시리얼 넘버**: MBXX12345678
+  - MB: 브랜드명
+  - XX: 제품 코드 (FT, RS 등 - 3종 제품)
+  - 12345678: 8자리 일련번호
+- **QR 코드**: 로컬 웹 URL (제품 정보 페이지)
 
-**납땜 불량 (Soldering Defects)** - SolDef_AI 모델
-- Cold Joint (냉납)
-- Solder Bridge (브릿지)
-- Insufficient Solder (땜납 부족)
-- Excess Solder (땜납 과다)
-- Solder Ball (땜납 볼)
-- Tombstone (묘비 현상)
+**부품 위치 검증 (앞면)**:
+- **위치 오류 (Misplaced)**:
+  - 검출된 부품이 기준 위치에서 20px 이상 벗어남
+  - 유클리드 거리 기반 판정
+- **누락 컴포넌트 (Missing)**:
+  - 기준 배치에는 있으나 검출되지 않음
+  - 제품별 필수 부품 누락
+- **추가 컴포넌트 (Extra)**:
+  - 검출되었으나 기준 배치에 없음
+  - 예상치 못한 부품 검출
+- **정상 (Correct)**:
+  - 기준 위치 ± 20px 이내
+  - 모든 필수 부품 검출
 
-**폐기 (Discard)**
-- 심각한 부품 불량 (Missing Component 다수)
-- 심각한 납땜 불량 (Solder Bridge 다수)
-- 부품 + 납땜 불량 동시 발생
-
-**정상 (Normal)**
-- 양면 모두 불량 없음
+**최종 판정**:
+- **정상 (Normal)**: 모든 부품이 정확한 위치에 배치
+- **부품 누락 (Missing Component)**: 누락 부품 1개 이상
+- **위치 오류 (Position Error)**: 위치 오류 부품 1개 이상
+- **폐기 (Discard)**:
+  - 누락 부품 3개 이상
+  - 위치 오류 부품 5개 이상
+  - 누락 + 위치 오류 합계 7개 이상
 
 ### 개발 우선순위
-1. ✅ Phase 1-3: 데이터셋 변경 및 이중 모델 설계 (완료)
-2. 🔄 Phase 4: 이중 YOLOv11l 모델 학습 (진행 중)
-   - FPIC-Component 모델 학습 (YOLOv11l)
-   - SolDef_AI 모델 학습 (YOLOv11l)
-3. Phase 5: Flask 서버 구축 및 결과 융합 로직 구현 ⭐
+1. ✅ Phase 1-3: 제품별 검증 시스템 설계 및 데이터셋 수집 (완료)
+2. 🔄 Phase 4: 커스텀 데이터셋 기반 부품 검출 모델 학습 (진행 중)
+   - 부품 검출 모델 학습 (YOLOv11l)
+   - 시리얼 넘버 검출 모델 학습 (선택 사항)
+3. Phase 5: Flask 서버 구축 및 제품별 검증 로직 구현 ⭐
+   - QR 코드 검출기 구현
+   - 시리얼 넘버 OCR 구현
+   - 제품 데이터베이스 구축
+   - 부품 위치 검증 로직 통합
 4. Phase 6: 라즈베리파이 양면 촬영 및 통합 테스트
 5. Phase 7: 문서화 및 발표 준비
 

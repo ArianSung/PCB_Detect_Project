@@ -1,277 +1,452 @@
-# PCB 불량 검사 데이터셋 가이드
+# PCB 검사 시스템 커스텀 데이터셋 가이드 v3.0
 
 ## 목표
-이중 YOLO 모델 아키텍처를 위한 전문 데이터셋 다운로드 및 준비
+Product Verification Architecture를 위한 커스텀 데이터셋 수집 및 준비
 
 **핵심 변경** ⭐:
-- **기존**: 커스텀 병합 데이터셋 (22-29 클래스, 심각한 불균형)
-- **신규**: 검증된 전문 데이터셋 2개
-  - **FPIC-Component**: 부품 검출 (25 클래스)
-  - **SolDef_AI**: 납땜 불량 (5-6 클래스)
+- **기존 v2.0**: 공개 데이터셋 2개 (FPIC-Component + SolDef_AI)
+- **신규 v3.0**: 제품별 커스텀 데이터셋 수집
+  - **3개 제품**: FT, RS, BC
+  - **부품 검출 모델**: 단일 YOLOv11l 모델
+  - **기준 데이터**: 제품별 정상 부품 배치 위치
 
 **YOLO 환경 구축 및 학습 방법은 `docs/Phase1_YOLO_Setup.md`를 참조하세요.**
 
-**참고**: `Dual_Model_Architecture.md` (이중 모델 아키텍처 설계)
+**참고**: `MySQL_Database_Design.md` (제품별 기준 데이터 스키마)
 
 ---
 
-## 이 프로젝트에서 사용하는 데이터셋 ⭐
+## v3.0 아키텍처 개요
 
-### 1. FPIC-Component Dataset ⭐⭐⭐ (모델 1 - 부품 검출)
-
-**출처**: FPIC-Component (IIT, India)
-
-**설명**:
-PCB 전자 부품 검출을 위한 전문 데이터셋. 25종의 전자 부품을 포함하며, 균형 잡힌 클래스 분포를 가진 고품질 데이터셋입니다.
-
-**데이터셋 통계**:
-- **이미지 수**: 6,260장
-- **클래스 수**: 25개
-- **라벨 객체 수**: 29,639개
-- **평균 객체/이미지**: ~4.7개
-- **형식**: YOLO v11l 어노테이션 (바로 사용 가능)
-
-**25개 부품 클래스**:
+### 시스템 구조
 ```
-0: capacitor         (커패시터)
-1: resistor          (저항)
-2: IC                (집적 회로)
-3: LED               (발광 다이오드)
-4: diode             (다이오드)
-5: transistor        (트랜지스터)
-6: connector         (커넥터)
-7: inductor          (인덕터)
-8: relay             (릴레이)
-9: switch            (스위치)
-10: potentiometer    (가변저항)
-11: crystal          (크리스탈)
-12: fuse             (퓨즈)
-13: battery          (배터리)
-14: transformer      (변압기)
-15: coil             (코일)
-16: sensor           (센서)
-17: microcontroller  (마이크로컨트롤러)
-18: capacitor_electrolytic (전해 커패시터)
-19: capacitor_ceramic (세라믹 커패시터)
-20: resistor_smd     (SMD 저항)
-21: pad              (패드)
-22: via              (비아)
-23: trace            (트레이스)
-24: hole             (홀)
+PCB 뒷면 (Serial + QR) → 제품 식별 (FT/RS/BC)
+                             ↓
+PCB 앞면 (부품 배치) → YOLO 검출 → 제품별 기준 위치와 비교
+                             ↓
+                    4단계 판정 (normal/missing/position_error/discard)
 ```
 
-**다운로드 방법**:
-
-이 데이터셋은 IIT India에서 제공하는 학술 데이터셋입니다. 다운로드 방법:
-
-1. **Google Drive 링크** (추천):
-```bash
-# gdown을 사용한 다운로드
-pip install gdown
-
-# Google Drive에서 다운로드
-gdown --id <GOOGLE_DRIVE_FILE_ID> -O data/raw/fpic_component.zip
-
-# 압축 해제
-cd data/raw
-unzip fpic_component.zip
-```
-
-2. **공식 사이트 접근**:
-- 출처: [IIT Research Repository]
-- 논문: "FPIC: A Novel Semantic Dataset for Optical PCB Assurance"
-- 접근 방법: 논문 저자 연락 또는 기관 라이선스
-
-**데이터 구조**:
-```
-fpic_component/
-├── images/
-│   ├── train/          # 4,382 images (70%)
-│   ├── valid/          # 1,252 images (20%)
-│   └── test/           # 626 images (10%)
-├── labels/
-│   ├── train/          # YOLO format .txt
-│   ├── valid/
-│   └── test/
-└── data.yaml           # YOLO 설정 파일
-```
-
-**장점**:
-- ✅ 균형 잡힌 클래스 분포 (불균형 문제 없음)
-- ✅ YOLO 형식 바로 제공 (전처리 불필요)
-- ✅ 고해상도 이미지 (640x640)
-- ✅ 실제 산업 환경 반영
-- ✅ 학술적으로 검증됨
-
-**활용**:
-- 모델 1 (좌측 카메라): 부품 존재 여부, 위치 정확도, 잘못된 부품 검출
+### 필요한 데이터
+1. **학습 데이터**: 3개 제품의 PCB 부품 이미지 (YOLO 학습용)
+2. **기준 데이터**: 제품별 정상 부품 배치 위치 (product_components 테이블)
 
 ---
 
-### 2. SolDef_AI Dataset ⭐⭐⭐ (모델 2 - 납땜 불량)
+## 데이터 수집 전략
 
-**출처**: Roboflow Universe - SolDef_AI
+### 1. 학습 데이터 (Training Data)
 
-**설명**:
-우주항공 표준(ECSS-Q-ST-70-38C)을 따르는 고품질 납땜 불량 검출 데이터셋. 실제 산업 현장의 납땜 품질 기준을 반영합니다.
+**목적**: YOLOv11l 모델 학습용
 
-**데이터셋 통계**:
-- **이미지 수**: 1,150장 (원본), 429장 (Roboflow 버전)
-- **클래스 수**: 5-6개
-- **형식**: YOLO v11l 어노테이션 (바로 사용 가능)
-- **표준**: ECSS-Q-ST-70-38C (유럽우주국 납땜 표준)
+**수집 대상**:
+- 3개 제품 타입 (FT, RS, BC)의 PCB 앞면 이미지
+- 정상 제품 + 불량 제품 (부품 누락, 위치 오류)
+- 다양한 조명, 각도, 배경
 
-**5-6개 납땜 불량 클래스**:
+**권장 데이터 양**:
 ```
-0: no_good         (일반적인 납땜 불량)
-1: exc_solder      (과다 납땜 - Excessive Solder)
-2: spike           (납땜 스파이크)
-3: poor_solder     (불충분한 납땜 - Poor Solder Joint)
-4: solder_bridge   (납땜 브릿지 - 치명적 결함 ⚠️)
-5: tombstone       (툼스톤 현상 - 선택적)
-```
+최소 (Minimum):
+- 제품당 200장 이상
+- 총 600장 이상 (3개 제품)
 
-**심각도 분류**:
-- **치명적 (Critical)**: solder_bridge → 즉시 폐기
-- **심각 (Major)**: exc_solder, poor_solder → 수리 필요
-- **경미 (Minor)**: spike, no_good → 재검사 필요
+권장 (Recommended):
+- 제품당 500-1,000장
+- 총 1,500-3,000장
 
-**다운로드 방법 (Roboflow)** ⭐:
-
-```bash
-# 1. Roboflow API 설치
-pip install roboflow
-
-# 2. Python 스크립트로 다운로드
-python3 << 'EOF'
-from roboflow import Roboflow
-
-# API 키 설정 (Roboflow 웹사이트에서 발급)
-rf = Roboflow(api_key="YOUR_ROBOFLOW_API_KEY")
-
-# SolDef_AI 프로젝트 접근
-project = rf.workspace("soldef-ai").project("soldering-defects")
-dataset = project.version(1).download("yolo11")
-
-print("✅ SolDef_AI 데이터셋 다운로드 완료!")
-print(f"경로: {dataset.location}")
-EOF
+최적 (Optimal):
+- 제품당 2,000장 이상
+- 총 6,000장 이상
 ```
 
-**또는 웹 UI 다운로드**:
-1. https://universe.roboflow.com/soldef-ai/soldering-defects 접속
-2. "Download Dataset" 클릭
-3. Format: "YOLO v11l" 선택
-4. 다운로드 후 `data/raw/soldef_ai/`에 압축 해제
-
-**데이터 구조**:
-```
-soldef_ai/
-├── train/
-│   ├── images/         # 300 images (70%)
-│   └── labels/         # YOLO format .txt
-├── valid/
-│   ├── images/         # 86 images (20%)
-│   └── labels/
-├── test/
-│   ├── images/         # 43 images (10%)
-│   └── labels/
-└── data.yaml           # YOLO 설정 파일
-```
-
-**data.yaml 예시**:
-```yaml
-names:
-  - no_good
-  - exc_solder
-  - spike
-  - poor_solder
-  - solder_bridge
-  - tombstone
-
-nc: 6
-train: train/images
-val: valid/images
-test: test/images
-```
-
-**장점**:
-- ✅ 우주항공 표준 기반 (ECSS-Q-ST-70-38C)
-- ✅ YOLO 형식 바로 제공
-- ✅ Roboflow에서 간편 다운로드
-- ✅ 실제 산업 납땜 기준 반영
-- ✅ 치명적 결함 명확히 정의됨
-
-**활용**:
-- 모델 2 (우측 카메라): 납땜 품질 검사, 브릿지 검출, 과다/불충분 납땜 검출
+**데이터 분할**:
+- Train: 70% (학습)
+- Valid: 20% (검증)
+- Test: 10% (평가)
 
 ---
 
-## 데이터셋 준비 절차 ⭐
+### 2. 기준 데이터 (Reference Data)
 
-### Step 1: 두 데이터셋 다운로드
+**목적**: 제품별 정상 부품 배치 위치 기준
 
+**수집 대상**:
+- 각 제품의 정상 제품 1개 (Golden Sample)
+- 고해상도 이미지 (1920x1080 이상)
+- 정확한 부품 위치 좌표
+
+**저장 위치**:
+- MySQL `product_components` 테이블
+- JSON 형식 백업 (`server/reference_data/`)
+
+---
+
+## 데이터 수집 가이드
+
+### Phase 1: 촬영 환경 구축
+
+#### 하드웨어 요구사항
+- 웹캠 2대 (좌/우측 카메라)
+- 해상도: 1280x720 이상 (권장: 1920x1080)
+- 조명: 균일한 LED 조명 (컨베이어 벨트 좌우)
+- 배경: 단색 배경 (검은색 또는 흰색)
+
+#### 소프트웨어 도구
 ```bash
-# 프로젝트 루트로 이동
-cd ~/work_project
-
-# 데이터 폴더 생성
-mkdir -p data/raw
-cd data/raw
-
-# 1. FPIC-Component 다운로드
-# (Google Drive 링크 또는 공식 사이트에서 수동 다운로드)
-gdown --id <FILE_ID> -O fpic_component.zip
-unzip fpic_component.zip -d fpic_component/
-
-# 2. SolDef_AI 다운로드 (Roboflow)
-pip install roboflow
-python3 download_soldef.py  # 위 스크립트 사용
+# OpenCV 기반 이미지 캡처 스크립트
+python3 tools/capture_dataset.py --camera 0 --product FT --output data/raw/FT/
 ```
 
-### Step 2: 데이터셋 구조 확인
+---
 
+### Phase 2: 학습 데이터 수집
+
+#### Step 1: 정상 제품 촬영
+
+**각 제품별로**:
+1. 정상 제품 100-200개 준비
+2. 컨베이어 벨트에 배치
+3. 좌측 카메라로 PCB 앞면 촬영 (부품 배치)
+4. 자동 저장 (`data/raw/{PRODUCT_CODE}/normal/`)
+
+**촬영 팁**:
+- 조명 일정하게 유지
+- PCB 중앙 정렬
+- 초점 맞추기
+- 그림자 최소화
+
+#### Step 2: 불량 제품 촬영 (선택)
+
+**부품 누락 시뮬레이션**:
+- 일부러 부품 제거 (1-3개)
+- 촬영 후 `data/raw/{PRODUCT_CODE}/missing/` 저장
+
+**위치 오류 시뮬레이션**:
+- 부품을 살짝 이동 (20-50px)
+- 촬영 후 `data/raw/{PRODUCT_CODE}/misaligned/` 저장
+
+**권장 불량 비율**:
+- 정상: 70-80%
+- 부품 누락: 10-15%
+- 위치 오류: 10-15%
+
+---
+
+### Phase 3: 기준 데이터 수집
+
+#### Golden Sample 촬영
+
+**각 제품별로**:
+1. **완벽한 정상 제품 1개** 선택 (검수 완료된 제품)
+2. 고해상도로 촬영 (1920x1080 이상)
+3. YOLO 모델로 부품 검출
+4. 검출 결과를 `product_components` 테이블에 저장
+
+**자동화 스크립트**:
 ```bash
-# FPIC-Component 구조 확인
-echo "=== FPIC-Component ==="
-ls -R fpic_component/
-
-# SolDef_AI 구조 확인
-echo "=== SolDef_AI ==="
-ls -R soldef_ai/
-
-# 이미지 수 확인
-echo "FPIC-Component train images: $(ls fpic_component/images/train/ | wc -l)"
-echo "SolDef_AI train images: $(ls soldef_ai/train/images/ | wc -l)"
+# Golden Sample에서 기준 데이터 생성
+python3 tools/generate_reference_data.py \
+  --image data/golden_samples/FT_golden.jpg \
+  --product FT \
+  --output server/reference_data/FT_reference.json
 ```
 
-### Step 3: YOLO 형식으로 통합
+**생성된 JSON 예시** (`server/reference_data/FT_reference.json`):
+```json
+{
+  "product_code": "FT",
+  "component_count": 25,
+  "components": [
+    {
+      "component_class": "capacitor",
+      "center_x": 150.5,
+      "center_y": 200.3,
+      "bbox_x1": 140.0,
+      "bbox_y1": 190.0,
+      "bbox_x2": 161.0,
+      "bbox_y2": 210.6,
+      "tolerance_px": 20.0
+    },
+    {
+      "component_class": "resistor",
+      "center_x": 300.2,
+      "center_y": 250.8,
+      "bbox_x1": 290.0,
+      "bbox_y1": 240.0,
+      "bbox_x2": 310.4,
+      "bbox_y2": 261.6,
+      "tolerance_px": 20.0
+    }
+    // ... 나머지 부품들
+  ]
+}
+```
+
+#### 데이터베이스 삽입
 
 ```bash
-# 통합 데이터셋 폴더 생성
-mkdir -p ../processed/component_model
-mkdir -p ../processed/solder_model
+# JSON → MySQL 자동 삽입
+python3 tools/import_reference_data.py \
+  --json server/reference_data/FT_reference.json \
+  --database pcb_inspection
+```
 
-# FPIC-Component 복사 (이미 YOLO 형식)
-cp -r fpic_component/* ../processed/component_model/
+**MySQL 삽입 쿼리 예시**:
+```sql
+INSERT INTO product_components (
+    product_code,
+    component_class,
+    center_x,
+    center_y,
+    bbox_x1,
+    bbox_y1,
+    bbox_x2,
+    bbox_y2,
+    tolerance_px
+) VALUES
+('FT', 'capacitor', 150.5, 200.3, 140.0, 190.0, 161.0, 210.6, 20.0),
+('FT', 'resistor', 300.2, 250.8, 290.0, 240.0, 310.4, 261.6, 20.0);
+-- ... 나머지 부품들
+```
 
-# SolDef_AI 복사 (이미 YOLO 형식)
-cp -r soldef_ai/* ../processed/solder_model/
+---
+
+## 데이터 어노테이션 (Annotation)
+
+### YOLO 형식 어노테이션
+
+**도구**:
+- [LabelImg](https://github.com/heartexlabs/labelImg) (무료, 오픈소스)
+- [Roboflow](https://roboflow.com/) (웹 기반, 무료 티어)
+- [CVAT](https://www.cvat.ai/) (협업 가능)
+
+**YOLO 어노테이션 형식**:
+```
+<class_id> <x_center> <y_center> <width> <height>
+```
+
+- 모든 좌표는 **정규화된 값** (0~1 사이)
+- `x_center`, `y_center`: 바운딩 박스 중심점 (이미지 너비/높이로 나눔)
+- `width`, `height`: 바운딩 박스 너비/높이 (이미지 너비/높이로 나눔)
+
+**예시** (`FT_image_001.txt`):
+```
+0 0.234 0.512 0.045 0.067  # capacitor
+1 0.468 0.623 0.038 0.052  # resistor
+2 0.789 0.345 0.102 0.089  # IC
+```
+
+### 클래스 정의 (classes.txt)
+
+```
+0: capacitor
+1: resistor
+2: IC
+3: LED
+4: diode
+5: transistor
+6: connector
+7: inductor
+8: relay
+9: switch
+10: potentiometer
+11: crystal
+12: fuse
+13: battery
+14: transformer
+```
+
+**참고**: 제품별로 사용되는 부품 종류가 다를 수 있으므로, 실제 제품에 맞게 조정하세요.
+
+---
+
+## 데이터셋 디렉토리 구조
+
+### 원본 데이터 (Raw Data)
+
+```
+data/
+├── raw/
+│   ├── FT/                          # Fast Type 제품
+│   │   ├── normal/                  # 정상 제품
+│   │   │   ├── FT_0001.jpg
+│   │   │   ├── FT_0002.jpg
+│   │   │   └── ...
+│   │   ├── missing/                 # 부품 누락
+│   │   │   ├── FT_missing_0001.jpg
+│   │   │   └── ...
+│   │   └── misaligned/              # 위치 오류
+│   │       ├── FT_misaligned_0001.jpg
+│   │       └── ...
+│   ├── RS/                          # Reliable Stable 제품
+│   │   ├── normal/
+│   │   ├── missing/
+│   │   └── misaligned/
+│   └── BC/                          # Budget Compact 제품
+│       ├── normal/
+│       ├── missing/
+│       └── misaligned/
+└── golden_samples/
+    ├── FT_golden.jpg                # FT 정상 기준 샘플
+    ├── RS_golden.jpg                # RS 정상 기준 샘플
+    └── BC_golden.jpg                # BC 정상 기준 샘플
+```
+
+### YOLO 학습 데이터 (Processed Data)
+
+```
+data/
+└── processed/
+    └── pcb_components/              # 통합 데이터셋
+        ├── images/
+        │   ├── train/               # 70% 학습
+        │   │   ├── FT_0001.jpg
+        │   │   ├── RS_0001.jpg
+        │   │   ├── BC_0001.jpg
+        │   │   └── ...
+        │   ├── valid/               # 20% 검증
+        │   │   ├── FT_val_001.jpg
+        │   │   └── ...
+        │   └── test/                # 10% 평가
+        │       ├── FT_test_001.jpg
+        │       └── ...
+        ├── labels/
+        │   ├── train/               # YOLO .txt 파일
+        │   │   ├── FT_0001.txt
+        │   │   ├── RS_0001.txt
+        │   │   └── ...
+        │   ├── valid/
+        │   │   ├── FT_val_001.txt
+        │   │   └── ...
+        │   └── test/
+        │       ├── FT_test_001.txt
+        │       └── ...
+        ├── data.yaml                # YOLO 설정 파일
+        └── classes.txt              # 클래스 정의
+```
+
+---
+
+## 데이터셋 준비 절차
+
+### Step 1: 원본 데이터 수집 완료 확인
+
+```bash
+# 각 제품별 이미지 수 확인
+echo "=== FT 제품 ==="
+ls data/raw/FT/normal/*.jpg | wc -l
+ls data/raw/FT/missing/*.jpg | wc -l
+ls data/raw/FT/misaligned/*.jpg | wc -l
+
+echo "=== RS 제품 ==="
+ls data/raw/RS/normal/*.jpg | wc -l
+ls data/raw/RS/missing/*.jpg | wc -l
+ls data/raw/RS/misaligned/*.jpg | wc -l
+
+echo "=== BC 제품 ==="
+ls data/raw/BC/normal/*.jpg | wc -l
+ls data/raw/BC/missing/*.jpg | wc -l
+ls data/raw/BC/misaligned/*.jpg | wc -l
+```
+
+### Step 2: 어노테이션 완료 확인
+
+```bash
+# LabelImg 또는 Roboflow로 모든 이미지 어노테이션 완료
+# 각 이미지마다 대응하는 .txt 파일 생성 확인
+
+# 예시: FT_0001.jpg → FT_0001.txt
+ls data/raw/FT/normal/*.txt | wc -l
+```
+
+### Step 3: YOLO 데이터셋 생성
+
+**자동화 스크립트** (`tools/prepare_dataset.py`):
+```python
+#!/usr/bin/env python3
+"""
+원본 데이터를 YOLO 형식으로 변환하고 Train/Val/Test 분할
+"""
+import os
+import shutil
+from pathlib import Path
+from sklearn.model_selection import train_test_split
+
+def prepare_yolo_dataset(raw_dir, output_dir, split_ratio=(0.7, 0.2, 0.1)):
+    """
+    raw_dir: data/raw/ 경로
+    output_dir: data/processed/pcb_components/ 경로
+    split_ratio: (train, valid, test) 비율
+    """
+    # 디렉토리 생성
+    for split in ['train', 'valid', 'test']:
+        (output_dir / 'images' / split).mkdir(parents=True, exist_ok=True)
+        (output_dir / 'labels' / split).mkdir(parents=True, exist_ok=True)
+
+    # 모든 제품의 이미지 수집
+    all_images = []
+    for product in ['FT', 'RS', 'BC']:
+        product_dir = raw_dir / product
+        for category in ['normal', 'missing', 'misaligned']:
+            category_dir = product_dir / category
+            if category_dir.exists():
+                all_images.extend(list(category_dir.glob('*.jpg')))
+
+    # Train/Val/Test 분할
+    train_images, temp_images = train_test_split(
+        all_images, test_size=(1 - split_ratio[0]), random_state=42
+    )
+    val_images, test_images = train_test_split(
+        temp_images,
+        test_size=(split_ratio[2] / (split_ratio[1] + split_ratio[2])),
+        random_state=42
+    )
+
+    # 파일 복사
+    for split_name, images in [('train', train_images), ('valid', val_images), ('test', test_images)]:
+        for img_path in images:
+            # 이미지 복사
+            shutil.copy(img_path, output_dir / 'images' / split_name / img_path.name)
+
+            # 라벨 복사
+            label_path = img_path.with_suffix('.txt')
+            if label_path.exists():
+                shutil.copy(label_path, output_dir / 'labels' / split_name / label_path.name)
+
+    print(f"✅ 데이터셋 준비 완료!")
+    print(f"  Train: {len(train_images)}장")
+    print(f"  Valid: {len(val_images)}장")
+    print(f"  Test: {len(test_images)}장")
+
+if __name__ == "__main__":
+    prepare_yolo_dataset(
+        raw_dir=Path('data/raw'),
+        output_dir=Path('data/processed/pcb_components')
+    )
+```
+
+**실행**:
+```bash
+python3 tools/prepare_dataset.py
 ```
 
 ### Step 4: data.yaml 생성
 
-**Component Model** (`data/processed/component_model/data.yaml`):
-```yaml
-# FPIC-Component Dataset for YOLOv11l
+**파일 경로**: `data/processed/pcb_components/data.yaml`
 
-path: /home/<사용자명>/work_project/data/processed/component_model
+```yaml
+# PCB Component Detection Dataset for YOLOv11l
+# Product Verification Architecture v3.0
+
+path: /home/<사용자명>/work_project/data/processed/pcb_components
 train: images/train
 val: images/valid
 test: images/test
 
-nc: 25
+# 클래스 수 (실제 제품에 따라 조정)
+nc: 15
 
+# 클래스 이름
 names:
   0: capacitor
   1: resistor
@@ -288,115 +463,37 @@ names:
   12: fuse
   13: battery
   14: transformer
-  15: coil
-  16: sensor
-  17: microcontroller
-  18: capacitor_electrolytic
-  19: capacitor_ceramic
-  20: resistor_smd
-  21: pad
-  22: via
-  23: trace
-  24: hole
 ```
 
-**Solder Model** (`data/processed/solder_model/data.yaml`):
-```yaml
-# SolDef_AI Dataset for YOLOv11l
-
-path: /home/<사용자명>/work_project/data/processed/solder_model
-train: train/images
-val: valid/images
-test: test/images
-
-nc: 6
-
-names:
-  0: no_good
-  1: exc_solder
-  2: spike
-  3: poor_solder
-  4: solder_bridge
-  5: tombstone
-```
-
----
-
-## 참고: 구버전 데이터셋 (아카이브) 📦
-
-이 프로젝트는 이전에 다음 데이터셋들을 사용했으나, **이중 모델 아키텍처 전환**으로 인해 더 이상 사용하지 않습니다:
-
-### 아카이브된 데이터셋
-- **DeepPCB Dataset**: 6가지 PCB 불량 (Open, Short, Mouse bite 등)
-- **Kaggle PCB Defects**: 1,386장 (Akhatova)
-- **병합 데이터셋**: 22-29 클래스 (심각한 클래스 불균형)
-
-**변경 이유**:
-- 클래스 불균형 문제 (일부 클래스 < 50 샘플)
-- 부품 검출 + 납땜 불량이 혼재되어 학습 효율 저하
-- 전문화된 모델이 더 높은 정확도 달성
-
-**참고 링크** (학습 자료용):
-- DeepPCB: https://github.com/tangsanli5201/DeepPCB
-- Kaggle: https://www.kaggle.com/datasets/akhatova/pcb-defects
-- Roboflow Universe: https://universe.roboflow.com/search?q=pcb+defect
-
----
-
-## 데이터 전처리 가이드
-
-**참고**: FPIC-Component와 SolDef_AI는 이미 YOLO 형식으로 제공되므로 대부분의 전처리가 불필요합니다.
-
-### YOLO 어노테이션 형식 (참고)
-
-```
-<class_id> <x_center> <y_center> <width> <height>
-```
-
-- 모든 좌표는 **정규화된 값** (0~1 사이)
-- `x_center`, `y_center`: 바운딩 박스 중심점
-- `width`, `height`: 바운딩 박스 너비/높이
-
-**예시** (image_001.txt):
-```
-0 0.5 0.5 0.2 0.3
-1 0.3 0.7 0.15 0.1
-```
-
-### 데이터 증강 (Augmentation)
-
-#### YOLO 기본 증강 (자동 적용)
-YOLO v11l은 학습 시 다음 증강을 자동으로 적용:
-- Random crop
-- Random flip (horizontal/vertical)
-- Mosaic augmentation
-- MixUp
-- HSV augmentation (색상, 채도, 밝기)
-
-**권장사항**: FPIC-Component와 SolDef_AI는 충분한 데이터 양과 증강을 제공하므로 추가 증강은 선택 사항입니다.
+**주의**: `nc`와 `names`는 실제 제품에 사용되는 부품 종류에 맞게 조정하세요.
 
 ---
 
 ## 데이터 품질 확인
 
-### 데이터 시각화 스크립트
+### 어노테이션 시각화
 
-`visualize_dataset.py`:
-
+**스크립트** (`tools/visualize_annotations.py`):
 ```python
+#!/usr/bin/env python3
+"""YOLO 어노테이션 시각화"""
 import cv2
 import matplotlib.pyplot as plt
 from pathlib import Path
 import yaml
 
 def visualize_yolo_annotation(image_path, label_path, class_names):
-    """YOLO 어노테이션을 시각화"""
+    """YOLO 어노테이션을 이미지 위에 그리기"""
     # 이미지 로드
     image = cv2.imread(str(image_path))
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     h, w = image.shape[:2]
 
     # 라벨 로드
+    if not label_path.exists():
+        print(f"⚠️  라벨 파일 없음: {label_path}")
+        return
+
     with open(label_path, 'r') as f:
         labels = f.readlines()
 
@@ -406,7 +503,7 @@ def visualize_yolo_annotation(image_path, label_path, class_names):
         class_id = int(parts[0])
         x_center, y_center, width, height = map(float, parts[1:])
 
-        # 픽셀 좌표로 변환
+        # 정규화된 좌표 → 픽셀 좌표 변환
         x1 = int((x_center - width / 2) * w)
         y1 = int((y_center - height / 2) * h)
         x2 = int((x_center + width / 2) * w)
@@ -414,27 +511,82 @@ def visualize_yolo_annotation(image_path, label_path, class_names):
 
         # 박스 및 라벨 그리기
         cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(image, class_names[class_id], (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        cv2.putText(
+            image,
+            class_names[class_id],
+            (x1, y1 - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 255, 0),
+            2
+        )
 
-    plt.figure(figsize=(10, 10))
+    # 시각화
+    plt.figure(figsize=(12, 12))
     plt.imshow(image)
+    plt.title(f"Annotations: {image_path.name}")
     plt.axis('off')
+    plt.tight_layout()
     plt.show()
 
-# 사용 예시 - Component Model
-with open('data/processed/component_model/data.yaml', 'r') as f:
-    config = yaml.safe_load(f)
-    class_names = [config['names'][i] for i in range(config['nc'])]
+if __name__ == "__main__":
+    # data.yaml 로드
+    with open('data/processed/pcb_components/data.yaml', 'r') as f:
+        config = yaml.safe_load(f)
+        class_names = [config['names'][i] for i in range(config['nc'])]
 
-visualize_yolo_annotation(
-    'data/processed/component_model/images/train/image_001.jpg',
-    'data/processed/component_model/labels/train/image_001.txt',
-    class_names
-)
+    # 샘플 이미지 시각화
+    sample_image = Path('data/processed/pcb_components/images/train/FT_0001.jpg')
+    sample_label = Path('data/processed/pcb_components/labels/train/FT_0001.txt')
+
+    visualize_yolo_annotation(sample_image, sample_label, class_names)
 ```
 
-**활용**: 두 모델 모두에 적용 가능 (경로만 변경)
+**실행**:
+```bash
+python3 tools/visualize_annotations.py
+```
+
+### 데이터셋 통계 확인
+
+```bash
+# 각 분할별 이미지 수
+echo "Train: $(ls data/processed/pcb_components/images/train/*.jpg | wc -l)"
+echo "Valid: $(ls data/processed/pcb_components/images/valid/*.jpg | wc -l)"
+echo "Test: $(ls data/processed/pcb_components/images/test/*.jpg | wc -l)"
+
+# 이미지-라벨 매칭 확인
+echo "Train 이미지: $(ls data/processed/pcb_components/images/train/*.jpg | wc -l)"
+echo "Train 라벨: $(ls data/processed/pcb_components/labels/train/*.txt | wc -l)"
+```
+
+---
+
+## 데이터 증강 (Augmentation)
+
+### YOLO 기본 증강 (자동 적용)
+
+YOLO v11l은 학습 시 다음 증강을 자동으로 적용:
+- Random crop
+- Random flip (horizontal/vertical)
+- Mosaic augmentation (4장 합성)
+- MixUp (이미지 혼합)
+- HSV augmentation (색상, 채도, 밝기 조정)
+
+### 추가 증강 (선택)
+
+**데이터가 부족한 경우** (제품당 200장 미만), Roboflow 또는 Albumentations로 추가 증강:
+- 회전 (±15도)
+- 밝기 조정 (±20%)
+- 노이즈 추가
+- 블러 효과
+
+**Roboflow 예시**:
+1. https://roboflow.com/ 계정 생성 (무료)
+2. 데이터셋 업로드
+3. Preprocessing: Auto-Orient, Resize (640x640)
+4. Augmentation: Flip (horizontal), Rotation (±15°), Brightness (±20%)
+5. Generate → Export (YOLO v11 format)
 
 ---
 
@@ -442,65 +594,72 @@ visualize_yolo_annotation(
 
 학습 전 반드시 확인:
 
-### Component Model (FPIC-Component)
-- [ ] 이미지 수: 6,260장 확인
-- [ ] 클래스 수: 25개 확인
+### 학습 데이터
+- [ ] 총 이미지 수: 600장 이상 (권장: 1,500장 이상)
+- [ ] 3개 제품 골고루 포함 (FT, RS, BC)
+- [ ] Train/Val/Test 분할 완료 (70/20/10)
+- [ ] 모든 이미지에 대응하는 라벨 파일 존재
+- [ ] 라벨 파일 YOLO 형식 확인 (정규화된 좌표 0~1)
 - [ ] data.yaml 경로 설정 완료
-- [ ] Train/Val/Test 분할 확인 (70/20/10)
-- [ ] 클래스 불균형 없음 확인 (균형 잡힌 분포)
+- [ ] 클래스 수 (nc) 정확히 설정
 
-### Solder Model (SolDef_AI)
-- [ ] 이미지 수: 429장 확인 (Roboflow 버전)
-- [ ] 클래스 수: 5-6개 확인
-- [ ] data.yaml 경로 설정 완료
-- [ ] Train/Val/Test 분할 확인 (70/20/10)
-- [ ] 치명적 결함 클래스 확인 (solder_bridge)
+### 기준 데이터
+- [ ] 3개 제품 Golden Sample 촬영 완료
+- [ ] YOLO 모델로 부품 검출 완료
+- [ ] JSON 형식으로 저장 (`server/reference_data/`)
+- [ ] MySQL `product_components` 테이블 삽입 완료
+- [ ] 제품별 component_count 정확히 설정
 
-### 공통
-- [ ] 이미지와 라벨 파일 이름 동일 확인
-- [ ] 라벨 파일 YOLO 형식 확인 (정규화된 좌표)
-- [ ] 모든 좌표 값 0~1 사이 확인
-- [ ] 데이터 시각화로 어노테이션 정확성 확인
+### 데이터 품질
+- [ ] 어노테이션 시각화로 정확성 확인
+- [ ] 바운딩 박스가 부품을 정확히 포함
+- [ ] 클래스 라벨 정확 (capacitor, resistor 등)
+- [ ] 좌표 값 모두 0~1 사이
 
 ---
 
 ## 다음 단계
 
-데이터 준비가 완료되면:
-
 ### 1. 모델 학습 시작 ⭐
-```bash
-# Component Model (FPIC-Component) 학습
-yolo detect train \
-  data=data/processed/component_model/data.yaml \
-  model=yolo11l.pt \
-  epochs=150 \
-  imgsz=640 \
-  batch=32 \
-  device=0 \
-  project=runs/detect \
-  name=component_model
 
-# Solder Model (SolDef_AI) 학습
+```bash
+# YOLOv11l 모델 학습
 yolo detect train \
-  data=data/processed/solder_model/data.yaml \
+  data=data/processed/pcb_components/data.yaml \
   model=yolo11l.pt \
   epochs=150 \
   imgsz=640 \
-  batch=32 \
+  batch=16 \
   device=0 \
   project=runs/detect \
-  name=solder_model
+  name=component_model_v3
+
+# 학습 완료 후 최적 모델 저장
+cp runs/detect/component_model_v3/weights/best.pt models/component_detector_v3.0.pt
 ```
 
+**주의**: batch=16 권장 (VRAM 12-14GB 사용)
+
 ### 2. 성능 평가
-- Component Model: mAP@0.5, Precision, Recall (25 클래스)
-- Solder Model: mAP@0.5, Precision, Recall (5-6 클래스)
-- 치명적 결함 검출률 (solder_bridge) 특히 중요
+
+```bash
+# 평가 실행
+yolo detect val \
+  model=models/component_detector_v3.0.pt \
+  data=data/processed/pcb_components/data.yaml
+
+# 주요 지표 확인:
+# - mAP@0.5: 객체 검출 정확도
+# - Precision: 검출된 것 중 실제 부품 비율
+# - Recall: 실제 부품 중 검출된 비율
+```
 
 ### 3. Flask 서버 통합
-- `docs/Flask_Server_Setup.md` 참조
-- 이중 모델 로드 및 결과 융합 로직 구현
+
+`docs/Flask_Server_Setup.md` 참조:
+- 모델 로드 (`models/component_detector_v3.0.pt`)
+- ComponentVerifier 통합 (부품 위치 검증)
+- 기준 데이터 로드 (`product_components` 테이블)
 
 **자세한 학습 가이드**: `docs/YOLO_Training_Guide.md` 참조
 
@@ -509,22 +668,37 @@ yolo detect train \
 ## 참고 자료
 
 ### 이 프로젝트 관련 문서
-- **이중 모델 아키텍처**: `Dual_Model_Architecture.md`
+- **시스템 아키텍처**: `PCB_Defect_Detection_Project.md`
 - **Flask 서버 구현**: `Flask_Server_Setup.md`
+- **MySQL 스키마**: `MySQL_Database_Design.md`
 - **YOLO 학습 가이드**: `YOLO_Training_Guide.md`
-- **프로젝트 전체 개요**: `PCB_Defect_Detection_Project.md`
 
-### 데이터셋 출처
-- **FPIC-Component**: IIT India (논문: "FPIC: A Novel Semantic Dataset for Optical PCB Assurance")
-- **SolDef_AI**: Roboflow Universe - https://universe.roboflow.com/soldef-ai/soldering-defects
-- **우주항공 표준**: ECSS-Q-ST-70-38C (European Space Agency)
+### 어노테이션 도구
+- [LabelImg](https://github.com/heartexlabs/labelImg) - 오픈소스, YOLO 형식 지원
+- [Roboflow](https://roboflow.com/) - 웹 기반, 증강 자동화
+- [CVAT](https://www.cvat.ai/) - 협업 가능, 클라우드/로컬
 
-### 도구
-- [Roboflow](https://roboflow.com/) - SolDef_AI 다운로드
-- [Ultralytics YOLO](https://docs.ultralytics.com/) - 모델 학습 프레임워크 (YOLOv11l)
+### YOLO 공식 문서
+- [Ultralytics YOLO](https://docs.ultralytics.com/)
+- [YOLOv11 Documentation](https://docs.ultralytics.com/models/yolo11/)
 
 ---
 
-**작성일**: 2025-10-31
-**버전**: 2.0 ⭐ (이중 모델 아키텍처 전환)
-**다음 단계**: 이중 모델 학습 시작 → Flask 서버 통합
+## 아카이브: 구버전 데이터셋 📦
+
+**v2.0 이중 모델 아키텍처**에서 사용했던 공개 데이터셋:
+- **FPIC-Component**: 부품 검출 (25 클래스, 6,260 이미지)
+- **SolDef_AI**: 납땜 불량 (5-6 클래스, 1,150 이미지)
+
+**변경 이유**:
+- v3.0에서는 커스텀 제품(FT, RS, BC) 기반으로 전환
+- 공개 데이터셋은 일반적인 PCB이며 제품별 특화 불가
+- 부품 위치 검증을 위해 정확한 기준 데이터 필요
+
+공개 데이터셋 정보는 `docs/archives/Dataset_Guide_v2.0.md` 참조
+
+---
+
+**작성일**: 2025-11-28
+**버전**: 3.0 ⭐ (Product Verification Architecture)
+**다음 단계**: 커스텀 데이터셋 수집 → YOLO 모델 학습 → 기준 데이터 생성
