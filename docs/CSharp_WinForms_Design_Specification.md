@@ -1,20 +1,26 @@
-# C# WinForms PCB 검사 모니터링 시스템 - 설계 사양서 ⭐ (이중 모델 아키텍처)
+# C# WinForms PCB 검사 모니터링 시스템 - 설계 사양서 ⭐ (Product Verification Architecture v3.0)
 
 ## 문서 정보
 
 **작성일**: 2025-10-28
-**수정일**: 2025-10-31
-**버전**: 3.0 (이중 YOLO 모델 아키텍처)
+**수정일**: 2025-11-28
+**버전**: 4.0 (Product Verification Architecture - 제품별 부품 위치 검증)
 **관련 문서**:
-- `CSharp_WinForms_Guide.md` - 기본 개발 가이드 (이중 모델)
-- `MySQL_Database_Design.md` - 데이터베이스 스키마 (융합 결과)
+- `CSharp_WinForms_Guide.md` - 기본 개발 가이드
+- `MySQL_Database_Design.md` - 데이터베이스 스키마 v3.0 (제품별 검증)
 - `PCB_Defect_Detection_Project.md` - 전체 시스템 아키텍처
 
-**주요 변경사항 (v3.0)**:
-- ✅ 이중 모델 결과 표시 (Component + Solder)
-- ✅ 융합 판정 표시 (normal, component_defect, solder_defect, discard)
-- ✅ 양면 이미지 뷰어 (좌측: 부품, 우측: 납땜)
-- ✅ 모델별 상세 불량 목록 표시
+**주요 변경사항 (v4.0 - 2025-11-28)**:
+- ✅ **제품 식별 시스템**: 시리얼 넘버(MBXX12345678) + QR 코드 기반
+- ✅ **제품별 필터링**: FT(Fast Type), RS(Reliable Stable), BC(Budget Compact)
+- ✅ **4단계 판정**: normal, missing, position_error, discard
+- ✅ **집계 테이블**: 시간별/일별/월별 자동 집계 조회
+- ✅ **부품 위치 검증**: ComponentVerifier 기반 위치 오류 검출
+- ✅ **10년 데이터 보관**: 자동 삭제 이벤트 (Event Scheduler)
+
+**이전 버전 (v3.0 - Deprecated)**:
+- 이중 YOLO 모델 (부품 검출 + 납땜 불량) → v4.0에서는 단일 YOLO + 위치 검증으로 변경
+- 공개 데이터셋 (FPIC-Component, SolDef_AI) → 커스텀 데이터셋 (FT, RS, BC)
 
 ---
 
@@ -22,9 +28,13 @@
 
 ### 시스템 역할
 
-- **실시간 모니터링**: Flask 서버로부터 이중 모델 검사 현황을 실시간으로 표시
-- **데이터 조회**: MySQL 데이터베이스에서 융합 결과 및 개별 모델 결과 조회
-- **데이터 내보내기**: Excel, CSV 형식으로 이중 모델 데이터 내보내기
+- **실시간 모니터링**: Flask 서버로부터 제품별 검사 현황을 실시간으로 표시
+- **데이터 조회**: MySQL 데이터베이스에서 제품별 검사 이력 및 집계 통계 조회
+  - `inspections` 테이블: 전체 검사 이력 (10년 보관)
+  - `inspection_summary_hourly`: 시간별 집계
+  - `inspection_summary_daily`: 일별 집계
+  - `inspection_summary_monthly`: 월별 집계
+- **데이터 내보내기**: Excel, CSV 형식으로 제품별 데이터 내보내기
 - **시스템 관리**: 사용자 관리, 시스템 설정 (관리자 전용)
 
 ---
@@ -131,12 +141,17 @@ private async void btnLogin_Click(object sender, EventArgs e)
 - DataGridView (최근 10건)
 
 **박스 상태 모니터링:** ⭐ OHT 시스템 (수평 박스 배치)
-- 3개 박스(정상/부품불량/납땜불량) 실시간 상태 표시
+- 3개 박스(정상/부품누락/위치오류) 실시간 상태 표시
 - 각 박스의 슬롯 사용 현황 (5/5 표시, 수평 배치)
 - DISCARD는 슬롯 관리 안 함 (고정 위치에 떨어뜨리기)
 - 꽉 찬 박스 빨간색 경고
 - "박스 리셋" 버튼 (박스 교체 후, Admin/Operator 권한)
 - 2초마다 자동 새로고침
+
+**제품별 필터링:** ⭐ 신규 추가 (v4.0)
+- ComboBox 또는 ToggleButton으로 제품 타입 선택 (전체/FT/RS/BC)
+- 선택한 제품의 통계만 표시
+- 차트 및 최근 검사 이력 필터링
 
 > **참고**: UI 디자인은 팀에서 직접 구현합니다.
 
@@ -280,11 +295,19 @@ public class OHTRequestHistory
 ### 3. InspectionHistoryForm (검사 이력)
 
 #### 주요 기능
-- 날짜 범위 필터
-- 불량 유형 필터 (전체/정상/부품불량/납땜불량/폐기)
-- 카메라 ID 필터 (전체/left/right)
-- 페이징 (50건씩)
-- Excel 내보내기 (Operator 이상)
+- **날짜 범위 필터**: DateTimePicker (시작일, 종료일)
+- **제품 필터** ⭐ (v4.0 신규): 전체/FT/RS/BC
+- **불량 유형 필터**: 전체/정상/부품누락/위치오류/폐기
+- **카메라 ID 필터**: 전체/left/right (선택 사항)
+- **페이징**: 50건씩, 집계 테이블 사용 권장
+- **Excel 내보내기**: Operator 이상 권한
+
+#### 집계 테이블 사용 (v4.0) ⭐
+대량 데이터 조회 시 집계 테이블 사용 권장:
+- **시간별 조회**: `inspection_summary_hourly` (최근 24-48시간)
+- **일별 조회**: `inspection_summary_daily` (최근 1-3개월)
+- **월별 조회**: `inspection_summary_monthly` (1년 이상)
+- **상세 조회**: `inspections` (특정 검사 건 확인)
 
 #### DataGridView 커스텀 렌더링
 
@@ -913,7 +936,7 @@ public class LegendItem : Control
 
 ---
 
-### DefectTypeHelper (색상 매핑)
+### DefectTypeHelper (색상 매핑) - v4.0 업데이트
 
 ```csharp
 public static class DefectTypeHelper
@@ -922,10 +945,17 @@ public static class DefectTypeHelper
     {
         return defectType switch
         {
-            "정상" => Color.FromArgb(76, 175, 80),      // 초록
-            "부품불량" => Color.FromArgb(255, 152, 0),  // 주황
-            "납땜불량" => Color.FromArgb(255, 235, 59), // 노랑
-            "폐기" => Color.FromArgb(244, 67, 54),      // 빨강
+            "normal" => Color.FromArgb(76, 175, 80),        // 초록 (정상)
+            "missing" => Color.FromArgb(255, 152, 0),       // 주황 (부품 누락)
+            "position_error" => Color.FromArgb(255, 235, 59), // 노랑 (위치 오류)
+            "discard" => Color.FromArgb(244, 67, 54),       // 빨강 (폐기)
+
+            // 한글 호환 (레거시)
+            "정상" => Color.FromArgb(76, 175, 80),
+            "부품누락" => Color.FromArgb(255, 152, 0),
+            "위치오류" => Color.FromArgb(255, 235, 59),
+            "폐기" => Color.FromArgb(244, 67, 54),
+
             _ => Color.Gray
         };
     }
@@ -934,11 +964,30 @@ public static class DefectTypeHelper
     {
         return defectType switch
         {
+            "normal" => "정상",
+            "missing" => "부품 누락",
+            "position_error" => "위치 오류",
+            "discard" => "폐기",
+
+            // 한글 호환 (레거시)
             "정상" => "정상",
-            "부품불량" => "부품 불량",
-            "납땜불량" => "납땜 불량",
+            "부품누락" => "부품 누락",
+            "위치오류" => "위치 오류",
             "폐기" => "폐기",
+
             _ => "알 수 없음"
+        };
+    }
+
+    // 제품 코드 → 제품명 변환 (v4.0 신규)
+    public static string GetProductDisplayName(string productCode)
+    {
+        return productCode switch
+        {
+            "FT" => "Fast Type",
+            "RS" => "Reliable Stable",
+            "BC" => "Budget Compact",
+            _ => productCode
         };
     }
 }
@@ -946,7 +995,7 @@ public static class DefectTypeHelper
 
 ---
 
-## Excel 내보내기 기능
+## Excel 내보내기 기능 - v4.0 업데이트
 
 ### ExcelExportService 클래스
 
@@ -959,37 +1008,43 @@ public class ExcelExportService
         {
             var worksheet = workbook.Worksheets.Add("검사 이력");
 
-            // 헤더
+            // 헤더 (v4.0: 시리얼 넘버, 제품 코드 추가)
             worksheet.Cell(1, 1).Value = "검사 ID";
-            worksheet.Cell(1, 2).Value = "카메라 ID";
-            worksheet.Cell(1, 3).Value = "불량 유형";
-            worksheet.Cell(1, 4).Value = "신뢰도";
-            worksheet.Cell(1, 5).Value = "검사 시간";
+            worksheet.Cell(1, 2).Value = "시리얼 넘버";
+            worksheet.Cell(1, 3).Value = "제품 코드";
+            worksheet.Cell(1, 4).Value = "판정";
+            worksheet.Cell(1, 5).Value = "부품 누락";
+            worksheet.Cell(1, 6).Value = "위치 오류";
+            worksheet.Cell(1, 7).Value = "평균 신뢰도";
+            worksheet.Cell(1, 8).Value = "검사 시간";
 
             // 데이터 및 조건부 서식
             int row = 2;
             foreach (var inspection in inspections)
             {
                 worksheet.Cell(row, 1).Value = inspection.Id;
-                worksheet.Cell(row, 2).Value = inspection.CameraId;
-                worksheet.Cell(row, 3).Value = inspection.DefectType;
-                worksheet.Cell(row, 4).Value = inspection.Confidence;
-                worksheet.Cell(row, 5).Value = inspection.InspectionTime;
+                worksheet.Cell(row, 2).Value = inspection.SerialNumber;
+                worksheet.Cell(row, 3).Value = inspection.ProductCode;
+                worksheet.Cell(row, 4).Value = DefectTypeHelper.GetDefectDisplayName(inspection.Decision);
+                worksheet.Cell(row, 5).Value = inspection.MissingCount;
+                worksheet.Cell(row, 6).Value = inspection.PositionErrorCount;
+                worksheet.Cell(row, 7).Value = inspection.AvgConfidence;
+                worksheet.Cell(row, 8).Value = inspection.InspectionTime;
 
                 // 불량 유형별 조건부 서식
-                var rowRange = worksheet.Range(row, 1, row, 5);
-                switch (inspection.DefectType)
+                var rowRange = worksheet.Range(row, 1, row, 8);
+                switch (inspection.Decision)
                 {
-                    case "정상":
+                    case "normal":
                         rowRange.Style.Fill.BackgroundColor = XLColor.LightGreen;
                         break;
-                    case "부품불량":
+                    case "missing":
                         rowRange.Style.Fill.BackgroundColor = XLColor.Orange;
                         break;
-                    case "납땜불량":
+                    case "position_error":
                         rowRange.Style.Fill.BackgroundColor = XLColor.Yellow;
                         break;
-                    case "폐기":
+                    case "discard":
                         rowRange.Style.Fill.BackgroundColor = XLColor.Red;
                         break;
                 }
@@ -1005,33 +1060,55 @@ public class ExcelExportService
     {
         using (var workbook = new XLWorkbook())
         {
-            // 시트 1: 요약 통계
+            // 시트 1: 요약 통계 (v4.0: 제품별 분리)
             var summarySheet = workbook.Worksheets.Add("요약");
-            summarySheet.Cell(1, 1).Value = "총 검사";
-            summarySheet.Cell(1, 2).Value = stats.TotalInspections;
-            summarySheet.Cell(2, 1).Value = "정상";
-            summarySheet.Cell(2, 2).Value = stats.NormalCount;
-            summarySheet.Cell(3, 1).Value = "부품불량";
-            summarySheet.Cell(3, 2).Value = stats.ComponentDefectCount;
-            summarySheet.Cell(4, 1).Value = "납땜불량";
-            summarySheet.Cell(4, 2).Value = stats.SolderDefectCount;
-            summarySheet.Cell(5, 1).Value = "폐기";
-            summarySheet.Cell(5, 2).Value = stats.DiscardCount;
-            summarySheet.Cell(6, 1).Value = "불량률";
-            summarySheet.Cell(6, 2).Value = $"{stats.DefectRate:F2}%";
-
-            // 시트 2: 시간대별 데이터
-            var hourlySheet = workbook.Worksheets.Add("시간대별");
-            hourlySheet.Cell(1, 1).Value = "시간";
-            hourlySheet.Cell(1, 2).Value = "검사 건수";
+            summarySheet.Cell(1, 1).Value = "제품 코드";
+            summarySheet.Cell(1, 2).Value = "총 검사";
+            summarySheet.Cell(1, 3).Value = "정상";
+            summarySheet.Cell(1, 4).Value = "부품 누락";
+            summarySheet.Cell(1, 5).Value = "위치 오류";
+            summarySheet.Cell(1, 6).Value = "폐기";
+            summarySheet.Cell(1, 7).Value = "불량률";
 
             int row = 2;
-            foreach (var item in stats.HourlyInspections)
+            foreach (var productStat in stats.ProductStatistics)
             {
-                hourlySheet.Cell(row, 1).Value = item.Key;
-                hourlySheet.Cell(row, 2).Value = item.Value;
+                summarySheet.Cell(row, 1).Value = productStat.ProductCode;
+                summarySheet.Cell(row, 2).Value = productStat.TotalInspections;
+                summarySheet.Cell(row, 3).Value = productStat.NormalCount;
+                summarySheet.Cell(row, 4).Value = productStat.MissingCount;
+                summarySheet.Cell(row, 5).Value = productStat.PositionErrorCount;
+                summarySheet.Cell(row, 6).Value = productStat.DiscardCount;
+                summarySheet.Cell(row, 7).Value = $"{productStat.DefectRate:F2}%";
                 row++;
             }
+
+            // 시트 2: 시간대별 데이터 (집계 테이블 사용)
+            var hourlySheet = workbook.Worksheets.Add("시간별 집계");
+            hourlySheet.Cell(1, 1).Value = "시간";
+            hourlySheet.Cell(1, 2).Value = "제품 코드";
+            hourlySheet.Cell(1, 3).Value = "검사 건수";
+            hourlySheet.Cell(1, 4).Value = "정상";
+            hourlySheet.Cell(1, 5).Value = "부품 누락";
+            hourlySheet.Cell(1, 6).Value = "위치 오류";
+            hourlySheet.Cell(1, 7).Value = "폐기";
+
+            row = 2;
+            foreach (var item in stats.HourlyData)
+            {
+                hourlySheet.Cell(row, 1).Value = item.Timestamp;
+                hourlySheet.Cell(row, 2).Value = item.ProductCode;
+                hourlySheet.Cell(row, 3).Value = item.TotalInspections;
+                hourlySheet.Cell(row, 4).Value = item.NormalCount;
+                hourlySheet.Cell(row, 5).Value = item.MissingCount;
+                hourlySheet.Cell(row, 6).Value = item.PositionErrorCount;
+                hourlySheet.Cell(row, 7).Value = item.DiscardCount;
+                row++;
+            }
+
+            // 시트 3: 일별 집계
+            var dailySheet = workbook.Worksheets.Add("일별 집계");
+            // (동일한 구조로 daily 데이터 출력)
 
             workbook.SaveAs(filePath);
         }
@@ -1043,16 +1120,23 @@ public class ExcelExportService
 
 ## UI 디자인 가이드
 
-### 컬러 팔레트
+### 컬러 팔레트 - v4.0 업데이트
 
-| 용도 | RGB | C# 코드 |
-|------|-----|---------|
-| 정상 | (76, 175, 80) | `Color.FromArgb(76, 175, 80)` |
-| 부품 불량 | (255, 152, 0) | `Color.FromArgb(255, 152, 0)` |
-| 납땜 불량 | (255, 235, 59) | `Color.FromArgb(255, 235, 59)` |
-| 폐기 | (244, 67, 54) | `Color.FromArgb(244, 67, 54)` |
-| 온라인 | (76, 175, 80) | `Color.FromArgb(76, 175, 80)` |
-| 오프라인 | (244, 67, 54) | `Color.FromArgb(244, 67, 54)` |
+| 용도 | RGB | C# 코드 | 비고 |
+|------|-----|---------|------|
+| 정상 (normal) | (76, 175, 80) | `Color.FromArgb(76, 175, 80)` | 초록 |
+| 부품 누락 (missing) | (255, 152, 0) | `Color.FromArgb(255, 152, 0)` | 주황 |
+| 위치 오류 (position_error) | (255, 235, 59) | `Color.FromArgb(255, 235, 59)` | 노랑 |
+| 폐기 (discard) | (244, 67, 54) | `Color.FromArgb(244, 67, 54)` | 빨강 |
+| 온라인 | (76, 175, 80) | `Color.FromArgb(76, 175, 80)` | 초록 |
+| 오프라인 | (244, 67, 54) | `Color.FromArgb(244, 67, 54)` | 빨강 |
+
+**제품별 색상 (선택 사항)**:
+| 제품 코드 | 색상 | RGB | C# 코드 |
+|-----------|------|-----|---------|
+| FT | 파랑 | (33, 150, 243) | `Color.FromArgb(33, 150, 243)` |
+| RS | 보라 | (156, 39, 176) | `Color.FromArgb(156, 39, 176)` |
+| BC | 청록 | (0, 150, 136) | `Color.FromArgb(0, 150, 136)` |
 
 ### 폰트
 
