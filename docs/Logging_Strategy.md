@@ -39,7 +39,7 @@
 
 **예시**:
 ```
-[2025-10-23 14:30:45,123] [INFO] [Flask-Server] [inference.py] - Inference completed (defect_type: 납땜불량, confidence: 0.95, time: 85ms)
+[2025-10-23 14:30:45,123] [INFO] [Flask-Server] [frontscan.py] - Frontscan completed (decision: position_error, missing_count: 1, position_error_count: 2, time: 85ms)
 [2025-10-23 14:30:46,456] [WARNING] [RaspberryPi-1 (Left)] [camera_client.py] - Frame skip detected (network delay: 150ms)
 [2025-10-23 14:30:47,789] [ERROR] [Flask-Server] [database.py] - Database connection failed (MySQL error: 2003)
 ```

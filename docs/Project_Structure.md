@@ -629,15 +629,15 @@ temp/
 ## `README.md` 템플릿
 
 ```markdown
-# PCB Defect Detection using YOLO v11l and Anomaly Detection
+# PCB Backscan & Frontscan Verification System
 
 ## 프로젝트 개요
-PCB(인쇄회로기판) 이미지에서 부품 및 납땜 불량을 자동으로 검출하는 하이브리드 딥러닝 시스템
+PCB(인쇄회로기판)의 뒷면을 통해 제품을 식별하고, 앞면 부품 배치를 YOLO v11l + ComponentVerifier 로 검증하여 missing/position_error/discard 를 자동 판정하는 실시간 검사 시스템
 
 ## 주요 기능
-- YOLO v11l 기반 객체 탐지 (Object Detection)
-- 이상 탐지 모델 (Anomaly Detection)
-- 병렬 처리를 통한 결과 융합
+- Backscan: 시리얼 넘버 OCR + QR 디코딩
+- Frontscan: YOLO v11l 부품 검출 + 제품별 위치 검증
+- GPIO/로봇팔 제어 + OHT 연동 자동 분류
 
 ## 환경 요구사항
 - Python 3.10+

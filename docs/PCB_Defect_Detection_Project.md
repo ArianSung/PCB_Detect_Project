@@ -298,16 +298,17 @@ Flask 서버에서 뒷면 + 앞면 결과를 통합하여 최종 판정:
                 ┌────────┴─────────┐
                 │                  │
         HTTP POST             HTTP POST
-        (left_frame)          (right_frame)
+        (frontscan)           (backscan)
                 │                  │
                 ↓                  ↓
         ┌─────────────────────────────────────────┐
         │  Flask 추론 서버 (GPU PC)               │
         │  Tailscale VPN: 100.x.x.x:5000                │
         │  ┌──────────────────────────────────┐   │
-        │  │  양면 프레임 수신 (/predict_dual) │   │
-        │  │    - left_frame (부품)            │   │
-        │  │    - right_frame (시리얼+QR)      │   │
+        │  │  Backscan → /api/v3/backscan │   │
+        │  │  Frontscan → /api/v3/frontscan │ │
+        │  │    - backscan: 시리얼+QR         │   │
+        │  │    - frontscan: 부품 프레임 + token │ │
         │  └──────────────────────────────────┘   │
         │                   ↓                      │
         │  ┌─────────────────────────────────┐    │
@@ -373,7 +374,8 @@ Flask 서버에서 뒷면 + 앞면 결과를 통합하여 최종 판정:
         │                   ↓                      │
         │  ┌──────────────────────────────────┐   │
         │  │  REST API 서버                   │   │
-        │  │  - /predict_dual ⭐ (양면 검사)  │   │
+        │  │  - /api/v3/backscan ⭐ (뒷면)     │   │
+        │  │  - /api/v3/frontscan ⭐ (앞면)    │   │
         │  │  - /api/inspections              │   │
         │  │  - /api/products ⭐ (제품 정보)  │   │
         │  │  - /api/statistics               │   │
@@ -446,7 +448,7 @@ Flask 서버에서 뒷면 + 앞면 결과를 통합하여 최종 판정:
                         │
         ┌────────┬────────┬────────┬────────┐
         │        │        │        │        │
-      [정상]   [부품불량] [납땜불량]  [폐기]
+      [정상]   [부품불량] [위치 오류]  [폐기]
      (3슬롯)   (3슬롯)   (3슬롯)   (슬롯없음)
         │        │        │        │
         └────────┴────────┴────────┴─→ 슬롯 3/3 감지 → LED/WinForms 알림
@@ -463,7 +465,7 @@ Flask 서버에서 뒷면 + 앞면 결과를 통합하여 최종 판정:
 카테고리별 박스:
 1. NORMAL (정상) - 3 슬롯 (수평)
 2. COMPONENT_DEFECT (부품 불량) - 3 슬롯 (수평)
-3. SOLDER_DEFECT (납땜 불량) - 3 슬롯 (수평)
+3. POSITION_ERROR (위치 오류) - 3 슬롯 (수평)
 4. DISCARD (폐기) - 슬롯 관리 없음 (고정 위치)
 
 슬롯 할당 로직:
@@ -481,7 +483,7 @@ Flask 서버에서 뒷면 + 앞면 결과를 통합하여 최종 판정:
   │
   ├─ GPIO 제어 (LED/릴레이)
   │   ├─ 부품 불량 → GPIO 핀 17 (BCM) → LED/릴레이
-  │   ├─ 납땜 불량 → GPIO 핀 27 (BCM) → LED/릴레이
+  │   ├─ 위치 오류 → GPIO 핀 27 (BCM) → LED/릴레이
   │   ├─ 폐기      → GPIO 핀 22 (BCM) → LED/릴레이
   │   └─ 정상      → GPIO 핀 23 (BCM) → LED/릴레이
   │
@@ -492,7 +494,7 @@ Flask 서버에서 뒷면 + 앞면 결과를 통합하여 최종 판정:
           └─ 배치 좌표: 9개 슬롯 + 1개 폐기 위치 좌표 테이블
               - NORMAL_SLOT_0 ~ NORMAL_SLOT_2 (좌측 → 우측)
               - COMPONENT_DEFECT_SLOT_0 ~ COMPONENT_DEFECT_SLOT_2
-              - SOLDER_DEFECT_SLOT_0 ~ SOLDER_DEFECT_SLOT_2
+              - POSITION_ERROR_SLOT_0 ~ POSITION_ERROR_SLOT_2
               - DISCARD_POSITION (고정 좌표)
 
 참고: 라즈베리파이 2는 카메라 전용이며, GPIO 및 로봇팔 제어를 수행하지 않음
@@ -529,7 +531,7 @@ Flask 서버에서 뒷면 + 앞면 결과를 통합하여 최종 판정:
               │ 3개 박스 수평 배치 (각 3슬롯) │
               ├──────────────────────────┤
               │ [박스1]  [박스2]  [박스3]   │
-              │  정상    부품불량  납땜불량   │
+              │  정상    부품불량  위치 오류   │
               │ (3슬롯)  (3슬롯)  (3슬롯)    │
               └──────────────────────────┘
                             ↓
@@ -538,7 +540,7 @@ Flask 서버에서 뒷면 + 앞면 결과를 통합하여 최종 판정:
 제어 흐름:
 1. WinForms → Flask API (/api/oht/request)
    - 수동 호출 (Admin/Operator만 가능) ⭐ 권한 제한
-   - 카테고리 선택 (정상/부품불량/납땜불량)
+   - 카테고리 선택 (정상/부품불량/위치 오류)
 
 2. BoxManager 자동 감지 → Flask API (/api/oht/auto_trigger)
    - 박스 가득 참 (3/3 슬롯) 감지
@@ -596,52 +598,69 @@ Flask 서버에서 뒷면 + 앞면 결과를 통합하여 최종 판정:
 
 #### 웹서버 통신 프로토콜 ⭐ 업데이트
 
-**1. 라즈베리파이 → Flask 서버 (양면 프레임 전송)**
-- **요청**: HTTP POST `/predict_dual` ⭐ 신규
+**1. Backscan (라즈베리파이 2 → Flask 서버)**
+- **요청**: HTTP POST `/api/v3/backscan`
 ```json
 {
-  "left_frame": "base64_encoded_image",   // 좌측 카메라 (부품면)
-  "right_frame": "base64_encoded_image",  // 우측 카메라 (납땜면)
-  "timestamp": "2025-10-22T10:30:45.123Z"
+  "camera_id": "right",
+  "frame": "base64_encoded_image",      // 뒷면 (시리얼 + QR)
+  "request_id": "7c7a1e8c-9273-4c46",
+  "timestamp": "2025-11-30T10:30:45.123Z"
 }
 ```
 
-- **응답**: JSON ⭐ 업데이트
+- **응답**:
 ```json
 {
   "status": "ok",
-  "decision": "normal" | "component_defect" | "solder_defect" | "discard",
-  "component_defects": [
-    {
-      "type": "resistor",
-      "bbox": [x, y, w, h],
-      "confidence": 0.92,
-      "issue": "misalignment"
-    }
+  "inspection_token": "20251130-FT-000123",
+  "serial_number": "MBFT00012345",
+  "product_code": "FT",
+  "qr_data": "http://local.product/FT00012345",
+  "backscan_time_ms": 65.2
+}
+```
+
+**2. Frontscan (라즈베리파이 1 → Flask 서버)**
+- **요청**: HTTP POST `/api/v3/frontscan`
+```json
+{
+  "inspection_token": "20251130-FT-000123",
+  "product_code": "FT",
+  "camera_id": "left",
+  "frame": "base64_encoded_image",      // 앞면 (부품)
+  "gpio_enabled": true,
+  "client_ip": "100.64.1.2"
+}
+```
+
+- **응답**:
+```json
+{
+  "status": "ok",
+  "decision": "position_error",
+  "missing_count": 1,
+  "position_error_count": 2,
+  "extra_count": 0,
+  "missing_components": [
+    {"class": "cap_10uF", "expected": [320, 210]}
   ],
-  "solder_defects": [
-    {
-      "type": "solder_bridge",
-      "bbox": [x, y, w, h],
-      "confidence": 0.88,
-      "severity": "critical"
-    }
+  "position_errors": [
+    {"class": "ic_main", "expected": [400, 150], "actual": [420, 160], "offset": 22.4}
   ],
-  "component_severity": 1,  // 0-3
-  "solder_severity": 2,     // 0-3
+  "extra_components": [],
   "gpio_signal": {
     "pin": 27,
-    "action": "HIGH",
     "duration_ms": 500
   },
   "robot_arm_command": {
     "action": "place_pcb",
-    "box_id": "SOLDER_DEFECT",
+    "box_id": "POSITION_ERROR",
     "slot_number": 2,
     "coordinates": {"x": 120.5, "y": 85.3, "z": 30.0}
   },
   "box_status": {
-    "box_id": "SOLDER_DEFECT",
+    "box_id": "POSITION_ERROR",
     "current_slot": 3,
     "is_full": false
   },
@@ -716,29 +735,27 @@ Flask 서버에서 뒷면 + 앞면 결과를 통합하여 최종 판정:
 ```
 
 #### 체크리스트 ⭐ 업데이트
-- [ ] Flask 웹서버 구축 (상세: `Flask_Server_Setup.md`, `Dual_Model_Architecture.md`)
-  - [ ] **이중 모델 로딩 및 추론** ⭐ 핵심
-    - [ ] FPIC-Component 모델 로드 (부품 검출)
-    - [ ] SolDef_AI 모델 로드 (납땜 불량)
-    - [ ] 병렬 추론 로직 구현
-    - [ ] GPU 메모리 관리 (8GB 이내)
-  - [ ] **결과 융합 로직 구현** ⭐ 핵심
-    - [ ] component_defects 추출 함수
-    - [ ] solder_defects 추출 함수
-    - [ ] 심각도 계산 알고리즘 (Level 0-3)
-    - [ ] 최종 판정 로직 (normal/component/solder/discard)
-  - [ ] **API 엔드포인트 개발**
-    - [ ] POST /predict_dual - 양면 동시 검사 ⭐ 신규
-    - [ ] POST /predict - 단일 프레임 (하위 호환)
-    - [ ] GET /health - 서버 상태 확인
-  - [ ] MySQL 데이터베이스 연동
-    - [ ] 검사 이력 저장 (component/solder 분리)
-    - [ ] 박스 상태 업데이트
-  - [ ] REST API 엔드포인트 개발 (/api/*)
-  - [ ] GPIO 제어 응답 로직
-  - [ ] 박스 상태 관리 로직 (BoxManager) ⭐
-  - [ ] 슬롯 할당 알고리즘 ⭐
-  - [ ] 박스 가득 찬 경우 알림 시스템 ⭐
+- [ ] Flask 웹서버 구축 (상세: `Flask_Server_Setup.md`)
+  - [ ] **Backscan API** `/api/v3/backscan`
+    - [ ] YOLO Serial ROI + EasyOCR 파이프라인
+    - [ ] QR 코드 파서 + 제품 코드 매핑
+    - [ ] inspection_token 생성 및 만료 정책
+  - [ ] **Frontscan API** `/api/v3/frontscan`
+    - [ ] YOLOv11l 컴포넌트 모델 로드
+    - [ ] ComponentVerifier 로 missing/position_error 계산
+    - [ ] GPIO/로봇팔 응답 payload 생성
+  - [ ] **지원 API**
+    - [ ] POST /predict (legacy) → 유지 여부 결정
+    - [ ] GET /health → 상태 확인
+    - [ ] REST `/api/inspections`, `/api/statistics`, `/api/box_status`, `/api/products`
+  - [ ] MySQL 연동
+    - [ ] `inspections` 테이블 insert (serial, decision, counts)
+    - [ ] 요약 테이블 갱신 (hourly/daily/monthly)
+    - [ ] box_status / oht_operations 업데이트
+  - [ ] BoxManager & OHT 연동
+    - [ ] 슬롯 할당 알고리즘
+    - [ ] 박스 가득 참 감지 + auto_trigger 호출
+  - [ ] 사용자/인증 API 유지 (`auth_bp`, `user_api.py`)
   - [ ] 사용자 관리 API (user_api.py) ⭐
     - [ ] GET /api/users - 사용자 목록 조회
     - [ ] POST /api/users - 사용자 생성
@@ -750,14 +767,13 @@ Flask 서버에서 뒷면 + 앞면 결과를 통합하여 최종 판정:
     - [ ] POST /api/auth/login - 로그인
     - [ ] POST /api/auth/logout - 로그아웃
 - [ ] 라즈베리파이 클라이언트 개발 (상세: `RaspberryPi_Setup.md`)
-  - [ ] 웹캠 프레임 캡처 및 전송
-  - [ ] Base64 인코딩/디코딩
-  - [ ] GPIO 제어 모듈 (RPi.GPIO)
-  - [ ] 릴레이 제어 로직
+  - [ ] Backscan: 우측 카메라 캡처 → `/api/v3/backscan` 전송
+  - [ ] Frontscan: 좌측 카메라 캡처 → `/api/v3/frontscan` 전송
+  - [ ] inspection_token 공유 로직 (Redis/MQTT/File)
+  - [ ] GPIO 제어 모듈 (RPi.GPIO) + 릴레이 제어
   - [ ] USB 시리얼 통신 모듈 (pyserial) ⭐ 신규
-  - [ ] Arduino Mega 명령 전송 ⭐ 신규
-  - [ ] 로봇팔 응답 처리 ⭐ 신규
-  - [ ] 자동 시작 스크립트
+  - [ ] Arduino 명령/응답 처리 ⭐ 신규
+  - [ ] systemd 서비스/Watchdog 스크립트
 - [ ] 라즈베리파이 3번 OHT 컨트롤러 개발 (상세: `OHT_System_Setup.md`) ⭐ 신규
   - [ ] 스텝모터 제어 모듈 (X축 이동)
   - [ ] 서보모터 제어 모듈 (Z축 상하)
@@ -809,28 +825,20 @@ Flask 서버에서 뒷면 + 앞면 결과를 통합하여 최종 판정:
   - [x] OHT 운영 관리 테이블 (oht_operations) ⭐ 신규
   - [x] 사용자 활동 로그 테이블 (user_logs) ⭐ 신규
   - [ ] 백업 전략 수립
-- [ ] **병렬 처리 파이프라인 구현** ⭐ 업데이트
-  - [ ] 이중 모델 병렬 추론 (PyTorch 자동 배치 처리)
-  - [ ] 프레임 큐 관리 (지연 최소화)
-  - [ ] GPU 메모리 최적화
-- [ ] **결과 융합 알고리즘 개발** ⭐ 업데이트
-  - [ ] 부품 모델 결과 파싱 (component_defects)
-  - [ ] 납땜 모델 결과 파싱 (solder_defects)
-  - [ ] 양면 검사 결과 통합 (좌측 + 우측)
-  - [ ] 심각도 기반 융합 로직
-  - [ ] NMS (Non-Maximum Suppression) 적용 (각 모델별)
-- [ ] **불량 분류 판정 로직** ⭐ 업데이트
-  - [ ] 부품 검출 분류 (25개 클래스)
-  - [ ] 납땜 불량 분류 (5-6개 클래스)
-  - [ ] 심각한 불량 판정 (폐기 기준)
-    - [ ] component_severity >= 3
-    - [ ] solder_severity >= 3
-    - [ ] 양면 모두 Level 2 이상
-  - [ ] 치명적 불량 타입 정의
-    - [ ] missing_component
-    - [ ] wrong_component
-    - [ ] solder_bridge
-  - [ ] Confidence threshold 설정 (클래스별)
+- [ ] **Backscan/Frontscan 파이프라인 구현** ⭐ 업데이트
+  - [ ] Backscan: 시리얼 OCR + QR 디코딩 (라즈베리파이 2)
+  - [ ] inspection_token 생성 및 전달 (Redis/MQTT 등)
+  - [ ] Frontscan: 좌측 프레임 정렬 + YOLO 추론 (라즈베리파이 1)
+  - [ ] ComponentVerifier 성능 최적화 (누락/위치오류)
+  - [ ] End-to-end 처리 시간 150ms 이하 유지
+- [ ] **판정 로직 및 GPIO 매핑** ⭐ 업데이트
+  - [ ] missing_components 파싱 (누락 부품 목록)
+  - [ ] position_errors 파싱 (expected vs actual 좌표)
+  - [ ] extra_components 파싱 (기준 외 부품)
+  - [ ] decision 계산: normal/missing/position_error/discard
+  - [ ] discard 기준: missing_count >=3, position_error_count >=5, 합계 >=7
+  - [ ] GPIO 매핑: normal=23, missing=17, position_error=27, discard=22
+  - [ ] 로봇팔 명령: box_id NORMAL/MISSING/POSITION_ERROR/DISCARD
 - [ ] 실시간 처리 최적화
   - [ ] 프레임 스킵 로직 (처리 지연 시)
   - [ ] 배치 처리 (여러 프레임 동시 추론)
@@ -852,18 +860,20 @@ Flask 서버에서 뒷면 + 앞면 결과를 통합하여 최종 판정:
   - [ ] 정량적 성능 비교표 작성
 
 **목표 성능** ⭐ 업데이트:
-- **부품 모델 (FPIC-Component)**: mAP@0.5 > 0.85
-- **납땜 모델 (SolDef_AI)**: mAP@0.5 > 0.90
-- **실시간 처리 속도**: 80-100ms (양면 병렬 추론)
-  - 부품 모델: 50-80ms
-  - 납땜 모델: 30-50ms (병렬)
-  - 결과 융합: <5ms
-- **추론 지연시간**: < 100ms (전체 파이프라인)
+- **Backscan**:
+  - 시리얼 OCR 정확도 > 99%
+  - QR 디코딩 성공률 > 99%
+  - 처리 시간 50-80ms
+- **Frontscan**:
+  - 부품 모델 (FPIC-Component): mAP@0.5 > 0.85
+  - missing/position_error 판정 정확도 > 90%
+  - 처리 시간 40-60ms
+- **End-to-End 지연시간**: < 150ms (Backscan + Frontscan + DB)
 - **False Positive Rate**: < 5%
 - **네트워크 통신 안정성**: 99% 이상
-- **GPU 메모리 사용량**: < 8GB (16GB VRAM 중 50%)
+- **GPU 메모리 사용량**: < 8GB (RTX 4080 Super 기준)
 
-**참고 문서**: `Flask_Server_Setup.md`, `Dual_Model_Architecture.md`
+**참고 문서**: `Flask_Server_Setup.md`, `RaspberryPi_Setup.md`
 
 ---
 
@@ -917,7 +927,7 @@ Flask 서버에서 뒷면 + 앞면 결과를 통합하여 최종 판정:
 - **GPU**: NVIDIA RTX 4080 Super (16GB VRAM) ✅
 - **AI 모델**: 이중 YOLOv11l (Large) 모델
   - 모델 1: FPIC-Component (부품 검출, 25 클래스)
-  - 모델 2: SolDef_AI (납땜 불량, 5-6 클래스)
+  - 모델 2: SolDef_AI (위치 오류, 5-6 클래스)
 - **GPU 메모리 사용량**:
   - **학습 시** (각 모델 독립 학습):
     - 모델 1 학습: 10-12GB VRAM (배치 32 기준)
@@ -1169,27 +1179,28 @@ Flask 서버에서 뒷면 + 앞면 결과를 통합하여 최종 판정:
 ## 성공 기준 ⭐ 업데이트
 
 ### 최소 목표
-- [x] 이중 YOLO v11l 모델 선정 및 데이터셋 확보
+- [x] Backscan/Frontscan 아키텍처 확정 및 문서화
 - [ ] 부품 모델: mAP@0.5 > 0.80
-- [ ] 납땜 모델: mAP@0.5 > 0.85
-- [ ] 4가지 판정 가능 (정상/부품불량/납땜불량/폐기)
+- [ ] 시리얼 OCR 인식률 > 99%
+- [ ] QR 디코딩 성공률 > 99%
+- [ ] 4가지 판정 (normal/missing/position_error/discard) 반환
 
 ### 목표
-- [ ] 이중 모델 시스템 완전 구현
+- [ ] Backscan + Frontscan 파이프라인 완전 구현
   - [ ] 부품 모델: mAP@0.5 > 0.85
-  - [ ] 납땜 모델: mAP@0.5 > 0.90
-  - [ ] 결과 융합 로직 정상 작동
-- [ ] 실시간 추론 (80-100ms)
+  - [ ] missing/position_error 검증 정확도 > 90%
+  - [ ] Backscan 평균 처리 시간 < 80ms
+  - [ ] Frontscan 평균 처리 시간 < 60ms
+- [ ] End-to-end 150ms 이내
 - [ ] False Positive Rate < 10%
-- [ ] Flask 서버 + 라즈베리파이 연동 완료
+- [ ] Flask 서버 + 라즈베리파이 연동 및 GPIO 제어 완료
 
 ### 우수 목표
 - [ ] 부품 모델: mAP@0.5 > 0.90
-- [ ] 납땜 모델: mAP@0.5 > 0.95
-- [ ] 추론 시간 < 80ms (최적화)
+- [ ] Backscan OCR/QR 실패율 < 0.5%
+- [ ] Backscan + Frontscan 총 120ms 이하
 - [ ] False Positive Rate < 5%
-- [ ] 양면 검사 시스템 완전 자동화
-- [ ] 졸업 논문 우수 평가
+- [ ] inspection_token 기반 추적 100% 확보
 
 ---
 
@@ -1262,7 +1273,7 @@ Flask 서버에서 뒷면 + 앞면 결과를 통합하여 최종 판정:
 - **데이터셋**: FPIC-Component + SolDef_AI
 - **모델**:
   - 모델 1: FPIC-Component (부품 검출, 25 클래스)
-  - 모델 2: SolDef_AI (납땜 불량, 5-6 클래스)
+  - 모델 2: SolDef_AI (위치 오류, 5-6 클래스)
 - **추론 방식**: 병렬 추론 + 결과 융합 로직
 - **성능 목표**: 80-100ms
 

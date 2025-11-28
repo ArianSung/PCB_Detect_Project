@@ -86,16 +86,16 @@ box_coordinates:
     slot_3: {x: 250.0, y: 100.0, z: 30.0}
     slot_4: {x: 270.0, y: 100.0, z: 30.0}
 
-  # 부품 불량 박스 (COMPONENT_DEFECT) - 5개 슬롯 (수평 배열)
-  COMPONENT_DEFECT:
+  # 부품 누락 박스 (MISSING) - 5개 슬롯 (수평 배열)
+  MISSING:
     slot_0: {x: 190.0, y: 140.0, z: 30.0}
     slot_1: {x: 210.0, y: 140.0, z: 30.0}
     slot_2: {x: 230.0, y: 140.0, z: 30.0}
     slot_3: {x: 250.0, y: 140.0, z: 30.0}
     slot_4: {x: 270.0, y: 140.0, z: 30.0}
 
-  # 납땜 불량 박스 (SOLDER_DEFECT) - 5개 슬롯 (수평 배열)
-  SOLDER_DEFECT:
+  # 납땜 불량 박스 (POSITION_ERROR) - 5개 슬롯 (수평 배열)
+  POSITION_ERROR:
     slot_0: {x: 190.0, y: 180.0, z: 30.0}
     slot_1: {x: 210.0, y: 180.0, z: 30.0}
     slot_2: {x: 230.0, y: 180.0, z: 30.0}
@@ -137,8 +137,8 @@ calibration:
   # 각 박스의 Z축 높이 오프셋 (실제 측정값으로 조정)
   box_height_offsets:
     NORMAL: 0.0
-    COMPONENT_DEFECT: 0.0
-    SOLDER_DEFECT: 0.0
+    MISSING: 0.0
+    POSITION_ERROR: 0.0
     DISCARD: 0.0
 
   # PCB 크기 (mm)
@@ -170,8 +170,8 @@ logging:
 #
 # 박스 배치 (3개 박스):
 #   - 정상 (NORMAL): Y = 100mm
-#   - 부품불량 (COMPONENT_DEFECT): Y = 140mm
-#   - 납땜불량 (SOLDER_DEFECT): Y = 180mm
+#   - 부품 누락 (MISSING): Y = 140mm
+#   - 위치 오류 (POSITION_ERROR): Y = 180mm
 #   - 폐기 (DISCARD): Y = 220mm (슬롯 관리 안 함)
 #
 # 슬롯 구조:
