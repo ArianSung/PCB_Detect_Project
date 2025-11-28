@@ -106,7 +106,7 @@
             Controls.Add(cardPCBBackMonitoring);
             Controls.Add(cardPCBFrontMonitoring);
             Name = "PCBMonitoringView";
-            Size = new Size(1600, 700);
+            Size = new Size(1600, 720);
             Load += PCBMonitoringView_Load;
             ((System.ComponentModel.ISupportInitialize)pb_LINE1PCBFRONT).EndInit();
             cardPCBFrontMonitoring.ResumeLayout(false);

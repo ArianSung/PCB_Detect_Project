@@ -18,6 +18,12 @@ namespace pcb_monitoring_program.Views.Dashboard
 
     public partial class DashboardView : UserControl
     {
+        private readonly ToolTip _defectTrendToolTip = new ToolTip();
+        private readonly ToolTip _hourlyChartToolTip = new ToolTip();
+        private bool _isRefreshing = false;
+        private System.Windows.Forms.Timer _refreshTimer;
+        private string _lastDefectTrendKey = null;
+        private string? _lastHourlyToolTipKey = null;
         private int[] _hourlyNormal;
         private int[] _hourlyPartDefect;
         private int[] _hourlySolderDefect;
@@ -29,7 +35,7 @@ namespace pcb_monitoring_program.Views.Dashboard
 
         private void DashboardView_Load(object sender, EventArgs e)
         {
-            InitDummyData();
+
 
             UiStyleHelper.MakeRoundedPanel(cardRate, radius: 16, back: Color.FromArgb(44, 44, 44));
             UiStyleHelper.MakeRoundedPanel(cardCategory, radius: 16, back: Color.FromArgb(44, 44, 44));
@@ -53,17 +59,40 @@ namespace pcb_monitoring_program.Views.Dashboard
             UiStyleHelper.AddShadowRoundedPanel(cardLog, 16);
             UiStyleHelper.AddShadowRoundedPanel(cardTop, 16);
 
+            ReloadHourlyDataFromDb();
+
+            RedrawDashboardCharts();
+
             SetupDefectRateChart();
             SetupDefectCategoryCharts();
             SetupDailyTargetCharts();
             SetupBoxRateChart();
             SetupDefectTrendChart();
             SetupHourlyInspectionChart();
+
+            _defectTrendToolTip.AutoPopDelay = 5000;
+            _defectTrendToolTip.InitialDelay = 200;
+            _defectTrendToolTip.ReshowDelay = 100;
+
+            _hourlyChartToolTip.AutoPopDelay = 4000;
+            _hourlyChartToolTip.InitialDelay = 200;
+            _hourlyChartToolTip.ReshowDelay = 100;
+
+            _refreshTimer = new System.Windows.Forms.Timer();
+            _refreshTimer.Interval = 5_000; // 10초마다 새로고침 (원하면 3초/5초 등으로 변경)
+            _refreshTimer.Tick += (s, ev) =>
+            {
+                ReloadHourlyDataFromDb();
+                RedrawDashboardCharts();
+            };
+            _refreshTimer.Start();
         }
 
-        private void InitDummyData()
+
+        // 0) 오늘 기준 시간별 데이터 다시 로드
+        private void ReloadHourlyDataFromDb()
         {
-            // 0~23시 (길이 24)
+            // 0~23시 (길이 24) 초기화
             _hourlyNormal = new int[24];
             _hourlyPartDefect = new int[24];
             _hourlySolderDefect = new int[24];
@@ -97,13 +126,53 @@ namespace pcb_monitoring_program.Views.Dashboard
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[InitDummyData(시간별 통계 로드 실패)] {ex.Message}");
+                Console.WriteLine($"[ReloadHourlyDataFromDb 실패] {ex.Message}");
             }
         }
 
+        private void RefreshTimer_Tick(object sender, EventArgs e)
+        {
+            if (_isRefreshing) return;   // 아직 이전 작업이 안 끝났으면 그냥 패스
+
+            try
+            {
+                _isRefreshing = true;
+                ReloadHourlyDataFromDb();
+                RedrawDashboardCharts();
+            }
+            finally
+            {
+                _isRefreshing = false;
+            }
+        }
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                if (_refreshTimer != null)
+                {
+                    _refreshTimer.Stop();
+                    _refreshTimer.Tick -= RefreshTimer_Tick; // 이벤트 핸들러 분리
+                    _refreshTimer.Dispose();
+                    _refreshTimer = null;
+                }
+            }
+            base.Dispose(disposing);
+        }
+        // 1) 현재 _hourlyXXX 기준으로 모든 대시보드 차트 다시 그리기
+        private void RedrawDashboardCharts()
+        {
+            SetupDefectRateChart();
+            SetupDefectCategoryCharts();
+            SetupDailyTargetCharts();
+            SetupBoxRateChart();
+            SetupDefectTrendChart();
+            SetupHourlyInspectionChart();
+        }
+
+
         private void SetupDefectRateChart()
         {
-
             int totalNormal = _hourlyNormal.Sum();
             int totalPartDefect = _hourlyPartDefect.Sum();
             int totalSolderDefect = _hourlySolderDefect.Sum();
@@ -115,8 +184,8 @@ namespace pcb_monitoring_program.Views.Dashboard
 
             var rateData = new (string name, int value, Color color)[]
             {
-                ("정상", normalCount, Color.FromArgb(76, 175, 80)),   // 초록
-                ("불량", defectCount, Color.FromArgb(238, 99, 99))    // 빨강
+        ("정상", normalCount, Color.FromArgb(100, 181, 246)),
+        ("불량", defectCount, Color.FromArgb(244, 67, 54))
             };
 
             // 2) 차트 초기화
@@ -143,26 +212,24 @@ namespace pcb_monitoring_program.Views.Dashboard
 
             foreach (var item in rateData)
             {
-                var pt = s.Points.AddXY(item.name, item.value);
-                s.Points[pt].Color = item.color;
+                int idx = s.Points.AddXY(item.name, item.value);
+                s.Points[idx].Color = item.color;
             }
             chart.Series.Add(s);
 
-            // 3) 커스텀 레전드(FlowLayoutPanel) 동적 생성 및 추가
-            var flowLegendRate = new FlowLayoutPanel
-            {
-                Location = new Point(240, 12),
-                Size = new Size(108, 215),
-                FlowDirection = FlowDirection.TopDown,
-                WrapContents = false,
-                AutoSize = false,
-                BackColor = Color.Transparent
-            };
-            cardRate.Controls.Add(flowLegendRate);
-            flowLegendRate.BringToFront();
+            // 3) 디자이너에 올려둔 flowLegendRate 재사용 (❌ new 안 만들기!)
+            flowLegendRate.SuspendLayout();
+            flowLegendRate.Controls.Clear();
+            flowLegendRate.FlowDirection = FlowDirection.TopDown;
+            flowLegendRate.WrapContents = false;
+            flowLegendRate.AutoSize = false;
+            flowLegendRate.BackColor = Color.Transparent;
+            // Location / Size 는 디자이너에서 설정한 값 그대로 사용
 
             // 4) 불량률 표시 (크게, 눈에 띄게)
-            double defectRate = (defectCount * 100.0) / totalCount;
+            double defectRate = 0.0;
+            if (totalCount > 0)
+                defectRate = (defectCount * 100.0) / totalCount;
 
             var ratePanel = new Panel
             {
@@ -179,7 +246,7 @@ namespace pcb_monitoring_program.Views.Dashboard
                 TextAlign = ContentAlignment.MiddleCenter,
                 Text = $"{defectRate:0.#}%",
                 Font = new Font("맑은 고딕", 18, FontStyle.Bold),
-                ForeColor = Color.FromArgb(238, 99, 99)  // 빨간색
+                ForeColor = Color.FromArgb(244, 67, 54)
             };
 
             ratePanel.Controls.Add(rateLabel);
@@ -278,12 +345,15 @@ namespace pcb_monitoring_program.Views.Dashboard
                     ForeColor = Color.Gainsboro
                 };
 
-                // 클릭 시 해당 조각 강조 효과
                 EventHandler clickHandler = (_, __) =>
                 {
                     foreach (var p in s.Points) { p.BorderWidth = 0; }
                     var target = s.Points.FirstOrDefault(p => p.AxisLabel == item.name);
-                    if (target != null) { target.BorderColor = Color.White; target.BorderWidth = 3; }
+                    if (target != null)
+                    {
+                        target.BorderColor = Color.White;
+                        target.BorderWidth = 3;
+                    }
                 };
 
                 row.Cursor = Cursors.Hand;
@@ -298,6 +368,8 @@ namespace pcb_monitoring_program.Views.Dashboard
                 row.Controls.Add(lbl);
                 flowLegendRate.Controls.Add(row);
             }
+
+            flowLegendRate.ResumeLayout();
         }
 
         private void SetupDefectCategoryCharts()
@@ -310,9 +382,9 @@ namespace pcb_monitoring_program.Views.Dashboard
 
             var categories = new (string name, int value, Color color)[]
             {
-                ("부품불량", totalPartDefect,   Color.FromArgb(238, 99, 99)),
-                ("납땜불량", totalSolderDefect, Color.FromArgb(255, 170, 0)),
-                ("폐기",     totalScrap,        Color.FromArgb(120, 160, 255)),
+                ("부품불량", totalPartDefect,   Color.FromArgb(255, 167, 38)),
+                ("납땜불량", totalSolderDefect, Color.FromArgb(158, 158, 158)),
+                ("폐기",     totalScrap,        Color.FromArgb(244, 67, 54))
             };
 
             // 2) 차트 초기화
@@ -589,8 +661,8 @@ namespace pcb_monitoring_program.Views.Dashboard
             var boxData = new (string name, int current, int max, Color color)[]
             {
                 ("정상",     2, 3, Color.FromArgb(100, 181, 246)),
-                ("부품불량",  3, 3, Color.FromArgb(238,  99,  99)),
-                ("납땜불량",  1, 3, Color.FromArgb(255, 170,   0)),
+                ("부품불량",  3, 3, Color.FromArgb(255, 167, 38)),
+                ("납땜불량",  1, 3, Color.FromArgb(158, 158, 158)),
             };
 
             var chart = BoxRateChart;
@@ -679,7 +751,7 @@ namespace pcb_monitoring_program.Views.Dashboard
             var area = new ChartArea("Main");
             area.BackColor = Color.Transparent;
 
-            // X축: 일자 (1~10 예시)
+            // X축: 0~23시
             area.AxisX.Minimum = 0;
             area.AxisX.Maximum = 23;
             area.AxisX.Interval = 1;
@@ -688,15 +760,15 @@ namespace pcb_monitoring_program.Views.Dashboard
             area.AxisX.LabelStyle.Font = new Font("맑은 고딕", 9);
             area.AxisX.LabelStyle.Format = "0시";
 
-            // Y축: 불량률(%) 0~100
-            area.AxisY.Minimum = 0;
-            area.AxisY.Maximum = 60;
-            area.AxisY.Interval = 10;
+            // ✅ Y축: 0.0 ~ 0.5 (0% ~ 50%), 값은 '비율'로, 표시만 %로
+            area.AxisY.Minimum = 0.0;
+            area.AxisY.Maximum = 0.5;      // 50%
+            area.AxisY.Interval = 0.1;     // 10% 단위
             area.AxisY.MajorGrid.Enabled = true;
             area.AxisY.MajorGrid.LineColor = Color.FromArgb(70, 70, 70);
             area.AxisY.LabelStyle.ForeColor = Color.Gainsboro;
             area.AxisY.LabelStyle.Font = new Font("맑은 고딕", 9);
-
+            area.AxisY.LabelStyle.Format = "0%";   // ← 비율(0~1)을 %로 표시
             chart.ChartAreas.Add(area);
 
             // 3) Series들 생성
@@ -761,7 +833,7 @@ namespace pcb_monitoring_program.Views.Dashboard
             chart.Series.Add(sLcl);
             chart.Series.Add(sOutlier);
 
-            // 4) 임시 데이터 (나중에 DB 값으로 바꾸면 됨)
+            // 4) 불량률 계산 (✅ 이제 0~1 사이 '비율'로 저장)
             double[] defectRates = new double[24];
 
             for (int hour = 0; hour < 24; hour++)
@@ -774,11 +846,14 @@ namespace pcb_monitoring_program.Views.Dashboard
                 int total = normal + part + solder + scrap;
                 int defects = part + solder + scrap;
 
-                defectRates[hour] = total == 0 ? 0 : defects * 100.0 / total;
+                // 🔥 여기에서 더 이상 *100 안 함! (그냥 비율)
+                defectRates[hour] = total == 0 ? 0.0 : defects * 1.0 / total;
             }
-            double avg = defectRates.Average();
-            double ucl = 30.0;                      // 예시 상한선
-            double lcl = 10.0;                      // 예시 하한선
+
+            // 평균/관리선도 비율(0~1)로
+            double avg = 0.20; // 20%
+            double ucl = 0.30; // 30%
+            double lcl = 0.10; // 10%
 
             for (int hour = 0; hour < defectRates.Length; hour++)
             {
@@ -794,7 +869,7 @@ namespace pcb_monitoring_program.Views.Dashboard
                     sOutlier.Points.AddXY(x, y);
             }
 
-            // 5) 레전드 기본 사용 (필요 없으면 지우거나 커스텀)
+            // 5) 레전드
             var legend = new Legend
             {
                 Docking = Docking.Top,
@@ -805,6 +880,7 @@ namespace pcb_monitoring_program.Views.Dashboard
             };
             chart.Legends.Add(legend);
         }
+
         private void SetupHourlyInspectionChart()
         {
             var chart = HourlyInspectionChart;
@@ -823,8 +899,8 @@ namespace pcb_monitoring_program.Views.Dashboard
             area.BackColor = Color.Transparent;
 
             // X축: 시간(0~23)
-            area.AxisX.Minimum = 0;
-            area.AxisX.Maximum = 23;
+            area.AxisX.Minimum = -1;
+            area.AxisX.Maximum = 24;
             area.AxisX.Interval = 1;
             area.AxisX.MajorGrid.Enabled = false;
             area.AxisX.LabelStyle.ForeColor = Color.Gainsboro;
@@ -855,21 +931,21 @@ namespace pcb_monitoring_program.Views.Dashboard
             {
                 ChartArea = "Main",
                 ChartType = SeriesChartType.StackedColumn,
-                Color = Color.Orange  // 주황
+                Color = Color.FromArgb(255, 167, 38)
             };
 
             Series sSolderDefect = new Series("납땜불량")
             {
                 ChartArea = "Main",
                 ChartType = SeriesChartType.StackedColumn,
-                Color = Color.Yellow  // 노랑
+                Color = Color.FromArgb(158, 158, 158)
             };
 
             Series sScrap = new Series("폐기")
             {
                 ChartArea = "Main",
                 ChartType = SeriesChartType.StackedColumn,
-                Color = Color.Red     // 빨강
+                Color = Color.Red
             };
 
             chart.Series.Add(sNormal);
@@ -902,6 +978,139 @@ namespace pcb_monitoring_program.Views.Dashboard
                 Font = new Font("맑은 고딕", 8)
             };
             chart.Legends.Add(legend);
+        }
+
+        private void DefectTrendChart_MouseMove(object sender, MouseEventArgs e)
+        {
+            var chart = (Chart)sender;
+
+            // 마우스 위치로 히트 테스트
+            var hit = chart.HitTest(e.X, e.Y);
+
+            // 기본 커서
+            chart.Cursor = Cursors.Default;
+
+            // 데이터 포인트 아니면 툴팁 숨김 + 상태 리셋
+            if (hit.ChartElementType != ChartElementType.DataPoint ||
+                hit.PointIndex < 0 ||
+                hit.Series == null)
+            {
+                _defectTrendToolTip.Hide(chart);
+                _lastDefectTrendKey = null;
+                return;
+            }
+
+            var series = hit.Series;
+
+            // 🔹 "실제 불량률" 라인에만 툴팁 표시
+            if (series.Name != "실제 불량률")
+            {
+                _defectTrendToolTip.Hide(chart);
+                _lastDefectTrendKey = null;
+                return;
+            }
+
+            chart.Cursor = Cursors.Hand;
+
+            var point = series.Points[hit.PointIndex];
+
+            int hour = (int)point.XValue;        // 0 ~ 23시
+            double rate = point.YValues[0];      // 0.0 ~ 0.5 (비율)
+
+            // 같은 포인트에서 계속 움직이면 다시 툴팁 안 띄우게
+            string key = $"actual_{hour}";
+            if (_lastDefectTrendKey == key)
+                return;
+
+            _lastDefectTrendKey = key;
+
+            // ✅ DashboardView에 이미 있는 시간별 배열 사용 (너가 DailyTargetChart에서 쓰던 그거)
+            int normal = _hourlyNormal[hour];
+            int part = _hourlyPartDefect[hour];
+            int solder = _hourlySolderDefect[hour];
+            int scrap = _hourlyScrap[hour];
+
+            int total = normal + part + solder + scrap;
+            int defects = part + solder + scrap;
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"{hour:00}시");
+            sb.AppendLine($"실제 불량률: {rate * 100:0.0}%");
+            sb.AppendLine($"총 검사: {total}개");
+            sb.AppendLine($"정상: {normal} / 부품: {part} / 납땜: {solder} / 폐기: {scrap}");
+            sb.AppendLine($"불량 합계: {defects}개");
+
+            _defectTrendToolTip.Show(
+                sb.ToString(),
+                chart,
+                e.Location.X + 15,
+                e.Location.Y - 15
+            );
+        }
+
+        private void HourlyInspectionChart_MouseMove(object sender, MouseEventArgs e)
+        {
+            var chart = (Chart)sender;
+
+            // 마우스 위치로 히트 테스트
+            var hit = chart.HitTest(e.X, e.Y);
+
+            // 데이터 포인트 위에 있을 때만 처리
+            if (hit.ChartElementType == ChartElementType.DataPoint &&
+                hit.Series != null &&
+                hit.PointIndex >= 0)
+            {
+                var series = hit.Series;
+                int pointIndex = hit.PointIndex;
+
+                // X값 = 시간(0~23), Y값 = 해당 시리즈 개수
+                int hour = (int)series.Points[pointIndex].XValue;
+                int value = (int)series.Points[pointIndex].YValues[0];
+
+                // 🔹 같은 포인트에서 계속 움직일 때 깜빡임 방지
+                string key = $"{series.Name}_{pointIndex}";
+                if (_lastHourlyToolTipKey == key)
+                    return;
+
+                _lastHourlyToolTipKey = key;
+
+                // ─ 시간대별 전체 합산 (스택형 막대 기준)
+                int normal = 0, comp = 0, solder = 0, scrap = 0;
+
+                if (chart.Series.IndexOf("정상") >= 0)
+                    normal = (int)chart.Series["정상"].Points[pointIndex].YValues[0];
+                if (chart.Series.IndexOf("부품불량") >= 0)
+                    comp = (int)chart.Series["부품불량"].Points[pointIndex].YValues[0];
+                if (chart.Series.IndexOf("납땜불량") >= 0)
+                    solder = (int)chart.Series["납땜불량"].Points[pointIndex].YValues[0];
+                if (chart.Series.IndexOf("폐기") >= 0)
+                    scrap = (int)chart.Series["폐기"].Points[pointIndex].YValues[0];
+
+                int total = normal + comp + solder + scrap;
+                int defectSum = comp + solder + scrap;
+                double defectRate = total > 0 ? defectSum * 100.0 / total : 0.0;
+
+                // 🔹 툴팁 텍스트 예쁘게 구성
+                var sb = new StringBuilder();
+                sb.AppendLine($"{hour:00}시");
+                sb.AppendLine($"[{series.Name}] {value}개");
+                sb.AppendLine($"총 검사: {total}개");
+                sb.AppendLine($"정상: {normal} / 부품: {comp} / 납땜: {solder} / 폐기: {scrap}");
+                sb.AppendLine($"불량률: {defectRate:0.0}% ({defectSum}개)");
+
+                _hourlyChartToolTip.Show(
+                    sb.ToString(),
+                    chart,
+                    e.Location.X + 15,
+                    e.Location.Y - 15
+                );
+            }
+            else
+            {
+                // 포인트 위가 아니면 툴팁 숨김 + 상태 리셋
+                _hourlyChartToolTip.Hide(chart);
+                _lastHourlyToolTipKey = null;
+            }
         }
     }
 }

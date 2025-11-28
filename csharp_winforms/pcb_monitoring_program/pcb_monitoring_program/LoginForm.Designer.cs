@@ -30,6 +30,7 @@
         {
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(LoginForm));
             cardLogin = new Panel();
+            btn_login_PW = new Button();
             passwordTextBox = new TextBox();
             userIdTextBox = new TextBox();
             btn_login = new Button();
@@ -52,6 +53,7 @@
             // cardLogin
             // 
             cardLogin.BackColor = Color.FromArgb(44, 44, 44);
+            cardLogin.Controls.Add(btn_login_PW);
             cardLogin.Controls.Add(passwordTextBox);
             cardLogin.Controls.Add(userIdTextBox);
             cardLogin.Controls.Add(btn_login);
@@ -70,6 +72,21 @@
             cardLogin.Size = new Size(630, 600);
             cardLogin.TabIndex = 19;
             // 
+            // btn_login_PW
+            // 
+            btn_login_PW.BackColor = Color.FromArgb(44, 44, 44);
+            btn_login_PW.BackgroundImage = (Image)resources.GetObject("btn_login_PW.BackgroundImage");
+            btn_login_PW.FlatAppearance.BorderSize = 0;
+            btn_login_PW.FlatStyle = FlatStyle.Flat;
+            btn_login_PW.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            btn_login_PW.ForeColor = Color.White;
+            btn_login_PW.Location = new Point(435, 343);
+            btn_login_PW.Name = "btn_login_PW";
+            btn_login_PW.Size = new Size(100, 50);
+            btn_login_PW.TabIndex = 20;
+            btn_login_PW.UseVisualStyleBackColor = false;
+            btn_login_PW.Click += btn_login_PW_Click;
+            // 
             // passwordTextBox
             // 
             passwordTextBox.BackColor = Color.FromArgb(44, 44, 44);
@@ -78,7 +95,7 @@
             passwordTextBox.ForeColor = Color.White;
             passwordTextBox.Location = new Point(223, 359);
             passwordTextBox.Name = "passwordTextBox";
-            passwordTextBox.Size = new Size(312, 37);
+            passwordTextBox.Size = new Size(206, 37);
             passwordTextBox.TabIndex = 40;
             passwordTextBox.UseSystemPasswordChar = true;
             // 
@@ -246,5 +263,6 @@
         private Button btn_login;
         private TextBox passwordTextBox;
         private TextBox userIdTextBox;
+        private Button btn_login_PW;
     }
 }

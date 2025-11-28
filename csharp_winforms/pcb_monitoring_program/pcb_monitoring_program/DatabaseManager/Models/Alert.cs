@@ -2,7 +2,9 @@ using System;
 
 namespace pcb_monitoring_program.DatabaseManager.Models
 {
-    /// 알람/알림 모델
+    /// <summary>
+    /// 알람/알림 모델 (v3.1 스키마)
+    /// </summary>
     public class Alert
     {
         public int Id { get; set; }

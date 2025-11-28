@@ -31,6 +31,8 @@
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(UserManagementForm_AddUser));
             cardAddUserBackground = new Panel();
             cardAddUser = new Panel();
+            btn_UM_Add_ID_Check = new Button();
+            btn_UM_Add_PW = new Button();
             panel1 = new Panel();
             label_UM_ADD_Name = new Label();
             textbox_UM_ADD_Name = new TextBox();
@@ -72,6 +74,8 @@
             // cardAddUser
             // 
             cardAddUser.BackColor = Color.FromArgb(44, 44, 44);
+            cardAddUser.Controls.Add(btn_UM_Add_ID_Check);
+            cardAddUser.Controls.Add(btn_UM_Add_PW);
             cardAddUser.Controls.Add(panel1);
             cardAddUser.Controls.Add(label_UM_ADD_Name);
             cardAddUser.Controls.Add(textbox_UM_ADD_Name);
@@ -98,6 +102,36 @@
             cardAddUser.Name = "cardAddUser";
             cardAddUser.Size = new Size(665, 740);
             cardAddUser.TabIndex = 5;
+            // 
+            // btn_UM_Add_ID_Check
+            // 
+            btn_UM_Add_ID_Check.BackColor = Color.FromArgb(44, 44, 44);
+            btn_UM_Add_ID_Check.FlatAppearance.BorderSize = 0;
+            btn_UM_Add_ID_Check.FlatStyle = FlatStyle.Flat;
+            btn_UM_Add_ID_Check.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            btn_UM_Add_ID_Check.ForeColor = Color.White;
+            btn_UM_Add_ID_Check.Location = new Point(475, 185);
+            btn_UM_Add_ID_Check.Name = "btn_UM_Add_ID_Check";
+            btn_UM_Add_ID_Check.Size = new Size(100, 50);
+            btn_UM_Add_ID_Check.TabIndex = 1;
+            btn_UM_Add_ID_Check.Text = "중복 확인";
+            btn_UM_Add_ID_Check.UseVisualStyleBackColor = false;
+            btn_UM_Add_ID_Check.Click += btn_UM_Add_ID_Check_Click;
+            // 
+            // btn_UM_Add_PW
+            // 
+            btn_UM_Add_PW.BackColor = Color.FromArgb(44, 44, 44);
+            btn_UM_Add_PW.BackgroundImage = (Image)resources.GetObject("btn_UM_Add_PW.BackgroundImage");
+            btn_UM_Add_PW.FlatAppearance.BorderSize = 0;
+            btn_UM_Add_PW.FlatStyle = FlatStyle.Flat;
+            btn_UM_Add_PW.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            btn_UM_Add_PW.ForeColor = Color.White;
+            btn_UM_Add_PW.Location = new Point(476, 342);
+            btn_UM_Add_PW.Name = "btn_UM_Add_PW";
+            btn_UM_Add_PW.Size = new Size(100, 50);
+            btn_UM_Add_PW.TabIndex = 7;
+            btn_UM_Add_PW.UseVisualStyleBackColor = false;
+            btn_UM_Add_PW.Click += btn_UM_Add_PW_Click;
             // 
             // panel1
             // 
@@ -128,7 +162,7 @@
             textbox_UM_ADD_Name.Location = new Point(224, 280);
             textbox_UM_ADD_Name.Name = "textbox_UM_ADD_Name";
             textbox_UM_ADD_Name.Size = new Size(340, 37);
-            textbox_UM_ADD_Name.TabIndex = 33;
+            textbox_UM_ADD_Name.TabIndex = 2;
             // 
             // CB_UM_ADD_Active_True
             // 
@@ -138,7 +172,7 @@
             CB_UM_ADD_Active_True.Location = new Point(223, 511);
             CB_UM_ADD_Active_True.Name = "CB_UM_ADD_Active_True";
             CB_UM_ADD_Active_True.Size = new Size(117, 41);
-            CB_UM_ADD_Active_True.TabIndex = 32;
+            CB_UM_ADD_Active_True.TabIndex = 5;
             CB_UM_ADD_Active_True.Text = "활성화";
             CB_UM_ADD_Active_True.UseVisualStyleBackColor = true;
             // 
@@ -201,7 +235,7 @@
             kComboBox_UM_ADD_Role.StateCommon.ComboBox.Border.DrawBorders = ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Top | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Bottom | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Left | ComponentFactory.Krypton.Toolkit.PaletteDrawBorders.Right;
             kComboBox_UM_ADD_Role.StateCommon.ComboBox.Content.Color1 = Color.White;
             kComboBox_UM_ADD_Role.StateCommon.ComboBox.Content.Font = new Font("맑은 고딕", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
-            kComboBox_UM_ADD_Role.TabIndex = 30;
+            kComboBox_UM_ADD_Role.TabIndex = 6;
             // 
             // label_UM_ADD_AddUser
             // 
@@ -224,7 +258,7 @@
             btn_UM_ADD_cancel.Location = new Point(550, 671);
             btn_UM_ADD_cancel.Name = "btn_UM_ADD_cancel";
             btn_UM_ADD_cancel.Size = new Size(100, 50);
-            btn_UM_ADD_cancel.TabIndex = 29;
+            btn_UM_ADD_cancel.TabIndex = 9;
             btn_UM_ADD_cancel.Text = "취소";
             btn_UM_ADD_cancel.UseVisualStyleBackColor = false;
             btn_UM_ADD_cancel.Click += btn_UserManage_cancel_Click;
@@ -239,7 +273,7 @@
             btn_UM_ADD_AddUser.Location = new Point(433, 671);
             btn_UM_ADD_AddUser.Name = "btn_UM_ADD_AddUser";
             btn_UM_ADD_AddUser.Size = new Size(100, 50);
-            btn_UM_ADD_AddUser.TabIndex = 28;
+            btn_UM_ADD_AddUser.TabIndex = 8;
             btn_UM_ADD_AddUser.Text = "추가";
             btn_UM_ADD_AddUser.UseVisualStyleBackColor = false;
             btn_UM_ADD_AddUser.Click += btn_UserManage_AddUser_Click;
@@ -283,8 +317,8 @@
             textbox_UM_ADD_VerifyPW.ForeColor = SystemColors.Window;
             textbox_UM_ADD_VerifyPW.Location = new Point(224, 444);
             textbox_UM_ADD_VerifyPW.Name = "textbox_UM_ADD_VerifyPW";
-            textbox_UM_ADD_VerifyPW.Size = new Size(340, 37);
-            textbox_UM_ADD_VerifyPW.TabIndex = 22;
+            textbox_UM_ADD_VerifyPW.Size = new Size(246, 37);
+            textbox_UM_ADD_VerifyPW.TabIndex = 4;
             // 
             // label_UM_ADD_PW
             // 
@@ -305,8 +339,8 @@
             textbox_UM_ADD_PW.ForeColor = SystemColors.Window;
             textbox_UM_ADD_PW.Location = new Point(224, 362);
             textbox_UM_ADD_PW.Name = "textbox_UM_ADD_PW";
-            textbox_UM_ADD_PW.Size = new Size(340, 37);
-            textbox_UM_ADD_PW.TabIndex = 19;
+            textbox_UM_ADD_PW.Size = new Size(246, 37);
+            textbox_UM_ADD_PW.TabIndex = 3;
             // 
             // label_UM_ADD_ID
             // 
@@ -327,8 +361,8 @@
             textbox_UM_ADD_ID.ForeColor = SystemColors.Window;
             textbox_UM_ADD_ID.Location = new Point(224, 198);
             textbox_UM_ADD_ID.Name = "textbox_UM_ADD_ID";
-            textbox_UM_ADD_ID.Size = new Size(340, 37);
-            textbox_UM_ADD_ID.TabIndex = 16;
+            textbox_UM_ADD_ID.Size = new Size(246, 37);
+            textbox_UM_ADD_ID.TabIndex = 0;
             // 
             // label_UM_ADD_Active
             // 
@@ -383,5 +417,7 @@
         private Panel panel1;
         private Label label_UM_ADD_Name;
         private TextBox textbox_UM_ADD_Name;
+        private Button btn_UM_Add_PW;
+        private Button btn_UM_Add_ID_Check;
     }
 }

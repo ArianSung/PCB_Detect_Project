@@ -37,6 +37,9 @@
             System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea3 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
             System.Windows.Forms.DataVisualization.Charting.Legend legend3 = new System.Windows.Forms.DataVisualization.Charting.Legend();
             System.Windows.Forms.DataVisualization.Charting.Series series3 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea4 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend4 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series4 = new System.Windows.Forms.DataVisualization.Charting.Series();
             cardMonthlyLine = new Panel();
             lblMonthlyLineTitle = new Label();
             MonthlyLineChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
@@ -51,12 +54,18 @@
             DefectTypePieChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
             btn_Excel = new Button();
             dtpMonth = new ComponentFactory.Krypton.Toolkit.KryptonDateTimePicker();
+            cardMonthlyTarget = new Panel();
+            lblMonthlyTargetTitle = new Label();
+            flowLegendMonthlyTarget = new FlowLayoutPanel();
+            MonthlyTargetChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
             cardMonthlyLine.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)MonthlyLineChart).BeginInit();
             cardMonthlyAccum.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)MonthlyAccumChart).BeginInit();
             cardDefectPie.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)DefectTypePieChart).BeginInit();
+            cardMonthlyTarget.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)MonthlyTargetChart).BeginInit();
             SuspendLayout();
             // 
             // cardMonthlyLine
@@ -104,9 +113,9 @@
             cardMonthlyAccum.Controls.Add(panel2);
             cardMonthlyAccum.Controls.Add(panel1);
             cardMonthlyAccum.Controls.Add(MonthlyAccumChart);
-            cardMonthlyAccum.Location = new Point(851, 105);
+            cardMonthlyAccum.Location = new Point(833, 411);
             cardMonthlyAccum.Name = "cardMonthlyAccum";
-            cardMonthlyAccum.Size = new Size(746, 294);
+            cardMonthlyAccum.Size = new Size(764, 294);
             cardMonthlyAccum.TabIndex = 2;
             // 
             // lblMonthlyAccumTitle
@@ -122,14 +131,14 @@
             // 
             // panel2
             // 
-            panel2.Location = new Point(629, 250);
+            panel2.Location = new Point(697, 250);
             panel2.Name = "panel2";
             panel2.Size = new Size(35, 30);
             panel2.TabIndex = 5;
             // 
             // panel1
             // 
-            panel1.Location = new Point(113, 250);
+            panel1.Location = new Point(58, 250);
             panel1.Name = "panel1";
             panel1.Size = new Size(44, 30);
             panel1.TabIndex = 4;
@@ -140,24 +149,25 @@
             MonthlyAccumChart.ChartAreas.Add(chartArea2);
             legend2.Name = "Legend1";
             MonthlyAccumChart.Legends.Add(legend2);
-            MonthlyAccumChart.Location = new Point(65, 38);
+            MonthlyAccumChart.Location = new Point(3, 38);
             MonthlyAccumChart.Name = "MonthlyAccumChart";
             series2.ChartArea = "ChartArea1";
             series2.Legend = "Legend1";
             series2.Name = "Series1";
             MonthlyAccumChart.Series.Add(series2);
-            MonthlyAccumChart.Size = new Size(623, 242);
+            MonthlyAccumChart.Size = new Size(758, 242);
             MonthlyAccumChart.TabIndex = 0;
             MonthlyAccumChart.Text = "chart1";
+            MonthlyAccumChart.MouseMove += MonthlyAccumChart_MouseMove;
             // 
             // cardDefectPie
             // 
             cardDefectPie.Controls.Add(lblDefectPieTitle);
             cardDefectPie.Controls.Add(flowPie);
             cardDefectPie.Controls.Add(DefectTypePieChart);
-            cardDefectPie.Location = new Point(851, 411);
+            cardDefectPie.Location = new Point(1220, 105);
             cardDefectPie.Name = "cardDefectPie";
-            cardDefectPie.Size = new Size(746, 294);
+            cardDefectPie.Size = new Size(377, 294);
             cardDefectPie.TabIndex = 3;
             // 
             // lblDefectPieTitle
@@ -173,9 +183,9 @@
             // 
             // flowPie
             // 
-            flowPie.Location = new Point(585, 41);
+            flowPie.Location = new Point(220, 46);
             flowPie.Name = "flowPie";
-            flowPie.Size = new Size(137, 230);
+            flowPie.Size = new Size(140, 230);
             flowPie.TabIndex = 5;
             // 
             // DefectTypePieChart
@@ -185,14 +195,14 @@
             DefectTypePieChart.ChartAreas.Add(chartArea3);
             legend3.Name = "Legend1";
             DefectTypePieChart.Legends.Add(legend3);
-            DefectTypePieChart.Location = new Point(65, 27);
+            DefectTypePieChart.Location = new Point(3, 27);
             DefectTypePieChart.Name = "DefectTypePieChart";
             series3.ChartArea = "ChartArea1";
             series3.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Pie;
             series3.Legend = "Legend1";
             series3.Name = "Series1";
             DefectTypePieChart.Series.Add(series3);
-            DefectTypePieChart.Size = new Size(476, 267);
+            DefectTypePieChart.Size = new Size(211, 267);
             DefectTypePieChart.TabIndex = 1;
             DefectTypePieChart.Text = "chart2";
             // 
@@ -223,11 +233,58 @@
             dtpMonth.TabIndex = 9;
             dtpMonth.ValueChanged += dtpMonth_ValueChanged;
             // 
+            // cardMonthlyTarget
+            // 
+            cardMonthlyTarget.Controls.Add(lblMonthlyTargetTitle);
+            cardMonthlyTarget.Controls.Add(flowLegendMonthlyTarget);
+            cardMonthlyTarget.Controls.Add(MonthlyTargetChart);
+            cardMonthlyTarget.Location = new Point(833, 105);
+            cardMonthlyTarget.Name = "cardMonthlyTarget";
+            cardMonthlyTarget.Size = new Size(377, 294);
+            cardMonthlyTarget.TabIndex = 7;
+            // 
+            // lblMonthlyTargetTitle
+            // 
+            lblMonthlyTargetTitle.AutoSize = true;
+            lblMonthlyTargetTitle.Font = new Font("맑은 고딕", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            lblMonthlyTargetTitle.ForeColor = SystemColors.Window;
+            lblMonthlyTargetTitle.Location = new Point(0, -9);
+            lblMonthlyTargetTitle.Name = "lblMonthlyTargetTitle";
+            lblMonthlyTargetTitle.Size = new Size(134, 30);
+            lblMonthlyTargetTitle.TabIndex = 6;
+            lblMonthlyTargetTitle.Text = "2000년 00월";
+            // 
+            // flowLegendMonthlyTarget
+            // 
+            flowLegendMonthlyTarget.Location = new Point(220, 46);
+            flowLegendMonthlyTarget.Name = "flowLegendMonthlyTarget";
+            flowLegendMonthlyTarget.Size = new Size(142, 230);
+            flowLegendMonthlyTarget.TabIndex = 5;
+            // 
+            // MonthlyTargetChart
+            // 
+            MonthlyTargetChart.BackColor = Color.Transparent;
+            chartArea4.Name = "ChartArea1";
+            MonthlyTargetChart.ChartAreas.Add(chartArea4);
+            legend4.Name = "Legend1";
+            MonthlyTargetChart.Legends.Add(legend4);
+            MonthlyTargetChart.Location = new Point(3, 27);
+            MonthlyTargetChart.Name = "MonthlyTargetChart";
+            series4.ChartArea = "ChartArea1";
+            series4.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Pie;
+            series4.Legend = "Legend1";
+            series4.Name = "Series1";
+            MonthlyTargetChart.Series.Add(series4);
+            MonthlyTargetChart.Size = new Size(211, 267);
+            MonthlyTargetChart.TabIndex = 1;
+            MonthlyTargetChart.Text = "chart2";
+            // 
             // StatisticsView
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(64, 64, 64);
+            Controls.Add(cardMonthlyTarget);
             Controls.Add(dtpMonth);
             Controls.Add(btn_Excel);
             Controls.Add(cardDefectPie);
@@ -245,6 +302,9 @@
             cardDefectPie.ResumeLayout(false);
             cardDefectPie.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)DefectTypePieChart).EndInit();
+            cardMonthlyTarget.ResumeLayout(false);
+            cardMonthlyTarget.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)MonthlyTargetChart).EndInit();
             ResumeLayout(false);
         }
 
@@ -264,5 +324,9 @@
         private Label lblMonthlyLineTitle;
         private Label lblMonthlyAccumTitle;
         private Label lblDefectPieTitle;
+        private Panel cardMonthlyTarget;
+        private Label lblMonthlyTargetTitle;
+        private FlowLayoutPanel flowLegendMonthlyTarget;
+        private System.Windows.Forms.DataVisualization.Charting.Chart MonthlyTargetChart;
     }
 }

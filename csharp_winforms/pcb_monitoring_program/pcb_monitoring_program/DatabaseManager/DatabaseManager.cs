@@ -76,10 +76,16 @@ namespace pcb_monitoring_program.DatabaseManager
                 {
                     conn.Open();
 
-                    // 동적 쿼리 생성
+                    // v3.0 스키마에 맞춘 쿼리 (30+ 컬럼)
                     string query = @"
-                        SELECT id, camera_id, defect_type, confidence, inspection_time,
-                               image_path, boxes, gpio_pin, gpio_duration_ms, user_id, notes
+                        SELECT id, serial_number, product_code, qr_data, qr_detected, serial_detected,
+                               decision, missing_count, position_error_count, extra_count, correct_count,
+                               missing_components, position_errors, extra_components,
+                               yolo_detections, detection_count, avg_confidence,
+                               inference_time_ms, verification_time_ms, total_time_ms,
+                               left_image_path, right_image_path, image_width, image_height,
+                               camera_id, client_ip, server_version,
+                               user_id, notes, inspection_time, created_at
                         FROM inspections
                         WHERE 1=1";
 
@@ -102,8 +108,8 @@ namespace pcb_monitoring_program.DatabaseManager
 
                         if (!string.IsNullOrEmpty(filter.DefectType))
                         {
-                            query += " AND defect_type = @defectType";
-                            parameters.Add(new MySqlParameter("@defectType", filter.DefectType));
+                            query += " AND decision = @decision";
+                            parameters.Add(new MySqlParameter("@decision", filter.DefectType));
                         }
 
                         if (!string.IsNullOrEmpty(filter.CameraId))
@@ -134,17 +140,37 @@ namespace pcb_monitoring_program.DatabaseManager
                             {
                                 inspections.Add(new Inspection
                                 {
-                                    Id = reader.GetInt32("id"),
-                                    CameraId = reader.GetString("camera_id"),
-                                    DefectType = reader.GetString("defect_type"),
-                                    Confidence = reader.GetDouble("confidence"),
-                                    InspectionTime = reader.GetDateTime("inspection_time"),
-                                    ImagePath = reader.IsDBNull(reader.GetOrdinal("image_path")) ? null : reader.GetString("image_path"),
-                                    Boxes = reader.IsDBNull(reader.GetOrdinal("boxes")) ? null : reader.GetString("boxes"),
-                                    GpioPin = reader.IsDBNull(reader.GetOrdinal("gpio_pin")) ? (int?)null : reader.GetInt32("gpio_pin"),
-                                    GpioDurationMs = reader.IsDBNull(reader.GetOrdinal("gpio_duration_ms")) ? (int?)null : reader.GetInt32("gpio_duration_ms"),
+                                    Id = reader.GetInt64("id"),
+                                    SerialNumber = reader.GetString("serial_number"),
+                                    ProductCode = reader.GetString("product_code"),
+                                    QrData = reader.IsDBNull(reader.GetOrdinal("qr_data")) ? null : reader.GetString("qr_data"),
+                                    QrDetected = reader.GetBoolean("qr_detected"),
+                                    SerialDetected = reader.GetBoolean("serial_detected"),
+                                    Decision = reader.GetString("decision"),
+                                    MissingCount = reader.GetInt32("missing_count"),
+                                    PositionErrorCount = reader.GetInt32("position_error_count"),
+                                    ExtraCount = reader.GetInt32("extra_count"),
+                                    CorrectCount = reader.GetInt32("correct_count"),
+                                    MissingComponents = reader.IsDBNull(reader.GetOrdinal("missing_components")) ? null : reader.GetString("missing_components"),
+                                    PositionErrors = reader.IsDBNull(reader.GetOrdinal("position_errors")) ? null : reader.GetString("position_errors"),
+                                    ExtraComponents = reader.IsDBNull(reader.GetOrdinal("extra_components")) ? null : reader.GetString("extra_components"),
+                                    YoloDetections = reader.IsDBNull(reader.GetOrdinal("yolo_detections")) ? null : reader.GetString("yolo_detections"),
+                                    DetectionCount = reader.GetInt32("detection_count"),
+                                    AvgConfidence = reader.IsDBNull(reader.GetOrdinal("avg_confidence")) ? (float?)null : reader.GetFloat("avg_confidence"),
+                                    InferenceTimeMs = reader.IsDBNull(reader.GetOrdinal("inference_time_ms")) ? (float?)null : reader.GetFloat("inference_time_ms"),
+                                    VerificationTimeMs = reader.IsDBNull(reader.GetOrdinal("verification_time_ms")) ? (float?)null : reader.GetFloat("verification_time_ms"),
+                                    TotalTimeMs = reader.IsDBNull(reader.GetOrdinal("total_time_ms")) ? (float?)null : reader.GetFloat("total_time_ms"),
+                                    LeftImagePath = reader.IsDBNull(reader.GetOrdinal("left_image_path")) ? null : reader.GetString("left_image_path"),
+                                    RightImagePath = reader.IsDBNull(reader.GetOrdinal("right_image_path")) ? null : reader.GetString("right_image_path"),
+                                    ImageWidth = reader.IsDBNull(reader.GetOrdinal("image_width")) ? (int?)null : reader.GetInt32("image_width"),
+                                    ImageHeight = reader.IsDBNull(reader.GetOrdinal("image_height")) ? (int?)null : reader.GetInt32("image_height"),
+                                    CameraId = reader.IsDBNull(reader.GetOrdinal("camera_id")) ? null : reader.GetString("camera_id"),
+                                    ClientIp = reader.IsDBNull(reader.GetOrdinal("client_ip")) ? null : reader.GetString("client_ip"),
+                                    ServerVersion = reader.IsDBNull(reader.GetOrdinal("server_version")) ? null : reader.GetString("server_version"),
                                     UserId = reader.IsDBNull(reader.GetOrdinal("user_id")) ? (int?)null : reader.GetInt32("user_id"),
-                                    Notes = reader.IsDBNull(reader.GetOrdinal("notes")) ? null : reader.GetString("notes")
+                                    Notes = reader.IsDBNull(reader.GetOrdinal("notes")) ? null : reader.GetString("notes"),
+                                    InspectionTime = reader.GetDateTime("inspection_time"),
+                                    CreatedAt = reader.GetDateTime("created_at")
                                 });
                             }
                         }
@@ -163,10 +189,10 @@ namespace pcb_monitoring_program.DatabaseManager
             return inspections;
         }
 
-        /// 특정 검사 ID로 검사 이력 조회
-        /// <param name="id">검사 ID</param>
+        /// 특정 검사 ID로 검사 이력 조회 (v3.0 스키마)
+        /// <param name="id">검사 ID (BIGINT)</param>
         /// <returns>검사 이력 객체 (없으면 null)</returns>
-        public Inspection GetInspectionById(int id)
+        public Inspection GetInspectionById(long id)
         {
             try
             {
@@ -175,8 +201,14 @@ namespace pcb_monitoring_program.DatabaseManager
                     conn.Open();
 
                     string query = @"
-                        SELECT id, camera_id, defect_type, confidence, inspection_time,
-                               image_path, boxes, gpio_pin, gpio_duration_ms, user_id, notes
+                        SELECT id, serial_number, product_code, qr_data, qr_detected, serial_detected,
+                               decision, missing_count, position_error_count, extra_count, correct_count,
+                               missing_components, position_errors, extra_components,
+                               yolo_detections, detection_count, avg_confidence,
+                               inference_time_ms, verification_time_ms, total_time_ms,
+                               left_image_path, right_image_path, image_width, image_height,
+                               camera_id, client_ip, server_version,
+                               user_id, notes, inspection_time, created_at
                         FROM inspections
                         WHERE id = @id";
 
@@ -190,17 +222,37 @@ namespace pcb_monitoring_program.DatabaseManager
                             {
                                 return new Inspection
                                 {
-                                    Id = reader.GetInt32("id"),
-                                    CameraId = reader.GetString("camera_id"),
-                                    DefectType = reader.GetString("defect_type"),
-                                    Confidence = reader.GetDouble("confidence"),
-                                    InspectionTime = reader.GetDateTime("inspection_time"),
-                                    ImagePath = reader.IsDBNull(reader.GetOrdinal("image_path")) ? null : reader.GetString("image_path"),
-                                    Boxes = reader.IsDBNull(reader.GetOrdinal("boxes")) ? null : reader.GetString("boxes"),
-                                    GpioPin = reader.IsDBNull(reader.GetOrdinal("gpio_pin")) ? (int?)null : reader.GetInt32("gpio_pin"),
-                                    GpioDurationMs = reader.IsDBNull(reader.GetOrdinal("gpio_duration_ms")) ? (int?)null : reader.GetInt32("gpio_duration_ms"),
+                                    Id = reader.GetInt64("id"),
+                                    SerialNumber = reader.GetString("serial_number"),
+                                    ProductCode = reader.GetString("product_code"),
+                                    QrData = reader.IsDBNull(reader.GetOrdinal("qr_data")) ? null : reader.GetString("qr_data"),
+                                    QrDetected = reader.GetBoolean("qr_detected"),
+                                    SerialDetected = reader.GetBoolean("serial_detected"),
+                                    Decision = reader.GetString("decision"),
+                                    MissingCount = reader.GetInt32("missing_count"),
+                                    PositionErrorCount = reader.GetInt32("position_error_count"),
+                                    ExtraCount = reader.GetInt32("extra_count"),
+                                    CorrectCount = reader.GetInt32("correct_count"),
+                                    MissingComponents = reader.IsDBNull(reader.GetOrdinal("missing_components")) ? null : reader.GetString("missing_components"),
+                                    PositionErrors = reader.IsDBNull(reader.GetOrdinal("position_errors")) ? null : reader.GetString("position_errors"),
+                                    ExtraComponents = reader.IsDBNull(reader.GetOrdinal("extra_components")) ? null : reader.GetString("extra_components"),
+                                    YoloDetections = reader.IsDBNull(reader.GetOrdinal("yolo_detections")) ? null : reader.GetString("yolo_detections"),
+                                    DetectionCount = reader.GetInt32("detection_count"),
+                                    AvgConfidence = reader.IsDBNull(reader.GetOrdinal("avg_confidence")) ? (float?)null : reader.GetFloat("avg_confidence"),
+                                    InferenceTimeMs = reader.IsDBNull(reader.GetOrdinal("inference_time_ms")) ? (float?)null : reader.GetFloat("inference_time_ms"),
+                                    VerificationTimeMs = reader.IsDBNull(reader.GetOrdinal("verification_time_ms")) ? (float?)null : reader.GetFloat("verification_time_ms"),
+                                    TotalTimeMs = reader.IsDBNull(reader.GetOrdinal("total_time_ms")) ? (float?)null : reader.GetFloat("total_time_ms"),
+                                    LeftImagePath = reader.IsDBNull(reader.GetOrdinal("left_image_path")) ? null : reader.GetString("left_image_path"),
+                                    RightImagePath = reader.IsDBNull(reader.GetOrdinal("right_image_path")) ? null : reader.GetString("right_image_path"),
+                                    ImageWidth = reader.IsDBNull(reader.GetOrdinal("image_width")) ? (int?)null : reader.GetInt32("image_width"),
+                                    ImageHeight = reader.IsDBNull(reader.GetOrdinal("image_height")) ? (int?)null : reader.GetInt32("image_height"),
+                                    CameraId = reader.IsDBNull(reader.GetOrdinal("camera_id")) ? null : reader.GetString("camera_id"),
+                                    ClientIp = reader.IsDBNull(reader.GetOrdinal("client_ip")) ? null : reader.GetString("client_ip"),
+                                    ServerVersion = reader.IsDBNull(reader.GetOrdinal("server_version")) ? null : reader.GetString("server_version"),
                                     UserId = reader.IsDBNull(reader.GetOrdinal("user_id")) ? (int?)null : reader.GetInt32("user_id"),
-                                    Notes = reader.IsDBNull(reader.GetOrdinal("notes")) ? null : reader.GetString("notes")
+                                    Notes = reader.IsDBNull(reader.GetOrdinal("notes")) ? null : reader.GetString("notes"),
+                                    InspectionTime = reader.GetDateTime("inspection_time"),
+                                    CreatedAt = reader.GetDateTime("created_at")
                                 };
                             }
                         }
@@ -250,8 +302,8 @@ namespace pcb_monitoring_program.DatabaseManager
 
                         if (!string.IsNullOrEmpty(filter.DefectType))
                         {
-                            query += " AND defect_type = @defectType";
-                            parameters.Add(new MySqlParameter("@defectType", filter.DefectType));
+                            query += " AND decision = @decision";
+                            parameters.Add(new MySqlParameter("@decision", filter.DefectType));
                         }
 
                         if (!string.IsNullOrEmpty(filter.CameraId))
@@ -441,13 +493,14 @@ namespace pcb_monitoring_program.DatabaseManager
                 {
                     conn.Open();
 
+                    // v3.0 스키마: decision 컬럼 사용 (normal/missing/position_error/discard)
                     string query = @"
                         SELECT
                             COUNT(*) as total,
-                            SUM(CASE WHEN defect_type = '정상' THEN 1 ELSE 0 END) as normal,
-                            SUM(CASE WHEN defect_type = '부품불량' THEN 1 ELSE 0 END) as component,
-                            SUM(CASE WHEN defect_type = '납땜불량' THEN 1 ELSE 0 END) as solder,
-                            SUM(CASE WHEN defect_type = '폐기' THEN 1 ELSE 0 END) as discard
+                            SUM(CASE WHEN decision = 'normal' THEN 1 ELSE 0 END) as normal,
+                            SUM(CASE WHEN decision = 'missing' THEN 1 ELSE 0 END) as component,
+                            SUM(CASE WHEN decision = 'position_error' THEN 1 ELSE 0 END) as solder,
+                            SUM(CASE WHEN decision = 'discard' THEN 1 ELSE 0 END) as discard
                         FROM inspections
                         WHERE inspection_time BETWEEN @startDate AND @endDate";
 
@@ -726,6 +779,470 @@ namespace pcb_monitoring_program.DatabaseManager
 
                 _disposed = true;
             }
+        }
+
+        #endregion
+
+        #region Product 관리 (v3.0 스키마)
+
+        /// 모든 제품 정보 조회
+        /// <returns>제품 리스트</returns>
+        public List<Product> GetAllProducts()
+        {
+            List<Product> products = new List<Product>();
+
+            try
+            {
+                using (MySqlConnection conn = new MySqlConnection(_connectionString))
+                {
+                    conn.Open();
+
+                    string query = @"
+                        SELECT product_code, product_name, description, serial_prefix,
+                               component_count, qr_url_template, created_at, updated_at
+                        FROM products
+                        ORDER BY product_code";
+
+                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    using (MySqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            products.Add(new Product
+                            {
+                                ProductCode = reader.GetString("product_code"),
+                                ProductName = reader.GetString("product_name"),
+                                Description = reader.IsDBNull(reader.GetOrdinal("description")) ? null : reader.GetString("description"),
+                                SerialPrefix = reader.GetString("serial_prefix"),
+                                ComponentCount = reader.GetInt32("component_count"),
+                                QrUrlTemplate = reader.IsDBNull(reader.GetOrdinal("qr_url_template")) ? null : reader.GetString("qr_url_template"),
+                                CreatedAt = reader.GetDateTime("created_at"),
+                                UpdatedAt = reader.GetDateTime("updated_at")
+                            });
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex)
+            {
+                Console.WriteLine($"[제품 목록 조회 실패] {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[제품 목록 조회 오류] {ex.Message}");
+            }
+
+            return products;
+        }
+
+        /// 특정 제품 코드로 제품 정보 조회
+        /// <param name="productCode">제품 코드 (예: FT, RS, BC)</param>
+        /// <returns>제품 객체 (없으면 null)</returns>
+        public Product GetProductByCode(string productCode)
+        {
+            try
+            {
+                using (MySqlConnection conn = new MySqlConnection(_connectionString))
+                {
+                    conn.Open();
+
+                    string query = @"
+                        SELECT product_code, product_name, description, serial_prefix,
+                               component_count, qr_url_template, created_at, updated_at
+                        FROM products
+                        WHERE product_code = @productCode";
+
+                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@productCode", productCode);
+
+                        using (MySqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            if (reader.Read())
+                            {
+                                return new Product
+                                {
+                                    ProductCode = reader.GetString("product_code"),
+                                    ProductName = reader.GetString("product_name"),
+                                    Description = reader.IsDBNull(reader.GetOrdinal("description")) ? null : reader.GetString("description"),
+                                    SerialPrefix = reader.GetString("serial_prefix"),
+                                    ComponentCount = reader.GetInt32("component_count"),
+                                    QrUrlTemplate = reader.IsDBNull(reader.GetOrdinal("qr_url_template")) ? null : reader.GetString("qr_url_template"),
+                                    CreatedAt = reader.GetDateTime("created_at"),
+                                    UpdatedAt = reader.GetDateTime("updated_at")
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex)
+            {
+                Console.WriteLine($"[제품 조회 실패 - Code: {productCode}] {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[제품 조회 오류 - Code: {productCode}] {ex.Message}");
+            }
+
+            return null;
+        }
+
+        #endregion
+
+        #region ProductComponent 관리 (v3.0 스키마)
+
+        /// 특정 제품의 부품 배치 기준 데이터 조회
+        /// <param name="productCode">제품 코드</param>
+        /// <returns>부품 배치 리스트</returns>
+        public List<ProductComponent> GetProductComponents(string productCode)
+        {
+            List<ProductComponent> components = new List<ProductComponent>();
+
+            try
+            {
+                using (MySqlConnection conn = new MySqlConnection(_connectionString))
+                {
+                    conn.Open();
+
+                    string query = @"
+                        SELECT id, product_code, component_class, center_x, center_y,
+                               bbox_x1, bbox_y1, bbox_x2, bbox_y2, tolerance_px, created_at
+                        FROM product_components
+                        WHERE product_code = @productCode
+                        ORDER BY component_class, id";
+
+                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@productCode", productCode);
+
+                        using (MySqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                components.Add(new ProductComponent
+                                {
+                                    Id = reader.GetInt32("id"),
+                                    ProductCode = reader.GetString("product_code"),
+                                    ComponentClass = reader.GetString("component_class"),
+                                    CenterX = reader.GetFloat("center_x"),
+                                    CenterY = reader.GetFloat("center_y"),
+                                    BboxX1 = reader.GetFloat("bbox_x1"),
+                                    BboxY1 = reader.GetFloat("bbox_y1"),
+                                    BboxX2 = reader.GetFloat("bbox_x2"),
+                                    BboxY2 = reader.GetFloat("bbox_y2"),
+                                    TolerancePx = reader.GetFloat("tolerance_px"),
+                                    CreatedAt = reader.GetDateTime("created_at")
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex)
+            {
+                Console.WriteLine($"[부품 배치 조회 실패 - Product: {productCode}] {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[부품 배치 조회 오류 - Product: {productCode}] {ex.Message}");
+            }
+
+            return components;
+        }
+
+        /// 모든 제품의 부품 배치 기준 데이터 조회
+        /// <returns>전체 부품 배치 리스트</returns>
+        public List<ProductComponent> GetAllProductComponents()
+        {
+            List<ProductComponent> components = new List<ProductComponent>();
+
+            try
+            {
+                using (MySqlConnection conn = new MySqlConnection(_connectionString))
+                {
+                    conn.Open();
+
+                    string query = @"
+                        SELECT id, product_code, component_class, center_x, center_y,
+                               bbox_x1, bbox_y1, bbox_x2, bbox_y2, tolerance_px, created_at
+                        FROM product_components
+                        ORDER BY product_code, component_class, id";
+
+                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    using (MySqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            components.Add(new ProductComponent
+                            {
+                                Id = reader.GetInt32("id"),
+                                ProductCode = reader.GetString("product_code"),
+                                ComponentClass = reader.GetString("component_class"),
+                                CenterX = reader.GetFloat("center_x"),
+                                CenterY = reader.GetFloat("center_y"),
+                                BboxX1 = reader.GetFloat("bbox_x1"),
+                                BboxY1 = reader.GetFloat("bbox_y1"),
+                                BboxX2 = reader.GetFloat("bbox_x2"),
+                                BboxY2 = reader.GetFloat("bbox_y2"),
+                                TolerancePx = reader.GetFloat("tolerance_px"),
+                                CreatedAt = reader.GetDateTime("created_at")
+                            });
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex)
+            {
+                Console.WriteLine($"[전체 부품 배치 조회 실패] {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[전체 부품 배치 조회 오류] {ex.Message}");
+            }
+
+            return components;
+        }
+
+        #endregion
+
+        #region InspectionSummary 조회 (v3.0 스키마)
+
+        /// 시간별 검사 집계 조회
+        /// <param name="startTime">시작 시간</param>
+        /// <param name="endTime">종료 시간</param>
+        /// <param name="productCode">제품 코드 (null이면 전체)</param>
+        /// <returns>시간별 집계 리스트</returns>
+        public List<InspectionSummaryHourly> GetHourlySummary(DateTime startTime, DateTime endTime, string productCode = null)
+        {
+            List<InspectionSummaryHourly> summaries = new List<InspectionSummaryHourly>();
+
+            try
+            {
+                using (MySqlConnection conn = new MySqlConnection(_connectionString))
+                {
+                    conn.Open();
+
+                    string query = @"
+                        SELECT id, hour_timestamp, product_code, total_inspections,
+                               normal_count, missing_count, position_error_count, discard_count,
+                               avg_inference_time_ms, avg_total_time_ms, avg_detection_count, avg_confidence,
+                               created_at, updated_at
+                        FROM inspection_summary_hourly
+                        WHERE hour_timestamp BETWEEN @startTime AND @endTime";
+
+                    if (!string.IsNullOrEmpty(productCode))
+                    {
+                        query += " AND product_code = @productCode";
+                    }
+
+                    query += " ORDER BY hour_timestamp DESC";
+
+                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@startTime", startTime);
+                        cmd.Parameters.AddWithValue("@endTime", endTime);
+                        if (!string.IsNullOrEmpty(productCode))
+                        {
+                            cmd.Parameters.AddWithValue("@productCode", productCode);
+                        }
+
+                        using (MySqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                summaries.Add(new InspectionSummaryHourly
+                                {
+                                    Id = reader.GetInt64("id"),
+                                    HourTimestamp = reader.GetDateTime("hour_timestamp"),
+                                    ProductCode = reader.GetString("product_code"),
+                                    TotalInspections = reader.GetInt32("total_inspections"),
+                                    NormalCount = reader.GetInt32("normal_count"),
+                                    MissingCount = reader.GetInt32("missing_count"),
+                                    PositionErrorCount = reader.GetInt32("position_error_count"),
+                                    DiscardCount = reader.GetInt32("discard_count"),
+                                    AvgInferenceTimeMs = reader.IsDBNull(reader.GetOrdinal("avg_inference_time_ms")) ? (float?)null : reader.GetFloat("avg_inference_time_ms"),
+                                    AvgTotalTimeMs = reader.IsDBNull(reader.GetOrdinal("avg_total_time_ms")) ? (float?)null : reader.GetFloat("avg_total_time_ms"),
+                                    AvgDetectionCount = reader.IsDBNull(reader.GetOrdinal("avg_detection_count")) ? (float?)null : reader.GetFloat("avg_detection_count"),
+                                    AvgConfidence = reader.IsDBNull(reader.GetOrdinal("avg_confidence")) ? (float?)null : reader.GetFloat("avg_confidence"),
+                                    CreatedAt = reader.GetDateTime("created_at"),
+                                    UpdatedAt = reader.GetDateTime("updated_at")
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex)
+            {
+                Console.WriteLine($"[시간별 집계 조회 실패] {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[시간별 집계 조회 오류] {ex.Message}");
+            }
+
+            return summaries;
+        }
+
+        /// 일별 검사 집계 조회
+        /// <param name="startDate">시작 날짜</param>
+        /// <param name="endDate">종료 날짜</param>
+        /// <param name="productCode">제품 코드 (null이면 전체)</param>
+        /// <returns>일별 집계 리스트</returns>
+        public List<InspectionSummaryDaily> GetDailySummary(DateTime startDate, DateTime endDate, string productCode = null)
+        {
+            List<InspectionSummaryDaily> summaries = new List<InspectionSummaryDaily>();
+
+            try
+            {
+                using (MySqlConnection conn = new MySqlConnection(_connectionString))
+                {
+                    conn.Open();
+
+                    string query = @"
+                        SELECT id, date, product_code, total_inspections,
+                               normal_count, missing_count, position_error_count, discard_count,
+                               avg_inference_time_ms, avg_total_time_ms, avg_detection_count, avg_confidence,
+                               created_at, updated_at
+                        FROM inspection_summary_daily
+                        WHERE date BETWEEN @startDate AND @endDate";
+
+                    if (!string.IsNullOrEmpty(productCode))
+                    {
+                        query += " AND product_code = @productCode";
+                    }
+
+                    query += " ORDER BY date DESC";
+
+                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@startDate", startDate.Date);
+                        cmd.Parameters.AddWithValue("@endDate", endDate.Date);
+                        if (!string.IsNullOrEmpty(productCode))
+                        {
+                            cmd.Parameters.AddWithValue("@productCode", productCode);
+                        }
+
+                        using (MySqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                summaries.Add(new InspectionSummaryDaily
+                                {
+                                    Id = reader.GetInt64("id"),
+                                    Date = reader.GetDateTime("date"),
+                                    ProductCode = reader.GetString("product_code"),
+                                    TotalInspections = reader.GetInt32("total_inspections"),
+                                    NormalCount = reader.GetInt32("normal_count"),
+                                    MissingCount = reader.GetInt32("missing_count"),
+                                    PositionErrorCount = reader.GetInt32("position_error_count"),
+                                    DiscardCount = reader.GetInt32("discard_count"),
+                                    AvgInferenceTimeMs = reader.IsDBNull(reader.GetOrdinal("avg_inference_time_ms")) ? (float?)null : reader.GetFloat("avg_inference_time_ms"),
+                                    AvgTotalTimeMs = reader.IsDBNull(reader.GetOrdinal("avg_total_time_ms")) ? (float?)null : reader.GetFloat("avg_total_time_ms"),
+                                    AvgDetectionCount = reader.IsDBNull(reader.GetOrdinal("avg_detection_count")) ? (float?)null : reader.GetFloat("avg_detection_count"),
+                                    AvgConfidence = reader.IsDBNull(reader.GetOrdinal("avg_confidence")) ? (float?)null : reader.GetFloat("avg_confidence"),
+                                    CreatedAt = reader.GetDateTime("created_at"),
+                                    UpdatedAt = reader.GetDateTime("updated_at")
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex)
+            {
+                Console.WriteLine($"[일별 집계 조회 실패] {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[일별 집계 조회 오류] {ex.Message}");
+            }
+
+            return summaries;
+        }
+
+        /// 월별 검사 집계 조회
+        /// <param name="startYear">시작 년도</param>
+        /// <param name="startMonth">시작 월</param>
+        /// <param name="endYear">종료 년도</param>
+        /// <param name="endMonth">종료 월</param>
+        /// <param name="productCode">제품 코드 (null이면 전체)</param>
+        /// <returns>월별 집계 리스트</returns>
+        public List<InspectionSummaryMonthly> GetMonthlySummary(int startYear, int startMonth, int endYear, int endMonth, string productCode = null)
+        {
+            List<InspectionSummaryMonthly> summaries = new List<InspectionSummaryMonthly>();
+
+            try
+            {
+                using (MySqlConnection conn = new MySqlConnection(_connectionString))
+                {
+                    conn.Open();
+
+                    string query = @"
+                        SELECT id, year, month, product_code, total_inspections,
+                               normal_count, missing_count, position_error_count, discard_count,
+                               avg_inference_time_ms, avg_total_time_ms, avg_detection_count, avg_confidence,
+                               created_at, updated_at
+                        FROM inspection_summary_monthly
+                        WHERE (year > @startYear OR (year = @startYear AND month >= @startMonth))
+                          AND (year < @endYear OR (year = @endYear AND month <= @endMonth))";
+
+                    if (!string.IsNullOrEmpty(productCode))
+                    {
+                        query += " AND product_code = @productCode";
+                    }
+
+                    query += " ORDER BY year DESC, month DESC";
+
+                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@startYear", startYear);
+                        cmd.Parameters.AddWithValue("@startMonth", startMonth);
+                        cmd.Parameters.AddWithValue("@endYear", endYear);
+                        cmd.Parameters.AddWithValue("@endMonth", endMonth);
+                        if (!string.IsNullOrEmpty(productCode))
+                        {
+                            cmd.Parameters.AddWithValue("@productCode", productCode);
+                        }
+
+                        using (MySqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                summaries.Add(new InspectionSummaryMonthly
+                                {
+                                    Id = reader.GetInt64("id"),
+                                    Year = reader.GetInt32("year"),
+                                    Month = reader.GetInt32("month"),
+                                    ProductCode = reader.GetString("product_code"),
+                                    TotalInspections = reader.GetInt32("total_inspections"),
+                                    NormalCount = reader.GetInt32("normal_count"),
+                                    MissingCount = reader.GetInt32("missing_count"),
+                                    PositionErrorCount = reader.GetInt32("position_error_count"),
+                                    DiscardCount = reader.GetInt32("discard_count"),
+                                    AvgInferenceTimeMs = reader.IsDBNull(reader.GetOrdinal("avg_inference_time_ms")) ? (float?)null : reader.GetFloat("avg_inference_time_ms"),
+                                    AvgTotalTimeMs = reader.IsDBNull(reader.GetOrdinal("avg_total_time_ms")) ? (float?)null : reader.GetFloat("avg_total_time_ms"),
+                                    AvgDetectionCount = reader.IsDBNull(reader.GetOrdinal("avg_detection_count")) ? (float?)null : reader.GetFloat("avg_detection_count"),
+                                    AvgConfidence = reader.IsDBNull(reader.GetOrdinal("avg_confidence")) ? (float?)null : reader.GetFloat("avg_confidence"),
+                                    CreatedAt = reader.GetDateTime("created_at"),
+                                    UpdatedAt = reader.GetDateTime("updated_at")
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex)
+            {
+                Console.WriteLine($"[월별 집계 조회 실패] {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[월별 집계 조회 오류] {ex.Message}");
+            }
+
+            return summaries;
         }
 
         #endregion

@@ -118,7 +118,7 @@
             Controls.Add(cardBoxRate);
             Controls.Add(cardBOXMonitoring);
             Name = "BoxMonitoringView";
-            Size = new Size(1600, 700);
+            Size = new Size(1600, 720);
             Load += BoxMonitoringView_Load;
             cardBOXMonitoring.ResumeLayout(false);
             cardBOXMonitoring.PerformLayout();
