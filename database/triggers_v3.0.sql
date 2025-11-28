@@ -1,13 +1,15 @@
 -- =====================================================
--- PCB 불량 검사 시스템 트리거 v3.0
--- Product Verification Architecture
+-- PCB 불량 검사 시스템 트리거 v3.1 (Extended for WinForms)
+-- Product Verification Architecture + Defect Details
 -- =====================================================
--- 작성일: 2025-11-28
--- 설명: inspections 테이블 INSERT 시 자동으로 집계 테이블 업데이트
--- 트리거 종류:
+-- 작성일: 2025-11-28 (v3.0)
+-- 확장일: 2025-11-28 (v3.1)
+-- 설명: inspections 테이블 INSERT 시 자동으로 집계 테이블 및 상세 정보 업데이트
+-- 트리거 종류: 4개
 --   1. update_hourly_summary: 시간별 집계 업데이트
 --   2. update_daily_summary: 일별 집계 업데이트
 --   3. update_monthly_summary: 월별 집계 업데이트
+--   4. insert_defect_details: 불량 클래스별 상세 정보 자동 삽입 (v3.1 추가)
 -- =====================================================
 
 USE pcb_inspection;
@@ -19,6 +21,7 @@ USE pcb_inspection;
 DROP TRIGGER IF EXISTS update_hourly_summary;
 DROP TRIGGER IF EXISTS update_daily_summary;
 DROP TRIGGER IF EXISTS update_monthly_summary;
+DROP TRIGGER IF EXISTS insert_defect_details;
 
 
 -- =====================================================
@@ -251,6 +254,44 @@ DELIMITER ;
 
 
 -- =====================================================
+-- 4. 불량 클래스별 상세 정보 자동 삽입 트리거 (v3.1 추가)
+-- =====================================================
+-- 설명: inspections 테이블 INSERT 시 yolo_detections JSON 파싱하여
+--       defect_details 테이블에 클래스별 통계 자동 삽입
+-- 동작: yolo_detections 컬럼의 JSON 배열을 파싱하여 각 클래스별로 레코드 생성
+-- JSON 형식: [{"class_name": "...", "count": 5, "confidence": 0.95}, ...]
+-- =====================================================
+
+DELIMITER $$
+
+CREATE TRIGGER insert_defect_details
+AFTER INSERT ON inspections
+FOR EACH ROW
+BEGIN
+    -- yolo_detections가 NULL이거나 빈 배열이 아닌 경우만 처리
+    IF NEW.yolo_detections IS NOT NULL AND JSON_LENGTH(NEW.yolo_detections) > 0 THEN
+        -- JSON 배열을 파싱하여 defect_details에 삽입
+        INSERT INTO defect_details (inspection_id, class_name, count, avg_confidence)
+        SELECT
+            NEW.id,
+            jt.class_name,
+            jt.count,
+            jt.confidence
+        FROM JSON_TABLE(
+            NEW.yolo_detections,
+            '$[*]' COLUMNS(
+                class_name VARCHAR(100) PATH '$.class_name',
+                count INT PATH '$.count',
+                confidence DECIMAL(5,4) PATH '$.confidence'
+            )
+        ) AS jt;
+    END IF;
+END$$
+
+DELIMITER ;
+
+
+-- =====================================================
 -- 트리거 확인
 -- =====================================================
 -- 다음 쿼리로 트리거 생성 확인 가능:
@@ -260,7 +301,8 @@ DELIMITER ;
 -- SHOW CREATE TRIGGER update_hourly_summary;
 -- SHOW CREATE TRIGGER update_daily_summary;
 -- SHOW CREATE TRIGGER update_monthly_summary;
+-- SHOW CREATE TRIGGER insert_defect_details;
 -- =====================================================
 
 -- 완료 메시지
-SELECT '트리거 생성 완료: update_hourly_summary, update_daily_summary, update_monthly_summary' AS status;
+SELECT 'v3.1 트리거 생성 완료 (4개): update_hourly_summary, update_daily_summary, update_monthly_summary, insert_defect_details' AS status;
