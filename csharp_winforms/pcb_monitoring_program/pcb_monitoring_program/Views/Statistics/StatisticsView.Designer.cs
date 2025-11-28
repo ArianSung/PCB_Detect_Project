@@ -131,14 +131,14 @@
             // 
             // panel2
             // 
-            panel2.Location = new Point(629, 250);
+            panel2.Location = new Point(697, 250);
             panel2.Name = "panel2";
             panel2.Size = new Size(35, 30);
             panel2.TabIndex = 5;
             // 
             // panel1
             // 
-            panel1.Location = new Point(113, 250);
+            panel1.Location = new Point(58, 250);
             panel1.Name = "panel1";
             panel1.Size = new Size(44, 30);
             panel1.TabIndex = 4;
@@ -149,13 +149,13 @@
             MonthlyAccumChart.ChartAreas.Add(chartArea2);
             legend2.Name = "Legend1";
             MonthlyAccumChart.Legends.Add(legend2);
-            MonthlyAccumChart.Location = new Point(65, 38);
+            MonthlyAccumChart.Location = new Point(3, 38);
             MonthlyAccumChart.Name = "MonthlyAccumChart";
             series2.ChartArea = "ChartArea1";
             series2.Legend = "Legend1";
             series2.Name = "Series1";
             MonthlyAccumChart.Series.Add(series2);
-            MonthlyAccumChart.Size = new Size(623, 242);
+            MonthlyAccumChart.Size = new Size(758, 242);
             MonthlyAccumChart.TabIndex = 0;
             MonthlyAccumChart.Text = "chart1";
             MonthlyAccumChart.MouseMove += MonthlyAccumChart_MouseMove;

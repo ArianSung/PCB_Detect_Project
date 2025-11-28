@@ -27,7 +27,7 @@ namespace pcb_monitoring_program.Views.Monitoring
         {
             UiStyleHelper.MakeRoundedPanel(cardBOXMonitoring, radius: 16, back: Color.FromArgb(44, 44, 44));
             UiStyleHelper.MakeRoundedPanel(cardBoxRate, radius: 16, back: Color.FromArgb(44, 44, 44));
-
+             
             UiStyleHelper.AddShadowRoundedPanel(cardBOXMonitoring, 16);
             UiStyleHelper.AddShadowRoundedPanel(cardBoxRate, 16);
 
