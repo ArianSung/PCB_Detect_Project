@@ -47,6 +47,7 @@ conda activate pcb_defect
 
 # Flask 및 관련 패키지 설치
 pip install flask flask-cors
+pip install flask-socketio python-socketio  # WebSocket 지원 ⭐
 pip install pillow opencv-python-headless
 pip install requests
 ```

@@ -38,9 +38,9 @@
             // 
             // BoxMonitoringpanel
             // 
-            BoxMonitoringpanel.Location = new Point(0, 100);
+            BoxMonitoringpanel.Location = new Point(0, 79);
             BoxMonitoringpanel.Name = "BoxMonitoringpanel";
-            BoxMonitoringpanel.Size = new Size(1600, 700);
+            BoxMonitoringpanel.Size = new Size(1600, 720);
             BoxMonitoringpanel.TabIndex = 13;
             // 
             // cardBoxLineChoice
@@ -50,7 +50,7 @@
             cardBoxLineChoice.Controls.Add(btnBoxLine2);
             cardBoxLineChoice.Location = new Point(13, 12);
             cardBoxLineChoice.Name = "cardBoxLineChoice";
-            cardBoxLineChoice.Size = new Size(358, 73);
+            cardBoxLineChoice.Size = new Size(358, 61);
             cardBoxLineChoice.TabIndex = 12;
             // 
             // btnBoxLine1
@@ -58,7 +58,7 @@
             btnBoxLine1.FlatAppearance.BorderSize = 0;
             btnBoxLine1.FlatStyle = FlatStyle.Flat;
             btnBoxLine1.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            btnBoxLine1.Location = new Point(21, 17);
+            btnBoxLine1.Location = new Point(13, 10);
             btnBoxLine1.Name = "btnBoxLine1";
             btnBoxLine1.Size = new Size(82, 40);
             btnBoxLine1.TabIndex = 6;
@@ -71,7 +71,7 @@
             btnBoxLine3.FlatAppearance.BorderSize = 0;
             btnBoxLine3.FlatStyle = FlatStyle.Flat;
             btnBoxLine3.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            btnBoxLine3.Location = new Point(259, 17);
+            btnBoxLine3.Location = new Point(263, 10);
             btnBoxLine3.Name = "btnBoxLine3";
             btnBoxLine3.Size = new Size(82, 40);
             btnBoxLine3.TabIndex = 8;
@@ -84,7 +84,7 @@
             btnBoxLine2.FlatAppearance.BorderSize = 0;
             btnBoxLine2.FlatStyle = FlatStyle.Flat;
             btnBoxLine2.Font = new Font("Arial", 15.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            btnBoxLine2.Location = new Point(140, 17);
+            btnBoxLine2.Location = new Point(138, 10);
             btnBoxLine2.Name = "btnBoxLine2";
             btnBoxLine2.Size = new Size(82, 40);
             btnBoxLine2.TabIndex = 7;
