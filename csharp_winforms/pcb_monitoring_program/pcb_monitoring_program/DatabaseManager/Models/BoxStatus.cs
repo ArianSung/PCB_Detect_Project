@@ -2,14 +2,16 @@ using System;
 
 namespace pcb_monitoring_program.DatabaseManager.Models
 {
-    /// 로봇팔 박스 상태 관리 모델
-    /// 3개 박스 (정상/부품불량/납땜불량) × 5개 슬롯 = 15개 슬롯
+    /// <summary>
+    /// 로봇팔 박스 상태 관리 모델 (v3.1 스키마)
+    /// 3개 박스 (정상/누락/위치오류) × 5개 슬롯 = 15개 슬롯
     /// DISCARD는 슬롯 관리 안 함 (고정 위치에 떨어뜨리기)
+    /// </summary>
     public class BoxStatus
     {
         public int Id { get; set; }
-        public string BoxId { get; set; }  // "NORMAL", "COMPONENT_DEFECT", "SOLDER_DEFECT"
-        public string Category { get; set; }  // "normal", "component_defect", "solder_defect"
+        public string BoxId { get; set; }       // "NORMAL", "MISSING", "POSITION_ERROR"
+        public string Category { get; set; }    // "normal", "missing", "position_error" (v3.1 변경)
         public int CurrentSlot { get; set; }  // 현재 사용 중인 슬롯 번호 (0-4)
         public int MaxSlots { get; set; }  // 최대 슬롯 개수 (5개, 수평 배치)
         public bool IsFull { get; set; }  // 박스 가득참 여부
