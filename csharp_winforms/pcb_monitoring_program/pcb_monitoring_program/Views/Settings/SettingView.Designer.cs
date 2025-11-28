@@ -98,7 +98,7 @@
             cardSetting.Controls.Add(btn_Setting_cancel);
             cardSetting.Controls.Add(btn_Setting_save);
             cardSetting.Controls.Add(textBox1);
-            cardSetting.Location = new Point(280, 100);
+            cardSetting.Location = new Point(240, 100);
             cardSetting.Name = "cardSetting";
             cardSetting.Size = new Size(1100, 700);
             cardSetting.TabIndex = 6;
@@ -162,7 +162,7 @@
             textBox_DB.Name = "textBox_DB";
             textBox_DB.Size = new Size(254, 25);
             textBox_DB.TabIndex = 66;
-            textBox_DB.Text = "pcb_project";
+            textBox_DB.Text = "pcb_inspection";
             // 
             // textBox_port
             // 
