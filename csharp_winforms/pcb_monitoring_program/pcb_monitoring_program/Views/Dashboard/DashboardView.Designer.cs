@@ -11,14 +11,7 @@
         /// 사용 중인 모든 리소스를 정리합니다.
         /// </summary>
         /// <param name="disposing">관리되는 리소스를 삭제해야 하면 true이고, 그렇지 않으면 false입니다.</param>
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing && (components != null))
-            {
-                components.Dispose();
-            }
-            base.Dispose(disposing);
-        }
+
 
         #region 구성 요소 디자이너에서 생성한 코드
 
@@ -28,28 +21,29 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea13 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend13 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series13 = new System.Windows.Forms.DataVisualization.Charting.Series();
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea14 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend14 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series14 = new System.Windows.Forms.DataVisualization.Charting.Series();
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea15 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend15 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series15 = new System.Windows.Forms.DataVisualization.Charting.Series();
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea16 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend16 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series16 = new System.Windows.Forms.DataVisualization.Charting.Series();
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea17 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend17 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series17 = new System.Windows.Forms.DataVisualization.Charting.Series();
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea18 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend18 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series18 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend2 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea3 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend3 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series3 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea4 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend4 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series4 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea5 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend5 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series5 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea6 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend6 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series6 = new System.Windows.Forms.DataVisualization.Charting.Series();
             DefectRateChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
             DefectCategoryChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
             DailyTargetChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
             cardRate = new Panel();
+            flowLegendRate = new FlowLayoutPanel();
             label1 = new Label();
             flowLegend = new FlowLayoutPanel();
             cardTarget = new Panel();
@@ -70,6 +64,8 @@
             pictureBox3 = new PictureBox();
             label7 = new Label();
             cardHourly = new Panel();
+            panel2 = new Panel();
+            panel1 = new Panel();
             HourlyInspectionChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
             label8 = new Label();
             cardLog = new Panel();
@@ -101,17 +97,17 @@
             // DefectRateChart
             // 
             DefectRateChart.BackColor = Color.Transparent;
-            chartArea13.Name = "ChartArea1";
-            DefectRateChart.ChartAreas.Add(chartArea13);
-            legend13.Name = "Legend1";
-            DefectRateChart.Legends.Add(legend13);
+            chartArea1.Name = "ChartArea1";
+            DefectRateChart.ChartAreas.Add(chartArea1);
+            legend1.Name = "Legend1";
+            DefectRateChart.Legends.Add(legend1);
             DefectRateChart.Location = new Point(3, 40);
             DefectRateChart.Name = "DefectRateChart";
-            series13.ChartArea = "ChartArea1";
-            series13.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Doughnut;
-            series13.Legend = "Legend1";
-            series13.Name = "Series1";
-            DefectRateChart.Series.Add(series13);
+            series1.ChartArea = "ChartArea1";
+            series1.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Doughnut;
+            series1.Legend = "Legend1";
+            series1.Name = "Series1";
+            DefectRateChart.Series.Add(series1);
             DefectRateChart.Size = new Size(200, 200);
             DefectRateChart.TabIndex = 0;
             DefectRateChart.Text = "chart1";
@@ -119,17 +115,17 @@
             // DefectCategoryChart
             // 
             DefectCategoryChart.BackColor = Color.Transparent;
-            chartArea14.Name = "ChartArea1";
-            DefectCategoryChart.ChartAreas.Add(chartArea14);
-            legend14.Name = "Legend1";
-            DefectCategoryChart.Legends.Add(legend14);
+            chartArea2.Name = "ChartArea1";
+            DefectCategoryChart.ChartAreas.Add(chartArea2);
+            legend2.Name = "Legend1";
+            DefectCategoryChart.Legends.Add(legend2);
             DefectCategoryChart.Location = new Point(3, 40);
             DefectCategoryChart.Name = "DefectCategoryChart";
-            series14.ChartArea = "ChartArea1";
-            series14.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Doughnut;
-            series14.Legend = "Legend1";
-            series14.Name = "Series1";
-            DefectCategoryChart.Series.Add(series14);
+            series2.ChartArea = "ChartArea1";
+            series2.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Doughnut;
+            series2.Legend = "Legend1";
+            series2.Name = "Series1";
+            DefectCategoryChart.Series.Add(series2);
             DefectCategoryChart.Size = new Size(200, 200);
             DefectCategoryChart.TabIndex = 1;
             DefectCategoryChart.Text = "chart2";
@@ -137,29 +133,37 @@
             // DailyTargetChart
             // 
             DailyTargetChart.BackColor = Color.Transparent;
-            chartArea15.Name = "ChartArea1";
-            DailyTargetChart.ChartAreas.Add(chartArea15);
-            legend15.Name = "Legend1";
-            DailyTargetChart.Legends.Add(legend15);
+            chartArea3.Name = "ChartArea1";
+            DailyTargetChart.ChartAreas.Add(chartArea3);
+            legend3.Name = "Legend1";
+            DailyTargetChart.Legends.Add(legend3);
             DailyTargetChart.Location = new Point(3, 40);
             DailyTargetChart.Name = "DailyTargetChart";
-            series15.ChartArea = "ChartArea1";
-            series15.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Doughnut;
-            series15.Legend = "Legend1";
-            series15.Name = "Series1";
-            DailyTargetChart.Series.Add(series15);
+            series3.ChartArea = "ChartArea1";
+            series3.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Doughnut;
+            series3.Legend = "Legend1";
+            series3.Name = "Series1";
+            DailyTargetChart.Series.Add(series3);
             DailyTargetChart.Size = new Size(200, 200);
             DailyTargetChart.TabIndex = 2;
             DailyTargetChart.Text = "chart3";
             // 
             // cardRate
             // 
+            cardRate.Controls.Add(flowLegendRate);
             cardRate.Controls.Add(label1);
             cardRate.Controls.Add(DefectRateChart);
             cardRate.Location = new Point(7, 26);
             cardRate.Name = "cardRate";
             cardRate.Size = new Size(360, 243);
             cardRate.TabIndex = 3;
+            // 
+            // flowLegendRate
+            // 
+            flowLegendRate.Location = new Point(230, 12);
+            flowLegendRate.Name = "flowLegendRate";
+            flowLegendRate.Size = new Size(127, 215);
+            flowLegendRate.TabIndex = 5;
             // 
             // label1
             // 
@@ -251,17 +255,17 @@
             // BoxRateChart
             // 
             BoxRateChart.BackColor = Color.Transparent;
-            chartArea16.Name = "ChartArea1";
-            BoxRateChart.ChartAreas.Add(chartArea16);
-            legend16.Name = "Legend1";
-            BoxRateChart.Legends.Add(legend16);
+            chartArea4.Name = "ChartArea1";
+            BoxRateChart.ChartAreas.Add(chartArea4);
+            legend4.Name = "Legend1";
+            BoxRateChart.Legends.Add(legend4);
             BoxRateChart.Location = new Point(3, 40);
             BoxRateChart.Name = "BoxRateChart";
-            series16.ChartArea = "ChartArea1";
-            series16.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Bar;
-            series16.Legend = "Legend1";
-            series16.Name = "Series1";
-            BoxRateChart.Series.Add(series16);
+            series4.ChartArea = "ChartArea1";
+            series4.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Bar;
+            series4.Legend = "Legend1";
+            series4.Name = "Series1";
+            BoxRateChart.Series.Add(series4);
             BoxRateChart.Size = new Size(337, 200);
             BoxRateChart.TabIndex = 0;
             BoxRateChart.Text = "chart1";
@@ -278,19 +282,20 @@
             // DefectTrendChart
             // 
             DefectTrendChart.BackColor = Color.Transparent;
-            chartArea17.Name = "ChartArea1";
-            DefectTrendChart.ChartAreas.Add(chartArea17);
-            legend17.Name = "Legend1";
-            DefectTrendChart.Legends.Add(legend17);
+            chartArea5.Name = "ChartArea1";
+            DefectTrendChart.ChartAreas.Add(chartArea5);
+            legend5.Name = "Legend1";
+            DefectTrendChart.Legends.Add(legend5);
             DefectTrendChart.Location = new Point(3, 38);
             DefectTrendChart.Name = "DefectTrendChart";
-            series17.ChartArea = "ChartArea1";
-            series17.Legend = "Legend1";
-            series17.Name = "Series1";
-            DefectTrendChart.Series.Add(series17);
+            series5.ChartArea = "ChartArea1";
+            series5.Legend = "Legend1";
+            series5.Name = "Series1";
+            DefectTrendChart.Series.Add(series5);
             DefectTrendChart.Size = new Size(500, 212);
             DefectTrendChart.TabIndex = 2;
             DefectTrendChart.Text = "chart1";
+            DefectTrendChart.MouseMove += DefectTrendChart_MouseMove;
             // 
             // label5
             // 
@@ -365,6 +370,8 @@
             // 
             // cardHourly
             // 
+            cardHourly.Controls.Add(panel2);
+            cardHourly.Controls.Add(panel1);
             cardHourly.Controls.Add(HourlyInspectionChart);
             cardHourly.Controls.Add(label8);
             cardHourly.Location = new Point(7, 579);
@@ -372,22 +379,37 @@
             cardHourly.Size = new Size(500, 250);
             cardHourly.TabIndex = 7;
             // 
+            // panel2
+            // 
+            panel2.Location = new Point(459, 221);
+            panel2.Name = "panel2";
+            panel2.Size = new Size(25, 26);
+            panel2.TabIndex = 6;
+            // 
+            // panel1
+            // 
+            panel1.Location = new Point(40, 202);
+            panel1.Name = "panel1";
+            panel1.Size = new Size(21, 20);
+            panel1.TabIndex = 5;
+            // 
             // HourlyInspectionChart
             // 
             HourlyInspectionChart.BackColor = Color.Transparent;
-            chartArea18.Name = "ChartArea1";
-            HourlyInspectionChart.ChartAreas.Add(chartArea18);
-            legend18.Name = "Legend1";
-            HourlyInspectionChart.Legends.Add(legend18);
+            chartArea6.Name = "ChartArea1";
+            HourlyInspectionChart.ChartAreas.Add(chartArea6);
+            legend6.Name = "Legend1";
+            HourlyInspectionChart.Legends.Add(legend6);
             HourlyInspectionChart.Location = new Point(3, 36);
             HourlyInspectionChart.Name = "HourlyInspectionChart";
-            series18.ChartArea = "ChartArea1";
-            series18.Legend = "Legend1";
-            series18.Name = "Series1";
-            HourlyInspectionChart.Series.Add(series18);
+            series6.ChartArea = "ChartArea1";
+            series6.Legend = "Legend1";
+            series6.Name = "Series1";
+            HourlyInspectionChart.Series.Add(series6);
             HourlyInspectionChart.Size = new Size(500, 212);
             HourlyInspectionChart.TabIndex = 2;
             HourlyInspectionChart.Text = "chart1";
+            HourlyInspectionChart.MouseMove += HourlyInspectionChart_MouseMove;
             // 
             // label8
             // 
@@ -530,5 +552,8 @@
         private Label label9;
         private Panel cardTop;
         private Label label10;
+        private Panel panel2;
+        private Panel panel1;
+        private FlowLayoutPanel flowLegendRate;
     }
 }
