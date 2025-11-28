@@ -2,12 +2,14 @@ using System;
 
 namespace pcb_monitoring_program.DatabaseManager.Models
 {
-    /// OHT (Overhead Hoist Transport) 운영 이력 모델
+    /// <summary>
+    /// OHT (Overhead Hoist Transport) 운영 이력 모델 (v3.1 스키마)
+    /// </summary>
     public class OHTOperation
     {
         public int Id { get; set; }
         public string OperationId { get; set; }  // UUID
-        public OHTCategory Category { get; set; }  // NORMAL, COMPONENT_DEFECT, SOLDER_DEFECT
+        public OHTCategory Category { get; set; }  // NORMAL, MISSING, POSITION_ERROR (v3.1 변경)
         public int? UserId { get; set; }  // NULL이면 시스템 자동
         public string UserRole { get; set; }  // "Admin", "Operator", "System"
         public bool IsAuto { get; set; }  // 자동 호출 여부
@@ -30,12 +32,14 @@ namespace pcb_monitoring_program.DatabaseManager.Models
         }
     }
 
-    /// OHT 카테고리 (수거할 PCB 종류)
+    /// <summary>
+    /// OHT 카테고리 (수거할 PCB 종류) - v3.1 스키마
+    /// </summary>
     public enum OHTCategory
     {
-        NORMAL,             // 정상 PCB
-        COMPONENT_DEFECT,   // 부품 불량 PCB
-        SOLDER_DEFECT       // 납땜 불량 PCB
+        NORMAL,            // 정상 PCB
+        MISSING,           // 부품 누락 PCB (v3.1 변경: COMPONENT_DEFECT → MISSING)
+        POSITION_ERROR     // 위치 오류 PCB (v3.1 변경: SOLDER_DEFECT → POSITION_ERROR)
     }
 
     /// OHT 운영 상태
