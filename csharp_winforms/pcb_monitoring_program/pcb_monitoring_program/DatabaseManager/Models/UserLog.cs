@@ -2,7 +2,9 @@ using System;
 
 namespace pcb_monitoring_program.DatabaseManager.Models
 {
-    /// 사용자 활동 로그 모델
+    /// <summary>
+    /// 사용자 활동 로그 모델 (v3.1 스키마)
+    /// </summary>
     public class UserLog
     {
         public int Id { get; set; }
