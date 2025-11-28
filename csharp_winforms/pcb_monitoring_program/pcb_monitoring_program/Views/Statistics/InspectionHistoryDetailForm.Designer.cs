@@ -28,18 +28,11 @@
         /// </summary>
         private void InitializeComponent()
         {
-            DataGridViewCellStyle dataGridViewCellStyle5 = new DataGridViewCellStyle();
-            DataGridViewCellStyle dataGridViewCellStyle6 = new DataGridViewCellStyle();
+            DataGridViewCellStyle dataGridViewCellStyle1 = new DataGridViewCellStyle();
+            DataGridViewCellStyle dataGridViewCellStyle2 = new DataGridViewCellStyle();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(InspectionHistoryDetailForm));
             cardIHD = new Panel();
             DGV_IHD_result = new ComponentFactory.Krypton.Toolkit.KryptonDataGridView();
-            date = new DataGridViewTextBoxColumn();
-            time = new DataGridViewTextBoxColumn();
-            CameraID = new DataGridViewTextBoxColumn();
-            PCBID = new DataGridViewTextBoxColumn();
-            DefectType = new DataGridViewTextBoxColumn();
-            DefectLocation = new DataGridViewTextBoxColumn();
-            productionline = new DataGridViewTextBoxColumn();
             pictureBox_IHD_Image = new PictureBox();
             cardIHD.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)DGV_IHD_result).BeginInit();
@@ -62,28 +55,27 @@
             DGV_IHD_result.AllowUserToAddRows = false;
             DGV_IHD_result.AllowUserToResizeColumns = false;
             DGV_IHD_result.AllowUserToResizeRows = false;
-            dataGridViewCellStyle5.BackColor = Color.FromArgb(44, 44, 44);
-            dataGridViewCellStyle5.Font = new Font("맑은 고딕", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
-            dataGridViewCellStyle5.ForeColor = Color.White;
-            dataGridViewCellStyle5.SelectionBackColor = Color.FromArgb(44, 44, 44);
-            dataGridViewCellStyle5.SelectionForeColor = Color.White;
-            DGV_IHD_result.AlternatingRowsDefaultCellStyle = dataGridViewCellStyle5;
+            dataGridViewCellStyle1.BackColor = Color.FromArgb(44, 44, 44);
+            dataGridViewCellStyle1.Font = new Font("맑은 고딕", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            dataGridViewCellStyle1.ForeColor = Color.White;
+            dataGridViewCellStyle1.SelectionBackColor = Color.FromArgb(44, 44, 44);
+            dataGridViewCellStyle1.SelectionForeColor = Color.White;
+            DGV_IHD_result.AlternatingRowsDefaultCellStyle = dataGridViewCellStyle1;
             DGV_IHD_result.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
             DGV_IHD_result.ClipboardCopyMode = DataGridViewClipboardCopyMode.Disable;
             DGV_IHD_result.ColumnHeadersHeight = 41;
             DGV_IHD_result.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-            DGV_IHD_result.Columns.AddRange(new DataGridViewColumn[] { date, time, CameraID, PCBID, DefectType, DefectLocation, productionline });
             DGV_IHD_result.Location = new Point(718, 67);
             DGV_IHD_result.Name = "DGV_IHD_result";
             DGV_IHD_result.PaletteMode = ComponentFactory.Krypton.Toolkit.PaletteMode.Office2010Black;
             DGV_IHD_result.ReadOnly = true;
             DGV_IHD_result.RowHeadersVisible = false;
-            dataGridViewCellStyle6.BackColor = Color.FromArgb(44, 44, 44);
-            dataGridViewCellStyle6.Font = new Font("맑은 고딕", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
-            dataGridViewCellStyle6.ForeColor = Color.White;
-            dataGridViewCellStyle6.SelectionBackColor = Color.FromArgb(44, 44, 44);
-            dataGridViewCellStyle6.SelectionForeColor = Color.White;
-            DGV_IHD_result.RowsDefaultCellStyle = dataGridViewCellStyle6;
+            dataGridViewCellStyle2.BackColor = Color.FromArgb(44, 44, 44);
+            dataGridViewCellStyle2.Font = new Font("맑은 고딕", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            dataGridViewCellStyle2.ForeColor = Color.White;
+            dataGridViewCellStyle2.SelectionBackColor = Color.FromArgb(44, 44, 44);
+            dataGridViewCellStyle2.SelectionForeColor = Color.White;
+            DGV_IHD_result.RowsDefaultCellStyle = dataGridViewCellStyle2;
             DGV_IHD_result.RowTemplate.DefaultCellStyle.BackColor = Color.FromArgb(44, 44, 44);
             DGV_IHD_result.RowTemplate.DefaultCellStyle.Font = new Font("맑은 고딕", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
             DGV_IHD_result.RowTemplate.DefaultCellStyle.ForeColor = Color.White;
@@ -220,48 +212,6 @@
             DGV_IHD_result.StateTracking.HeaderRow.Content.Color2 = Color.White;
             DGV_IHD_result.TabIndex = 1;
             // 
-            // date
-            // 
-            date.HeaderText = "날짜";
-            date.Name = "date";
-            date.ReadOnly = true;
-            // 
-            // time
-            // 
-            time.HeaderText = "시간";
-            time.Name = "time";
-            time.ReadOnly = true;
-            // 
-            // CameraID
-            // 
-            CameraID.HeaderText = "카메라 ID";
-            CameraID.Name = "CameraID";
-            CameraID.ReadOnly = true;
-            // 
-            // PCBID
-            // 
-            PCBID.HeaderText = "PCB ID";
-            PCBID.Name = "PCBID";
-            PCBID.ReadOnly = true;
-            // 
-            // DefectType
-            // 
-            DefectType.HeaderText = "불량 유형";
-            DefectType.Name = "DefectType";
-            DefectType.ReadOnly = true;
-            // 
-            // DefectLocation
-            // 
-            DefectLocation.HeaderText = "불량 위치";
-            DefectLocation.Name = "DefectLocation";
-            DefectLocation.ReadOnly = true;
-            // 
-            // productionline
-            // 
-            productionline.HeaderText = "생산 라인";
-            productionline.Name = "productionline";
-            productionline.ReadOnly = true;
-            // 
             // pictureBox_IHD_Image
             // 
             pictureBox_IHD_Image.BackColor = Color.Black;
@@ -291,12 +241,5 @@
         private Panel cardIHD;
         private PictureBox pictureBox_IHD_Image;
         private ComponentFactory.Krypton.Toolkit.KryptonDataGridView DGV_IHD_result;
-        private DataGridViewTextBoxColumn date;
-        private DataGridViewTextBoxColumn time;
-        private DataGridViewTextBoxColumn CameraID;
-        private DataGridViewTextBoxColumn PCBID;
-        private DataGridViewTextBoxColumn DefectType;
-        private DataGridViewTextBoxColumn DefectLocation;
-        private DataGridViewTextBoxColumn productionline;
     }
 }
