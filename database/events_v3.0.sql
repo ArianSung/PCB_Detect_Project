@@ -1,14 +1,18 @@
 -- =====================================================
--- PCB 불량 검사 시스템 이벤트 스케줄러 v3.0
--- Product Verification Architecture
+-- PCB 불량 검사 시스템 이벤트 스케줄러 v3.1 (Extended for WinForms)
+-- Product Verification Architecture + User Logs + Alerts + OHT
 -- =====================================================
--- 작성일: 2025-11-28
--- 설명: 10년 이상 된 데이터 자동 삭제 (매일 새벽 2시 실행)
--- 대상 테이블:
---   1. inspections (10년 이상)
---   2. inspection_summary_hourly (10년 이상)
---   3. inspection_summary_daily (10년 이상)
---   4. inspection_summary_monthly (10년 이상)
+-- 작성일: 2025-11-28 (v3.0)
+-- 확장일: 2025-11-28 (v3.1)
+-- 설명: 10년 이상 된 데이터 자동 삭제 (매일 새벽 2시~3시 실행)
+-- 대상 테이블: 7개
+--   1. inspections (10년 이상) - 매일 02:10
+--   2. inspection_summary_hourly (10년 이상) - 매일 02:20
+--   3. inspection_summary_daily (10년 이상) - 매일 02:30
+--   4. inspection_summary_monthly (10년 이상) - 매일 02:40
+--   5. user_logs (10년 이상) - 매일 02:50 (v3.1 추가)
+--   6. alerts (10년 이상) - 매일 03:00 (v3.1 추가)
+--   7. oht_operations (10년 이상) - 매일 03:10 (v3.1 추가)
 -- =====================================================
 
 USE pcb_inspection;
@@ -35,6 +39,9 @@ DROP EVENT IF EXISTS cleanup_old_inspections;
 DROP EVENT IF EXISTS cleanup_old_hourly_summary;
 DROP EVENT IF EXISTS cleanup_old_daily_summary;
 DROP EVENT IF EXISTS cleanup_old_monthly_summary;
+DROP EVENT IF EXISTS cleanup_old_user_logs;
+DROP EVENT IF EXISTS cleanup_old_alerts;
+DROP EVENT IF EXISTS cleanup_old_oht_operations;
 
 
 -- =====================================================
@@ -211,6 +218,129 @@ DELIMITER ;
 
 
 -- =====================================================
+-- 5. 사용자 활동 로그 정리 이벤트 (v3.1 추가)
+-- =====================================================
+-- 설명: user_logs 테이블에서 10년 이상 된 레코드 삭제
+-- 실행: 매일 새벽 2시 50분
+-- 보관 기간: 10년
+-- =====================================================
+
+DELIMITER $$
+
+CREATE EVENT cleanup_old_user_logs
+ON SCHEDULE
+    EVERY 1 DAY
+    STARTS CONCAT(CURDATE() + INTERVAL 1 DAY, ' 02:50:00')
+ON COMPLETION PRESERVE
+ENABLE
+COMMENT '10년 이상 된 사용자 로그 자동 삭제 (매일 02:50)'
+DO
+BEGIN
+    DECLARE deleted_rows INT DEFAULT 0;
+    DECLARE cutoff_date DATETIME;
+
+    -- 10년 전 날짜 계산
+    SET cutoff_date = DATE_SUB(NOW(), INTERVAL 10 YEAR);
+
+    -- 10년 이상 된 데이터 삭제
+    DELETE FROM user_logs
+    WHERE created_at < cutoff_date;
+
+    -- 삭제된 행 수 확인
+    SET deleted_rows = ROW_COUNT();
+
+    -- 삭제 완료 메시지
+    IF deleted_rows > 0 THEN
+        SELECT CONCAT('user_logs 테이블에서 ', deleted_rows, '개 레코드 삭제 완료 (기준: ', cutoff_date, ')') AS cleanup_status;
+    END IF;
+END$$
+
+DELIMITER ;
+
+
+-- =====================================================
+-- 6. 알림 정리 이벤트 (v3.1 추가)
+-- =====================================================
+-- 설명: alerts 테이블에서 10년 이상 된 레코드 삭제
+-- 실행: 매일 새벽 3시 00분
+-- 보관 기간: 10년
+-- =====================================================
+
+DELIMITER $$
+
+CREATE EVENT cleanup_old_alerts
+ON SCHEDULE
+    EVERY 1 DAY
+    STARTS CONCAT(CURDATE() + INTERVAL 1 DAY, ' 03:00:00')
+ON COMPLETION PRESERVE
+ENABLE
+COMMENT '10년 이상 된 알림 자동 삭제 (매일 03:00)'
+DO
+BEGIN
+    DECLARE deleted_rows INT DEFAULT 0;
+    DECLARE cutoff_date DATETIME;
+
+    -- 10년 전 날짜 계산
+    SET cutoff_date = DATE_SUB(NOW(), INTERVAL 10 YEAR);
+
+    -- 10년 이상 된 데이터 삭제
+    DELETE FROM alerts
+    WHERE created_at < cutoff_date;
+
+    -- 삭제된 행 수 확인
+    SET deleted_rows = ROW_COUNT();
+
+    -- 삭제 완료 메시지
+    IF deleted_rows > 0 THEN
+        SELECT CONCAT('alerts 테이블에서 ', deleted_rows, '개 레코드 삭제 완료 (기준: ', cutoff_date, ')') AS cleanup_status;
+    END IF;
+END$$
+
+DELIMITER ;
+
+
+-- =====================================================
+-- 7. OHT 운영 이력 정리 이벤트 (v3.1 추가)
+-- =====================================================
+-- 설명: oht_operations 테이블에서 10년 이상 된 레코드 삭제
+-- 실행: 매일 새벽 3시 10분
+-- 보관 기간: 10년
+-- =====================================================
+
+DELIMITER $$
+
+CREATE EVENT cleanup_old_oht_operations
+ON SCHEDULE
+    EVERY 1 DAY
+    STARTS CONCAT(CURDATE() + INTERVAL 1 DAY, ' 03:10:00')
+ON COMPLETION PRESERVE
+ENABLE
+COMMENT '10년 이상 된 OHT 운영 이력 자동 삭제 (매일 03:10)'
+DO
+BEGIN
+    DECLARE deleted_rows INT DEFAULT 0;
+    DECLARE cutoff_date DATETIME;
+
+    -- 10년 전 날짜 계산
+    SET cutoff_date = DATE_SUB(NOW(), INTERVAL 10 YEAR);
+
+    -- 10년 이상 된 데이터 삭제
+    DELETE FROM oht_operations
+    WHERE created_at < cutoff_date;
+
+    -- 삭제된 행 수 확인
+    SET deleted_rows = ROW_COUNT();
+
+    -- 삭제 완료 메시지
+    IF deleted_rows > 0 THEN
+        SELECT CONCAT('oht_operations 테이블에서 ', deleted_rows, '개 레코드 삭제 완료 (기준: ', cutoff_date, ')') AS cleanup_status;
+    END IF;
+END$$
+
+DELIMITER ;
+
+
+-- =====================================================
 -- 이벤트 확인
 -- =====================================================
 -- 다음 쿼리로 이벤트 생성 확인 가능:
@@ -221,6 +351,9 @@ DELIMITER ;
 -- SHOW CREATE EVENT cleanup_old_hourly_summary;
 -- SHOW CREATE EVENT cleanup_old_daily_summary;
 -- SHOW CREATE EVENT cleanup_old_monthly_summary;
+-- SHOW CREATE EVENT cleanup_old_user_logs;
+-- SHOW CREATE EVENT cleanup_old_alerts;
+-- SHOW CREATE EVENT cleanup_old_oht_operations;
 --
 -- 이벤트 실행 이력 확인 (performance_schema 활성화 필요):
 -- SELECT * FROM performance_schema.events_statements_history
@@ -238,8 +371,11 @@ DELIMITER ;
 -- DELETE FROM inspection_summary_hourly WHERE hour_timestamp < DATE_SUB(NOW(), INTERVAL 10 YEAR);
 -- DELETE FROM inspection_summary_daily WHERE date < DATE_SUB(CURDATE(), INTERVAL 10 YEAR);
 -- DELETE FROM inspection_summary_monthly WHERE (year < YEAR(DATE_SUB(CURDATE(), INTERVAL 10 YEAR)));
+-- DELETE FROM user_logs WHERE created_at < DATE_SUB(NOW(), INTERVAL 10 YEAR);
+-- DELETE FROM alerts WHERE created_at < DATE_SUB(NOW(), INTERVAL 10 YEAR);
+-- DELETE FROM oht_operations WHERE created_at < DATE_SUB(NOW(), INTERVAL 10 YEAR);
 -- =====================================================
 
 -- 완료 메시지
-SELECT 'Event Scheduler 생성 완료: 매일 새벽 2시 10분부터 10년 이상 된 데이터 자동 삭제' AS status;
-SELECT 'Event 목록: cleanup_old_inspections, cleanup_old_hourly_summary, cleanup_old_daily_summary, cleanup_old_monthly_summary' AS events;
+SELECT 'v3.1 Event Scheduler 생성 완료: 매일 새벽 2시 10분~3시 10분, 10년 이상 된 데이터 자동 삭제 (7개 테이블)' AS status;
+SELECT 'Event 목록: cleanup_old_inspections, cleanup_old_hourly_summary, cleanup_old_daily_summary, cleanup_old_monthly_summary, cleanup_old_user_logs, cleanup_old_alerts, cleanup_old_oht_operations' AS events;
