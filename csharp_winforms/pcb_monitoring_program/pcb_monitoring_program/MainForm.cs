@@ -26,10 +26,47 @@ namespace pcb_monitoring_program
         private MonitoringMainView _UcMonitoring = new MonitoringMainView();
         private UserManagementView _UcUserManagement = new UserManagementView();
         private SettingView _UcSetting = new SettingView();
+
+        private readonly string _currentUsername;
+        private readonly string _currentUserRole;   // admin / operator / viewer
+
         public MainForm()
         {
             InitializeComponent();
         }
+
+        // ⭐ 새로 추가된 생성자: 로그인 폼에서 호출될 예정
+        public MainForm(string username, string role) : this() // 기존 기본 생성자(InitializeComponent)를 호출
+        {
+            _currentUsername = username;
+            _currentUserRole = role;
+
+            labelusername.Text = username;
+            labeluserauthority.Text = $"[ {role} ]";
+        }
+
+        private void ApplyRolePermissions()
+        {
+            // null 대비 + 소문자로 통일
+            string role = (_currentUserRole ?? "").ToLowerInvariant();
+
+            bool isAdmin = role == "admin";
+            bool isOperator = role == "operator";
+            bool isViewer = role == "viewer" || string.IsNullOrEmpty(role);
+
+            // ✅ 모두 공통으로 보여줄 버튼
+            btnDashboard.Visible = true;
+            btnStatistics.Visible = true;
+            btnMonitoring.Visible = true;
+
+            // ✅ 권한에 따라 달라지는 버튼
+            btnUserManagement.Visible = isAdmin;               // Admin only
+            btnSetting.Visible = isAdmin; // Admin 
+
+            // 필요하면 Enabled도 같이 제어 가능
+            // btnUserManagement.Enabled = isAdmin;
+        }
+
         private void ShowInPanel(UserControl page) //콘텐츠 패널 전환 메서드
         {
             // 1) 기존 컨트롤 모두 제거
@@ -125,6 +162,8 @@ namespace pcb_monitoring_program
             }
             UiStyleHelper.HighlightButton(btnDashboard);
             ShowInPanel(_UcDashboard);
+
+            ApplyRolePermissions();
         }
 
         private void timerClock_Tick(object sender, EventArgs e)

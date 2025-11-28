@@ -9,7 +9,6 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Security.Cryptography;
-using pcb_monitoring_program.DatabaseManager.Repositories;
 using BCrypt.Net;
 
 namespace pcb_monitoring_program.Views.UserManagement
@@ -17,6 +16,12 @@ namespace pcb_monitoring_program.Views.UserManagement
     public partial class UserManagementForm_AddUser : Form
     {
         private readonly UserRepository _userRepo = new UserRepository();
+
+        private Image _iconEyeClose;
+        private Image _iconEyeOpen;
+
+        // 👀 비밀번호 보이기 상태
+        private bool _isPasswordVisible = false;
 
         public UserManagementForm_AddUser()
         {
@@ -31,10 +36,28 @@ namespace pcb_monitoring_program.Views.UserManagement
 
             UiStyleHelper.MakeRoundedButton(btn_UM_ADD_AddUser, 24);
             UiStyleHelper.MakeRoundedButton(btn_UM_ADD_cancel, 24);
+            UiStyleHelper.MakeRoundedButton(btn_UM_Add_ID_Check, 24);
             UiStyleHelper.AttachDropShadow(btn_UM_ADD_AddUser, radius: 12, offset: 6);
             UiStyleHelper.AttachDropShadow(btn_UM_ADD_cancel, radius: 12, offset: 6);
+            UiStyleHelper.AttachDropShadow(btn_UM_Add_ID_Check, radius: 12, offset: 6);
 
             CB_UM_ADD_Active_True.Checked = true;
+
+            int iconSize = 32;
+
+            // 리소스 이미지 리사이즈
+            _iconEyeClose = new Bitmap(Properties.Resources.UM_eye_close, new Size(iconSize, iconSize));
+            _iconEyeOpen = new Bitmap(Properties.Resources.UM_eye_open, new Size(iconSize, iconSize));
+
+            // 버튼 기본 이미지는 눈 감김
+            btn_UM_Add_PW.Image = _iconEyeClose;
+
+            // 버튼 비주얼 초기화
+            btn_UM_Add_PW.FlatStyle = FlatStyle.Flat;
+            btn_UM_Add_PW.FlatAppearance.BorderSize = 0;
+            btn_UM_Add_PW.BackColor = Color.Transparent;
+            btn_UM_Add_PW.Text = "";
+            btn_UM_Add_PW.ImageAlign = ContentAlignment.MiddleCenter;
         }
 
         // ✅ 비밀번호 해시 (SHA256)
@@ -67,6 +90,24 @@ namespace pcb_monitoring_program.Views.UserManagement
                 MessageBox.Show("사용자 이름을 입력하세요.", "알림",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 textbox_UM_ADD_Name.Focus();
+                return;
+            }
+
+            // --- 🚨 1.5) 최종 아이디 중복 확인 (저장 전에 필수) ---
+            try
+            {
+                if (_userRepo.IsUsernameTaken(username, 0))
+                {
+                    MessageBox.Show($"'{username}'은(는) 이미 사용 중인 아이디입니다. 다른 아이디를 사용하세요.", "중복 오류",
+                                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    textbox_UM_ADD_ID.Focus();
+                    return; // 중복이므로 저장 중단
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"사용자 추가 중 아이디 확인에 DB 오류가 발생했습니다: {ex.Message}", "DB 오류",
+                                MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
@@ -136,6 +177,72 @@ namespace pcb_monitoring_program.Views.UserManagement
             {
                 this.DialogResult = DialogResult.Cancel;
                 this.Close();
+            }
+        }
+
+        private void btn_UM_Add_PW_Click(object sender, EventArgs e)
+        {
+            _isPasswordVisible = !_isPasswordVisible;
+
+            if (_isPasswordVisible)
+            {
+                // 🔓 비밀번호 보이기 (숫자/문자 그대로 표시)
+                textbox_UM_ADD_PW.UseSystemPasswordChar = false;
+                textbox_UM_ADD_VerifyPW.UseSystemPasswordChar = false;
+
+                // 아이콘 변경
+                btn_UM_Add_PW.Image = _iconEyeOpen;
+            }
+            else
+            {
+                // 🔒 다시 가리기 (시스템 기본 문자 사용)
+                textbox_UM_ADD_PW.UseSystemPasswordChar = true;
+                textbox_UM_ADD_VerifyPW.UseSystemPasswordChar = true;
+
+                // Note: PasswordChar는 건드리지 않습니다.
+                // UseSystemPasswordChar가 true이면 PasswordChar는 무시됩니다.
+
+                // 아이콘 변경
+                btn_UM_Add_PW.Image = _iconEyeClose;
+            }
+        }
+
+        private void btn_UM_Add_ID_Check_Click(object sender, EventArgs e)
+        {
+            string username = textbox_UM_ADD_ID.Text.Trim();
+
+            // 1. 입력값 검증
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                MessageBox.Show("확인할 아이디를 입력하세요.", "알림",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                textbox_UM_ADD_ID.Focus();
+                return;
+            }
+
+            // 2. DB 중복 확인 실행
+            try
+            {
+                // IsUsernameTaken(username, 0) 호출 (0은 새 사용자 추가를 의미)
+                bool isTaken = _userRepo.IsUsernameTaken(username, 0);
+
+                if (isTaken)
+                {
+                    MessageBox.Show($"'{username}'은(는) 이미 사용 중인 아이디입니다. 다른 아이디를 사용하세요.", "중복 오류",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    textbox_UM_ADD_ID.Focus();
+                }
+                else
+                {
+                    MessageBox.Show($"'{username}'은(는) 사용 가능한 아이디입니다.", "확인 완료",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                // DB 연동 오류 처리
+                MessageBox.Show($"아이디 확인 중 DB 오류가 발생했습니다: {ex.Message}", "오류",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
     }

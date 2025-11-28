@@ -168,7 +168,7 @@
             pictureBox_Main_user.ErrorImage = null;
             pictureBox_Main_user.Image = Properties.Resources.Main_user_user_white;
             pictureBox_Main_user.InitialImage = null;
-            pictureBox_Main_user.Location = new Point(3, 13);
+            pictureBox_Main_user.Location = new Point(8, 13);
             pictureBox_Main_user.Name = "pictureBox_Main_user";
             pictureBox_Main_user.Size = new Size(76, 90);
             pictureBox_Main_user.SizeMode = PictureBoxSizeMode.Zoom;

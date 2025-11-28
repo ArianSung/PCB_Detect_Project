@@ -21,6 +21,13 @@ namespace pcb_monitoring_program
 
         private int _failedLoginCount = 0;
         private DateTime? _lockoutUntil = null;
+
+        private Image _iconEyeClose;
+        private Image _iconEyeOpen;
+
+        // 👀 비밀번호 보이기 상태
+        private bool _isPasswordVisible = false;
+
         public LoginForm()
         {
             InitializeComponent();
@@ -29,8 +36,16 @@ namespace pcb_monitoring_program
             btn_login.Parent = cardLogin;
 
             // 카드 스타일/섀도우: Paint에서 하지 말고 한 번만
+            Color cardBgColor = Color.FromArgb(44, 44, 44);
             UiStyleHelper.MakeRoundedPanel(cardLogin, 16, Color.FromArgb(44, 44, 44));
             UiStyleHelper.AddShadowRoundedPanel(cardLogin, 16);
+
+            // --- 테두리 문제 해결을 위한 코드 추가 시작 ---
+            btn_login.FlatStyle = FlatStyle.Flat;
+            btn_login.FlatAppearance.BorderSize = 0;
+            btn_login.FlatAppearance.BorderColor = cardBgColor;
+            btn_login.FlatAppearance.MouseDownBackColor = cardBgColor;
+            btn_login.FlatAppearance.MouseOverBackColor = cardBgColor;  
 
             // 버튼 둥글게 + 그림자 초기화 (한 번만)
             UiStyleHelper.MakeRoundedButton(btn_login, 24);
@@ -43,7 +58,26 @@ namespace pcb_monitoring_program
             // 깜빡임 줄이기
             typeof(Panel).GetProperty("DoubleBuffered",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-                ?.SetValue(cardLogin, true, null);
+                ?.SetValue(cardLogin, true, null);      
+
+            // 비밀번호는 처음에 가려진 상태로
+            passwordTextBox.UseSystemPasswordChar = true;
+
+            int iconSize = 32;
+
+            // AddUser에서 쓰던 것과 똑같이 리소스에서 아이콘 가져오기
+            _iconEyeClose = new Bitmap(Properties.Resources.UM_eye_close, new Size(iconSize, iconSize));
+            _iconEyeOpen = new Bitmap(Properties.Resources.UM_eye_open, new Size(iconSize, iconSize));
+
+            // 버튼 기본 이미지는 눈 감김
+            btn_login_PW.Image = _iconEyeClose;
+
+            // 버튼 비주얼 초기화 (AddUser와 동일하게)
+            btn_login_PW.FlatStyle = FlatStyle.Flat;
+            btn_login_PW.FlatAppearance.BorderSize = 0;
+            btn_login_PW.BackColor = Color.Transparent;
+            btn_login_PW.Text = "";
+            btn_login_PW.ImageAlign = ContentAlignment.MiddleCenter;
         }
 
         private void btn_login_Click(object sender, EventArgs e)
@@ -86,7 +120,7 @@ namespace pcb_monitoring_program
                         MessageBox.Show($"{user.Role} 권한으로 로그인 성공!", "로그인 성공");
 
                         // 여기서 user 정보를 MainForm에 넘기고 싶으면 생성자 수정해서 전달해도 됨
-                        MainForm nextForm = new MainForm(); // 필요하면 new MainForm(user)로 바꾸기
+                        MainForm nextForm = new MainForm(enteredUserId, user.Role.ToString());
                         nextForm.Show();
                         this.Hide();
                     }
@@ -121,6 +155,31 @@ namespace pcb_monitoring_program
             catch (Exception ex)
             {
                 MessageBox.Show($"로그인 처리 중 오류 발생: {ex.Message}", "오류");
+            }
+        }
+
+        private void btn_login_PW_Click(object sender, EventArgs e)
+        {
+            _isPasswordVisible = !_isPasswordVisible;
+
+            if (_isPasswordVisible)
+            {
+                // 🔓 비밀번호 보이기 (숫자/문자 그대로 표시)
+                passwordTextBox.UseSystemPasswordChar = false;
+
+                // 아이콘 변경
+                btn_login_PW.Image = _iconEyeOpen;
+            }
+            else
+            {
+                // 🔒 다시 가리기 (시스템 기본 문자 사용)
+                passwordTextBox.UseSystemPasswordChar = true;
+
+                // Note: PasswordChar는 건드리지 않습니다.
+                // UseSystemPasswordChar가 true이면 PasswordChar는 무시됩니다.
+
+                // 아이콘 변경
+                btn_login_PW.Image = _iconEyeClose;
             }
         }
     }
