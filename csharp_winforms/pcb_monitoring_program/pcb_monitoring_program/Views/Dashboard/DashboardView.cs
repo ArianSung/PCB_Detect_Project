@@ -383,7 +383,7 @@ namespace pcb_monitoring_program.Views.Dashboard
             var categories = new (string name, int value, Color color)[]
             {
                 ("부품불량", totalPartDefect,   Color.FromArgb(255, 167, 38)),
-                ("납땜불량", totalSolderDefect, Color.FromArgb(158, 158, 158)),
+                ("S/N불량", totalSolderDefect, Color.FromArgb(158, 158, 158)),
                 ("폐기",     totalScrap,        Color.FromArgb(244, 67, 54))
             };
 
@@ -662,7 +662,7 @@ namespace pcb_monitoring_program.Views.Dashboard
             {
                 ("정상",     2, 3, Color.FromArgb(100, 181, 246)),
                 ("부품불량",  3, 3, Color.FromArgb(255, 167, 38)),
-                ("납땜불량",  1, 3, Color.FromArgb(158, 158, 158)),
+                ("S/N불량",  1, 3, Color.FromArgb(158, 158, 158)),
             };
 
             var chart = BoxRateChart;
@@ -934,7 +934,7 @@ namespace pcb_monitoring_program.Views.Dashboard
                 Color = Color.FromArgb(255, 167, 38)
             };
 
-            Series sSolderDefect = new Series("납땜불량")
+            Series sSolderDefect = new Series("S/N불량")
             {
                 ChartArea = "Main",
                 ChartType = SeriesChartType.StackedColumn,
@@ -1037,7 +1037,7 @@ namespace pcb_monitoring_program.Views.Dashboard
             sb.AppendLine($"{hour:00}시");
             sb.AppendLine($"실제 불량률: {rate * 100:0.0}%");
             sb.AppendLine($"총 검사: {total}개");
-            sb.AppendLine($"정상: {normal} / 부품: {part} / 납땜: {solder} / 폐기: {scrap}");
+            sb.AppendLine($"정상: {normal} / 부품: {part} / S/N: {solder} / 폐기: {scrap}");
             sb.AppendLine($"불량 합계: {defects}개");
 
             _defectTrendToolTip.Show(
@@ -1081,8 +1081,8 @@ namespace pcb_monitoring_program.Views.Dashboard
                     normal = (int)chart.Series["정상"].Points[pointIndex].YValues[0];
                 if (chart.Series.IndexOf("부품불량") >= 0)
                     comp = (int)chart.Series["부품불량"].Points[pointIndex].YValues[0];
-                if (chart.Series.IndexOf("납땜불량") >= 0)
-                    solder = (int)chart.Series["납땜불량"].Points[pointIndex].YValues[0];
+                if (chart.Series.IndexOf("S/N불량") >= 0)
+                    solder = (int)chart.Series["S/N불량"].Points[pointIndex].YValues[0];
                 if (chart.Series.IndexOf("폐기") >= 0)
                     scrap = (int)chart.Series["폐기"].Points[pointIndex].YValues[0];
 
@@ -1095,7 +1095,7 @@ namespace pcb_monitoring_program.Views.Dashboard
                 sb.AppendLine($"{hour:00}시");
                 sb.AppendLine($"[{series.Name}] {value}개");
                 sb.AppendLine($"총 검사: {total}개");
-                sb.AppendLine($"정상: {normal} / 부품: {comp} / 납땜: {solder} / 폐기: {scrap}");
+                sb.AppendLine($"정상: {normal} / 부품: {comp} / S/N: {solder} / 폐기: {scrap}");
                 sb.AppendLine($"불량률: {defectRate:0.0}% ({defectSum}개)");
 
                 _hourlyChartToolTip.Show(
