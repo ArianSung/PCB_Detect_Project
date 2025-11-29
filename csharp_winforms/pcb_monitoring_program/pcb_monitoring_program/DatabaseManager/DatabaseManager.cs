@@ -346,7 +346,7 @@ namespace pcb_monitoring_program.DatabaseManager
         /// <param name="startDate">시작 날짜</param>
         /// <param name="endDate">종료 날짜</param>
         /// <returns>통계 객체</returns>
-        public List<DailyStatistics> GetDailyStatisticsForYear(int year)    //민준코드
+        public List<DailyStatistics> GetDailyStatisticsForYear(int year)
         {
             List<DailyStatistics> list = new List<DailyStatistics>();
 
@@ -359,20 +359,33 @@ namespace pcb_monitoring_program.DatabaseManager
                 {
                     conn.Open();
 
+                    // ✅ v3.0 스키마:
+                    //  - inspection_summary_daily 를 date 기준으로 모아서
+                    //  - product_code 는 전부 합산(전체 라인 기준 통계)
                     string query = @"
                 SELECT
-                    stat_date,
-                    total_inspections,
-                    normal_count,
-                    component_defect_count,
-                    solder_defect_count,
-                    discard_count,
-                    defect_rate,
-                    created_at,
-                    updated_at
-                FROM statistics_daily
-                WHERE stat_date BETWEEN @startDate AND @endDate
-                ORDER BY stat_date ASC";
+                    d.date AS stat_date,
+                    SUM(d.total_inspections)              AS total_inspections,
+                    SUM(d.normal_count)                   AS normal_count,
+                    SUM(d.missing_count)                  AS component_defect_count,
+                    SUM(d.position_error_count)           AS solder_defect_count,
+                    SUM(d.discard_count)                  AS discard_count,
+                    -- 전체 검사 대비 (누락+위치오류+폐기) 비율(%)
+                    CAST(
+                        CASE 
+                            WHEN SUM(d.total_inspections) > 0 THEN
+                                (SUM(d.missing_count + d.position_error_count + d.discard_count) * 100.0
+                                 / SUM(d.total_inspections))
+                            ELSE 0
+                        END
+                    AS DECIMAL(5,2))                      AS defect_rate,
+                    MIN(d.created_at)                     AS created_at,
+                    MAX(d.updated_at)                     AS updated_at
+                FROM inspection_summary_daily d
+                WHERE d.date BETWEEN @startDate AND @endDate
+                GROUP BY d.date
+                ORDER BY d.date ASC;
+            ";
 
                     using (MySqlCommand cmd = new MySqlCommand(query, conn))
                     {
@@ -385,6 +398,7 @@ namespace pcb_monitoring_program.DatabaseManager
                             {
                                 var d = new DailyStatistics
                                 {
+                                    // DailyStatistics 모델은 기존 그대로 사용
                                     StatDate = reader.GetDateTime("stat_date").Date,
                                     TotalInspections = reader.GetInt32("total_inspections"),
                                     NormalCount = reader.GetInt32("normal_count"),
@@ -392,8 +406,8 @@ namespace pcb_monitoring_program.DatabaseManager
                                     SolderDefectCount = reader.GetInt32("solder_defect_count"),
                                     DiscardCount = reader.GetInt32("discard_count"),
                                     DefectRate = reader.IsDBNull(reader.GetOrdinal("defect_rate"))
-                                                            ? 0.0
-                                                            : (double)reader.GetDecimal("defect_rate"),
+                                                 ? 0.0
+                                                 : (double)reader.GetDecimal("defect_rate"),
                                     CreatedAt = reader.GetDateTime("created_at"),
                                     UpdatedAt = reader.GetDateTime("updated_at"),
                                 };
@@ -415,6 +429,7 @@ namespace pcb_monitoring_program.DatabaseManager
 
             return list;
         }
+
         /// <summary>
         /// 시간별 통계 조회 (v3.0 스키마: inspection_summary_hourly)
         /// </summary>
