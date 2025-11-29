@@ -1,31 +1,31 @@
 {
-  "image_path": "../server/reference_images/reference_left_20251122_180849_2.jpg",
+  "image_path": "server/reference_images/reference_left_20251122_180849_2.jpg",
   "image_size": {
     "width": 640,
     "height": 480
   },
   "mounting_holes": [
     [
-      98,
-      84
+      206,
+      192
     ],
     [
-      526,
-      110
+      410,
+      176
     ],
     [
-      514,
-      346
+      360,
+      382
     ],
     [
-      92,
-      392
+      186,
+      382
     ]
   ],
   "hole_distances": {
-    "width": 428.78899239602686,
-    "height": 308.05843601498725,
-    "diagonal": 491.62994213127416
+    "width": 204.6264889988586,
+    "height": 191.049731745428,
+    "diagonal": 244.57309745759036
   },
   "components": [
     {
