@@ -27,7 +27,7 @@ namespace pcb_monitoring_program.Views.Monitoring
         {
             UiStyleHelper.MakeRoundedPanel(cardBOXMonitoring, radius: 16, back: Color.FromArgb(44, 44, 44));
             UiStyleHelper.MakeRoundedPanel(cardBoxRate, radius: 16, back: Color.FromArgb(44, 44, 44));
-             
+
             UiStyleHelper.AddShadowRoundedPanel(cardBOXMonitoring, 16);
             UiStyleHelper.AddShadowRoundedPanel(cardBoxRate, 16);
 
@@ -45,23 +45,26 @@ namespace pcb_monitoring_program.Views.Monitoring
                 {
                     var list = db.GetAllBoxStatus();
 
+                    // 🔹 DB box_id: NORMAL / MISSING / POSITION_ERROR
                     var normal = list.FirstOrDefault(b => b.BoxId == "NORMAL")
                                  ?? new BoxStatus { BoxId = "NORMAL", Category = "normal", CurrentSlot = 0, MaxSlots = 3 };
-                    var component = list.FirstOrDefault(b => b.BoxId == "COMPONENT_DEFECT")
-                                 ?? new BoxStatus { BoxId = "COMPONENT_DEFECT", Category = "component_defect", CurrentSlot = 0, MaxSlots = 3 };
-                    var solder = list.FirstOrDefault(b => b.BoxId == "SOLDER_DEFECT")
-                                 ?? new BoxStatus { BoxId = "SOLDER_DEFECT", Category = "solder_defect", CurrentSlot = 0, MaxSlots = 3 };
+
+                    var missing = list.FirstOrDefault(b => b.BoxId == "MISSING")
+                                 ?? new BoxStatus { BoxId = "MISSING", Category = "missing", CurrentSlot = 0, MaxSlots = 3 };
+
+                    var position = list.FirstOrDefault(b => b.BoxId == "POSITION_ERROR")
+                                 ?? new BoxStatus { BoxId = "POSITION_ERROR", Category = "position_error", CurrentSlot = 0, MaxSlots = 3 };
 
                     // 🔹 current_slot 그대로 = 찬 슬롯 개수 (0 ~ max_slots)
                     int normalUsed = Math.Min(normal.CurrentSlot, normal.MaxSlots);
-                    int componentUsed = Math.Min(component.CurrentSlot, component.MaxSlots);
-                    int solderUsed = Math.Min(solder.CurrentSlot, solder.MaxSlots);
+                    int missingUsed = Math.Min(missing.CurrentSlot, missing.MaxSlots);
+                    int positionUsed = Math.Min(position.CurrentSlot, position.MaxSlots);
 
                     boxData = new (string name, int current, int max, Color color)[]
                     {
-                ("정상",     normalUsed,    normal.MaxSlots,    Color.FromArgb(100, 181, 246)),
-                ("부품불량", componentUsed, component.MaxSlots, Color.FromArgb(238,  99,  99)),
-                ("납땜불량", solderUsed,    solder.MaxSlots,    Color.FromArgb(255, 170,   0)),
+                ("정상",     normalUsed,   normal.MaxSlots,   Color.FromArgb(100, 181, 246)),
+                ("부품불량", missingUsed,  missing.MaxSlots,  Color.FromArgb(255, 167, 38)),
+                ("S/N 불량", positionUsed, position.MaxSlots, Color.FromArgb(158, 158, 158)),
                     };
                 }
             }
@@ -71,7 +74,7 @@ namespace pcb_monitoring_program.Views.Monitoring
                 {
             ("정상",     0, 3, Color.FromArgb(100, 181, 246)),
             ("부품불량", 0, 3, Color.FromArgb(238,  99,  99)),
-            ("납땜불량", 0, 3, Color.FromArgb(255, 170,   0)),
+            ("S/N 불량", 0, 3, Color.FromArgb(255, 170,   0)),
                 };
 
                 MessageBox.Show($"박스 상태를 불러오는 중 오류가 발생했습니다.\n{ex.Message}", "박스 상태 모니터링");
@@ -97,9 +100,9 @@ namespace pcb_monitoring_program.Views.Monitoring
             area.AxisX.Interval = 1;
             area.AxisX.IsReversed = false;
 
-            // 🔹 AxisY = 값 축 (가로) – 여기서 0~3으로 고정
+            // 🔹 AxisY = 값 축 (가로) – 0~3 고정
             area.AxisY.Minimum = 0;
-            area.AxisY.Maximum = 3;     // ← 항상 0~3
+            area.AxisY.Maximum = 3;
             area.AxisY.Interval = 1;
             area.AxisY.MajorGrid.Enabled = true;
             area.AxisY.MajorGrid.LineColor = Color.FromArgb(70, 70, 70);
@@ -123,10 +126,10 @@ namespace pcb_monitoring_program.Views.Monitoring
             foreach (var item in boxData)
             {
                 var p = new DataPoint();
-                p.SetValueY(item.current);                 // 0~3 (찬 슬롯 개수)
-                p.AxisLabel = item.name;                   // 세로축: 정상/부품불량/납땜불량
+                p.SetValueY(item.current);              // 0~3 (찬 슬롯 개수)
+                p.AxisLabel = item.name;                // 세로축: 정상/부품불량/납땜불량
                 p.Color = item.color;
-                p.Label = $"{item.current}/{item.max}";    // 예: 1/3, 3/3
+                p.Label = $"{item.current}/{item.max}"; // 예: 1/3, 3/3
 
                 if (item.current >= item.max && item.max > 0)
                 {
@@ -139,7 +142,5 @@ namespace pcb_monitoring_program.Views.Monitoring
 
             chart.Series.Add(series);
         }
-
-
     }
 }

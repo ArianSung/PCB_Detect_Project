@@ -894,17 +894,55 @@ namespace pcb_monitoring_program.Views.Dashboard
 
         private void SetupBoxRateChart()
         {
-            // 1) 데이터: 위에서 아래로 "정상 → 부품불량 → 납땜불량"
-            var boxData = new (string name, int current, int max, Color color)[]
+            // 1) DB에서 box_status 읽어오기
+            (string name, int current, int max, Color color)[] boxData;
+
+            try
             {
-                ("정상",     2, 3, Color.FromArgb(100, 181, 246)),
-                ("부품불량",  3, 3, Color.FromArgb(255, 167, 38)),
-                ("S/N불량",  1, 3, Color.FromArgb(158, 158, 158)),
-            };
+                string connectionString =
+                    "Server=100.80.24.53;Port=3306;Database=pcb_inspection;Uid=pcb_admin;Pwd=1234;CharSet=utf8mb4;";
+
+                using (var db = new DatabaseManager.DatabaseManager(connectionString))
+                {
+                    var list = db.GetAllBoxStatus();
+
+                    // 🔹 DB box_id: NORMAL / MISSING / POSITION_ERROR
+                    var normal = list.FirstOrDefault(b => b.BoxId == "NORMAL")
+                                 ?? new BoxStatus { BoxId = "NORMAL", Category = "normal", CurrentSlot = 0, MaxSlots = 3 };
+
+                    var missing = list.FirstOrDefault(b => b.BoxId == "MISSING")
+                                 ?? new BoxStatus { BoxId = "MISSING", Category = "missing", CurrentSlot = 0, MaxSlots = 3 };
+
+                    var position = list.FirstOrDefault(b => b.BoxId == "POSITION_ERROR")
+                                 ?? new BoxStatus { BoxId = "POSITION_ERROR", Category = "position_error", CurrentSlot = 0, MaxSlots = 3 };
+
+                    // 🔹 current_slot 그대로 = 찬 슬롯 개수 (0 ~ max_slots)
+                    int normalUsed = Math.Min(normal.CurrentSlot, normal.MaxSlots);
+                    int missingUsed = Math.Min(missing.CurrentSlot, missing.MaxSlots);
+                    int positionUsed = Math.Min(position.CurrentSlot, position.MaxSlots);
+
+                    boxData = new (string name, int current, int max, Color color)[]
+                    {
+                ("정상",     normalUsed,   normal.MaxSlots,   Color.FromArgb(100, 181, 246)),
+                ("부품불량", missingUsed,  missing.MaxSlots,  Color.FromArgb(255, 167, 38)),
+                ("S/N 불량", positionUsed, position.MaxSlots, Color.FromArgb(158, 158, 158)),
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                boxData = new (string name, int current, int max, Color color)[]
+                {
+            ("정상",     0, 3, Color.FromArgb(100, 181, 246)),
+            ("부품불량", 0, 3, Color.FromArgb(238,  99,  99)),
+            ("S/N 불량", 0, 3, Color.FromArgb(255, 170,   0)),
+                };
+
+                MessageBox.Show($"박스 상태를 불러오는 중 오류가 발생했습니다.\n{ex.Message}", "박스 상태 모니터링");
+            }
 
             var chart = BoxRateChart;
 
-            // 2) 완전 초기화 + 데이터바인딩 끊기
             chart.DataSource = null;
             chart.Series.Clear();
             chart.ChartAreas.Clear();
@@ -913,30 +951,27 @@ namespace pcb_monitoring_program.Views.Dashboard
             chart.BackColor = Color.FromArgb(40, 40, 40);
             chart.BorderlineWidth = 0;
 
-            // 3) ChartArea + 축 설정
             var area = new ChartArea("Main");
             area.BackColor = Color.Transparent;
 
-            // ─ 가로축(X) : 값 (0 ~ 3)
-            area.AxisX.Minimum = 0;
-            area.AxisX.Maximum = 4;
-            area.AxisX.Interval = 1;                      // 0,1,2,3
-            area.AxisX.MajorGrid.Enabled = true;
-            area.AxisX.MajorGrid.LineColor = Color.FromArgb(70, 70, 70);
+            // 🔹 AxisX = 카테고리 축 (세로) – 숫자 필요 없음
+            area.AxisX.MajorGrid.Enabled = false;
             area.AxisX.LabelStyle.ForeColor = Color.Gainsboro;
             area.AxisX.LabelStyle.Font = new Font("맑은 고딕", 9);
+            area.AxisX.Interval = 1;
+            area.AxisX.IsReversed = false;
 
-            // ─ 세로축(Y) : 카테고리 (정상 / 부품불량 / 납땜불량)
-            area.AxisY.MajorGrid.Enabled = false;
+            // 🔹 AxisY = 값 축 (가로) – 0~3 고정
+            area.AxisY.Minimum = 0;
+            area.AxisY.Maximum = 3;
+            area.AxisY.Interval = 1;
+            area.AxisY.MajorGrid.Enabled = true;
+            area.AxisY.MajorGrid.LineColor = Color.FromArgb(70, 70, 70);
             area.AxisY.LabelStyle.ForeColor = Color.Gainsboro;
             area.AxisY.LabelStyle.Font = new Font("맑은 고딕", 9);
-            area.AxisY.Interval = 1;          // 한 칸씩
-            area.AxisY.IsReversed = false;    // 0번째가 맨 위
-
 
             chart.ChartAreas.Add(area);
 
-            // 4) Series 설정 (가로 막대)
             var series = new Series("BoxRate");
             series.ChartArea = "Main";
             series.ChartType = SeriesChartType.Bar;   // 가로 막대
@@ -945,22 +980,19 @@ namespace pcb_monitoring_program.Views.Dashboard
             series.LabelForeColor = Color.Gainsboro;
             series.Font = new Font("맑은 고딕", 8, FontStyle.Bold);
 
-            // ⚠ 자동 인덱싱 / 자동 X값 사용 안 함
-            series.IsXValueIndexed = true;         // 기본값대로 두는 게 안전
+            series.IsXValueIndexed = true;
             series.XValueType = ChartValueType.String;
             series.YValueType = ChartValueType.Int32;
 
-            // 5) 포인트 추가 – DataPoint로 직접
             foreach (var item in boxData)
             {
                 var p = new DataPoint();
-                // X값은 안 쓰고, Y값만 사용 (막대 길이)
-                p.SetValueY(item.current);          // 0~3
-                p.AxisLabel = item.name;            // 세로축에 보일 텍스트
+                p.SetValueY(item.current);              // 0~3 (찬 슬롯 개수)
+                p.AxisLabel = item.name;                // 세로축: 정상/부품불량/납땜불량
                 p.Color = item.color;
-                p.Label = $"{item.current}/{item.max}";  // 막대 위/옆 텍스트
+                p.Label = $"{item.current}/{item.max}"; // 예: 1/3, 3/3
 
-                if (item.current >= item.max)
+                if (item.current >= item.max && item.max > 0)
                 {
                     p.BorderColor = Color.Yellow;
                     p.BorderWidth = 3;
