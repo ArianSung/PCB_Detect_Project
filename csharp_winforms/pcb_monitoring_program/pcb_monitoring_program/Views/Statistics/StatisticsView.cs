@@ -182,7 +182,7 @@ namespace pcb_monitoring_program.Views.Statistics
             // 라인 시리즈 4개
             Series sNormal = CreateLineSeries("정상", Color.FromArgb(100, 181, 246));
             Series sPartDefect = CreateLineSeries("부품불량", Color.Orange);
-            Series sSolderDefect = CreateLineSeries("납땜불량", Color.FromArgb(158, 158, 158));
+            Series sSolderDefect = CreateLineSeries("S/N 불량", Color.FromArgb(158, 158, 158));
             Series sScrap = CreateLineSeries("폐기", Color.Red);
 
             chart.Series.Add(sNormal);
@@ -246,7 +246,7 @@ namespace pcb_monitoring_program.Views.Statistics
                         s.Color = Color.FromArgb(100, 181, 246);
                     else if (s.Name == "부품불량")
                         s.Color = Color.Orange;
-                    else if (s.Name == "납땜불량")
+                    else if (s.Name == "S/N 불량")
                         s.Color = Color.FromArgb(158, 158, 158);
                     else if (s.Name == "폐기")
                         s.Color = Color.Red;
@@ -341,7 +341,7 @@ namespace pcb_monitoring_program.Views.Statistics
             };
             sPartDefect["PointWidth"] = "0.7";
 
-            Series sSolderDefect = new Series("납땜불량")
+            Series sSolderDefect = new Series("S/N 불량")
             {
                 ChartArea = "Main",
                 ChartType = SeriesChartType.StackedColumn,
@@ -411,7 +411,7 @@ namespace pcb_monitoring_program.Views.Statistics
             {
         ("정상",     sumNormal,       normalColor),
         ("부품불량", sumPartDefect,   partDefectColor),
-        ("납땜불량", sumSolderDefect, solderDefColor),
+        ("S/N 불량", sumSolderDefect, solderDefColor),
         ("폐기",     sumScrap,        scrapColor),
             };
 
@@ -458,7 +458,7 @@ namespace pcb_monitoring_program.Views.Statistics
                 // 선택값 없으면 기본 "정상"
                 if (_selectedDefectCategoryName != "정상" &&
                      _selectedDefectCategoryName != "부품불량" &&
-                     _selectedDefectCategoryName != "납땜불량" &&
+                     _selectedDefectCategoryName != "S/N 불량" &&
                      _selectedDefectCategoryName != "폐기")
                 {
                     _selectedDefectCategoryName = "정상";
@@ -1044,7 +1044,7 @@ namespace pcb_monitoring_program.Views.Statistics
                     sb.AppendLine($"{rec.StatDate:yyyy-MM-dd}");
                     sb.AppendLine($"[{series.Name}] {value:N0}개");
                     sb.AppendLine($"총 검사: {total:N0}개");
-                    sb.AppendLine($"정상: {normal:N0} / 부품: {comp:N0} / 납땜: {solder:N0} / 폐기: {scrap:N0}");
+                    sb.AppendLine($"정상: {normal:N0} / 부품: {comp:N0} / S/N: {solder:N0} / 폐기: {scrap:N0}");
                     sb.AppendLine($"불량률: {defectRate:0.00}% ({defectSum:N0}개)");
 
                     // 마우스 위치 기준으로 약간 옆/위에 표시
@@ -1116,7 +1116,7 @@ namespace pcb_monitoring_program.Views.Statistics
                 var sb = new StringBuilder();
                 sb.AppendLine($"{_currentYear}년 {month:00}월");
                 sb.AppendLine($"[{series.Name}] {value:N0}개");
-                sb.AppendLine($"정상: {sumNormal:N0} / 부품: {sumPartDefect:N0} / 납땜: {sumSolderDefect:N0} / 폐기: {sumScrap:N0}");
+                sb.AppendLine($"정상: {sumNormal:N0} / 부품: {sumPartDefect:N0} / S/N: {sumSolderDefect:N0} / 폐기: {sumScrap:N0}");
                 sb.AppendLine($"총 검사: {total:N0}개");
                 sb.AppendLine($"불량률: {defectRate:0.00}% ({defectSum:N0}개)");
 
@@ -1173,7 +1173,7 @@ namespace pcb_monitoring_program.Views.Statistics
                         ws.Cell(1, 2).Value = "총 검사 수";
                         ws.Cell(1, 3).Value = "정상";
                         ws.Cell(1, 4).Value = "부품불량";
-                        ws.Cell(1, 5).Value = "납땜불량";
+                        ws.Cell(1, 5).Value = "S/N 불량";
                         ws.Cell(1, 6).Value = "폐기";
                         ws.Cell(1, 7).Value = "불량률";
 
