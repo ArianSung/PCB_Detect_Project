@@ -103,8 +103,8 @@ namespace pcb_monitoring_program.Views.Monitoring
                     }
                 };
 
-                // frame_data 이벤트 핸들러 (프레임 수신)
-                _socket.On("frame_data", response =>
+                // frame_update 이벤트 핸들러 (프레임 수신) ⭐ Flask v3.0 호환
+                _socket.On("frame_update", response =>
                 {
                     try
                     {
@@ -112,7 +112,7 @@ namespace pcb_monitoring_program.Views.Monitoring
                         var data = response.GetValue<FrameData>();
 
                         string cameraId = data.camera_id;
-                        string frameBase64 = data.frameData;
+                        string frameBase64 = data.image;  // Flask v3.0: frameData → image
 
                         // 프레임 드롭: 마지막 업데이트 후 33ms 이내면 스킵 (UI 과부하 방지)
                         if (cameraId == "left")
@@ -182,7 +182,7 @@ namespace pcb_monitoring_program.Views.Monitoring
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] frame_data 처리 실패: {ex.Message}");
+                        System.Diagnostics.Debug.WriteLine($"[PCBMonitoringView] frame_update 처리 실패: {ex.Message}");
                     }
                 });
 
@@ -337,13 +337,17 @@ namespace pcb_monitoring_program.Views.Monitoring
             }
         }
     }
-    // SocketIO 데이터 전송 객체 (DTO)
+    // SocketIO 데이터 전송 객체 (DTO) - Flask v3.0 호환 ⭐
     public class FrameData
     {
         public string camera_id { get; set; }
-        public string frameData { get; set; }  // Flask 서버와 필드명 일치 (frame → frameData)
-        public double timestamp { get; set; }
-        public int size { get; set; }
+        public string image { get; set; }  // Flask v3.0: frameData → image
+        public string defect_type { get; set; }  // 불량 유형 (추가됨)
+        public double confidence { get; set; }  // 신뢰도 (추가됨)
+        public int boxes_count { get; set; }  // 검출 박스 수 (추가됨)
+        public string roi_status { get; set; }  // ROI 상태 (추가됨)
+        public string timestamp { get; set; }  // ISO 포맷으로 변경
+        public string type { get; set; }  // 프레임 타입 (final_frame)
     }
 
     public class ConnectionResponse
