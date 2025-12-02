@@ -32,7 +32,7 @@ namespace pcb_monitoring_program.Views.Monitoring
         private const int MIN_UPDATE_INTERVAL_MS = 33;  // 최소 33ms 간격 (30 FPS)
 
         // Flask 서버 URL (나중에 config에서 읽도록 변경 예정)
-        private const string SERVER_URL = "http://100.123.23.111:5000";
+        private const string SERVER_URL = "http://100.80.24.53:5000";
 
         public PCBMonitoringView()
         {
