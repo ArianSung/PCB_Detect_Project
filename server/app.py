@@ -42,6 +42,7 @@ except ImportError:
 from db_manager import DatabaseManager
 from pcb_alignment import PCBAligner
 from component_verification import ComponentVerifier
+from template_based_alignment import TemplateBasedAlignment
 import json
 
 # Flask 앱 초기화
@@ -96,6 +97,22 @@ except Exception as e:
     logger.error(f"⚠️  YOLO 모델 로드 실패: {e}")
     logger.warning("   - 추론 시 더미 결과 반환됨")
     yolo_model = None
+
+# 템플릿 기반 정렬 시스템 초기화
+template_alignment = None
+try:
+    template_path = Path(__file__).parent / 'screw_hole_template.jpg'
+    if template_path.exists():
+        template_alignment = TemplateBasedAlignment(str(template_path))
+        logger.info(f"✅ 템플릿 기반 정렬 시스템 로드 완료")
+        logger.info(f"   - 템플릿 경로: {template_path}")
+        logger.info(f"   - 템플릿 크기: {template_alignment.template.shape if template_alignment.template is not None else 'N/A'}")
+    else:
+        logger.warning(f"⚠️  템플릿 파일 없음: {template_path}")
+        logger.warning("   - 템플릿 매칭 기능 비활성화")
+except Exception as e:
+    logger.error(f"⚠️  템플릿 기반 정렬 시스템 초기화 실패: {e}")
+    template_alignment = None
 
 # PCB 정렬 및 컴포넌트 검증 모듈 초기화
 pcb_aligner_left = None
@@ -344,9 +361,72 @@ def predict_test():
         # ROI 비활성화 - 전체 프레임 사용
         pcb_bbox, roi_bbox = None, None
 
-        # 4. AI 추론 (YOLO 모델, DB 저장 안 함)
+        # 3-1. 템플릿 매칭 + ROI 체크 ⭐⭐⭐
+        should_run_yolo = False
+        roi_status = "unknown"
+        reference_point = None
+
+        if template_alignment and template_alignment.template is not None:
+            # 템플릿 매칭용 ROI 영역 정의 (템플릿 중앙 기준)
+            img_h, img_w = frame.shape[:2]
+            roi_width = 80    # ROI 폭 (x축 축소: 120 → 80)
+            roi_height = 100  # ROI 높이 (y축 유지)
+            roi_center_x = 156  # 템플릿 중앙 X
+            roi_center_y = 99   # 템플릿 중앙 Y
+            roi_x1 = roi_center_x - roi_width // 2   # 116
+            roi_x2 = roi_center_x + roi_width // 2   # 196
+            roi_y1 = roi_center_y - roi_height // 2  # 49
+            roi_y2 = roi_center_y + roi_height // 2  # 149
+
+            # YOLO 검출용 ROI 영역 정의 (템플릿 ROI 좌상단 기준)
+            yolo_roi_x1 = roi_x1  # 116
+            yolo_roi_y1 = roi_y1  # 49
+            yolo_roi_x2 = yolo_roi_x1 + 400  # 516
+            yolo_roi_y2 = yolo_roi_y1 + 500  # 549
+
+            # 템플릿 매칭
+            reference_point = template_alignment.find_reference_point(
+                frame,
+                method=cv2.TM_CCORR_NORMED,
+                roi=None
+            )
+
+            if reference_point:
+                ref_x, ref_y = reference_point
+                is_in_roi = (roi_x1 <= ref_x <= roi_x2 and roi_y1 <= ref_y <= roi_y2)
+
+                if is_in_roi:
+                    should_run_yolo = True
+                    roi_status = "in_roi"
+                    logger.info(f"[TEST] ✅ 템플릿이 ROI 안: {camera_id} ({ref_x}, {ref_y}) → YOLO 실행")
+                else:
+                    should_run_yolo = False
+                    roi_status = "out_of_roi"
+                    logger.warning(f"[TEST] ⚠️ 템플릿이 ROI 밖: {camera_id} ({ref_x}, {ref_y}) → YOLO 건너뛰기")
+
+                # ROI 상태 broadcast
+                socketio.emit('roi_status', {
+                    'camera_id': camera_id,
+                    'status': roi_status,
+                    'reference_point': [int(ref_x), int(ref_y)],
+                    'roi': [roi_x1, roi_y1, roi_x2, roi_y2]
+                })
+
+        # 3-2. 템플릿 매칭 실패 처리
+        if template_alignment and template_alignment.template is not None:
+            if not reference_point:
+                logger.warning(f"[TEST] 템플릿 매칭 실패: {camera_id}")
+                should_run_yolo = False
+                roi_status = "template_not_found"
+        else:
+            # 템플릿이 없으면 항상 YOLO 실행 (기존 동작 유지)
+            should_run_yolo = True
+            roi_status = "no_template"
+            logger.info(f"[TEST] 템플릿 없음 → 항상 YOLO 실행: {camera_id}")
+
+        # 4. AI 추론 (YOLO 모델, ROI 조건부 실행) ⭐⭐⭐
         boxes_data = []
-        if yolo_model is not None:
+        if yolo_model is not None and should_run_yolo:
             try:
                 # YOLO 추론 실행 (ROI 영역만 사용)
                 # 참고: ROI 마스크를 직접 적용하지 않고, 추론 후 필터링으로 처리
@@ -356,18 +436,17 @@ def predict_test():
                 # 신뢰도 필터링 (낮은 신뢰도 제거)
                 filtered_boxes = [box for box in raw_boxes_data if box['confidence'] >= CONFIDENCE_THRESHOLD]
 
-                # ROI 필터링 (비활성화 - 전체 프레임 사용) ⭐
-                # if roi_bbox is not None:
-                #     rx, ry, rw, rh = roi_bbox
-                #     roi_filtered_boxes = []
-                #     for box in filtered_boxes:
-                #         # 바운딩 박스 중심점이 ROI 안에 있는지 확인
-                #         cx = box['x1'] + (box['x2'] - box['x1']) / 2
-                #         cy = box['y1'] + (box['y2'] - box['y1']) / 2
-                #         if rx <= cx <= rx + rw and ry <= cy <= ry + rh:
-                #             roi_filtered_boxes.append(box)
-                #     logger.info(f"[TEST] ROI 필터링: {camera_id} → {len(filtered_boxes)}개 → {len(roi_filtered_boxes)}개")
-                #     filtered_boxes = roi_filtered_boxes
+                # YOLO ROI 필터링 (템플릿이 ROI 안에 있을 때만) ⭐⭐⭐
+                if template_alignment and template_alignment.template is not None and reference_point:
+                    roi_filtered_boxes = []
+                    for box in filtered_boxes:
+                        # 바운딩 박스 중심점이 YOLO ROI 안에 있는지 확인
+                        cx = (box['x1'] + box['x2']) / 2
+                        cy = (box['y1'] + box['y2']) / 2
+                        if yolo_roi_x1 <= cx <= yolo_roi_x2 and yolo_roi_y1 <= cy <= yolo_roi_y2:
+                            roi_filtered_boxes.append(box)
+                    logger.info(f"[TEST] YOLO ROI 필터링: {camera_id} → {len(filtered_boxes)}개 → {len(roi_filtered_boxes)}개")
+                    filtered_boxes = roi_filtered_boxes
 
                 # 검출 결과 평활화 (Temporal Smoothing)
                 smoothed_boxes = smooth_detections(camera_id, filtered_boxes)
@@ -384,11 +463,73 @@ def predict_test():
                 defect_type = "정상"
                 confidence = 0.0
                 annotated_frame = frame.copy()
+        elif not should_run_yolo:
+            # ROI 밖 또는 템플릿 매칭 실패 - YOLO 실행하지 않음
+            logger.info(f"[TEST] YOLO 건너뛰기: {camera_id} (ROI 상태: {roi_status})")
+            defect_type = "정상"
+            confidence = 0.0
+            annotated_frame = frame.copy()
         else:
             logger.warning("[TEST] YOLO 모델이 로드되지 않음 - 더미 결과 반환")
             defect_type = "정상"
             confidence = 0.95
             annotated_frame = frame.copy()
+
+        # 5. ROI + 템플릿 시각화 오버레이 (annotated_frame 위에 그리기) ⭐⭐⭐
+        if template_alignment and template_alignment.template is not None:
+            img_h, img_w = annotated_frame.shape[:2]
+
+            # 템플릿 매칭용 ROI 재계산 (시각화용)
+            roi_width = 80    # ROI 폭 (x축 축소: 120 → 80)
+            roi_height = 100  # ROI 높이 (y축 유지)
+            roi_center_x = 156  # 템플릿 중앙 X
+            roi_center_y = 99   # 템플릿 중앙 Y
+            roi_x1 = roi_center_x - roi_width // 2   # 116
+            roi_x2 = roi_center_x + roi_width // 2   # 196
+            roi_y1 = roi_center_y - roi_height // 2  # 49
+            roi_y2 = roi_center_y + roi_height // 2  # 149
+
+            # YOLO 검출용 ROI 재계산 (시각화용)
+            yolo_roi_x1 = roi_x1  # 116
+            yolo_roi_y1 = roi_y1  # 49
+            yolo_roi_x2 = yolo_roi_x1 + 400  # 516
+            yolo_roi_y2 = yolo_roi_y1 + 500  # 549
+
+            # YOLO ROI 박스 그리기 (초록색, 먼저 그려서 뒤에 표시)
+            cv2.rectangle(annotated_frame, (yolo_roi_x1, yolo_roi_y1), (yolo_roi_x2, yolo_roi_y2), (0, 255, 0), 2)
+            cv2.putText(annotated_frame, "YOLO ROI", (yolo_roi_x1 + 10, yolo_roi_y1 + 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+            # 템플릿 ROI 박스 그리기 (노란색, 나중에 그려서 앞에 표시)
+            cv2.rectangle(annotated_frame, (roi_x1, roi_y1), (roi_x2, roi_y2), (0, 255, 255), 3)
+            cv2.putText(annotated_frame, "Template ROI", (roi_x1 + 10, roi_y1 + 50),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+
+            # 템플릿 매칭 결과 그리기
+            if reference_point:
+                ref_x, ref_y = reference_point
+
+                # 템플릿 영역 그리기 (보라색)
+                template_h, template_w = template_alignment.template.shape[:2]
+                top_left_x = ref_x - template_w // 2
+                top_left_y = ref_y - template_h // 2
+                cv2.rectangle(annotated_frame,
+                            (top_left_x, top_left_y),
+                            (top_left_x + template_w, top_left_y + template_h),
+                            (255, 0, 255), 3)
+
+                # 기준점 원 그리기 (빨간색)
+                cv2.circle(annotated_frame, (ref_x, ref_y), 10, (0, 0, 255), -1)
+
+                # 좌표축 그리기
+                cv2.arrowedLine(annotated_frame, (ref_x, ref_y), (ref_x + 50, ref_y), (255, 0, 0), 2)
+                cv2.arrowedLine(annotated_frame, (ref_x, ref_y), (ref_x, ref_y + 50), (0, 255, 0), 2)
+
+                # ROI 상태 텍스트
+                status_text = "✅ IN ROI" if roi_status == "in_roi" else "⚠️ OUT OF ROI"
+                status_color = (0, 255, 0) if roi_status == "in_roi" else (0, 0, 255)
+                cv2.putText(annotated_frame, status_text, (10, img_h - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.8, status_color, 2)
 
         gpio_pin = get_gpio_pin(defect_type)
 
@@ -407,6 +548,23 @@ def predict_test():
                 frame_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
                 latest_frames_jpeg[camera_id] = frame_base64
                 logger.debug(f"[TEST] JPEG 캐싱 완료: {camera_id} ({len(frame_base64)} bytes)")
+
+                # 최종 프레임을 viewer에 broadcast (ROI+템플릿+YOLO 박싱 모두 포함) ⭐⭐⭐
+                socketio.emit('frame_update', {
+                    'camera_id': camera_id,
+                    'image': frame_base64,
+                    'defect_type': defect_type,
+                    'confidence': confidence,
+                    'boxes_count': len(boxes_data),
+                    'roi_status': roi_status,
+                    'timestamp': datetime.now().isoformat(),
+                    'type': 'final_frame'
+                })
+
+                if should_run_yolo:
+                    logger.info(f"[TEST] 최종 프레임 broadcast: {camera_id} (YOLO: {len(boxes_data)}개 부품, ROI: {roi_status})")
+                else:
+                    logger.info(f"[TEST] 최종 프레임 broadcast: {camera_id} (YOLO 건너뛰기, ROI: {roi_status})")
 
         # 4. 추론 시간 계산
         inference_time_ms = (time.time() - start_time) * 1000
@@ -1108,6 +1266,245 @@ def viewer():
     return render_template_string(html_template)
 
 
+@app.route('/debug_viewer', methods=['GET'])
+def debug_viewer():
+    """템플릿 매칭 디버그 뷰어 (WebSocket 기반)"""
+    html_template = """
+    <!DOCTYPE html>
+    <html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>템플릿 매칭 디버그 뷰어</title>
+        <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: #fff;
+                padding: 20px;
+            }
+            .container {
+                max-width: 1400px;
+                margin: 0 auto;
+            }
+            h1 {
+                text-align: center;
+                margin-bottom: 30px;
+                font-size: 2.5em;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            }
+            .info-panel {
+                background: rgba(255,255,255,0.1);
+                border-radius: 15px;
+                padding: 20px;
+                margin-bottom: 30px;
+                backdrop-filter: blur(10px);
+                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            }
+            .info-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 20px;
+            }
+            .info-item {
+                background: rgba(255,255,255,0.05);
+                padding: 15px;
+                border-radius: 10px;
+            }
+            .info-value {
+                font-size: 1.5em;
+                color: #4CAF50;
+                text-align: center;
+            }
+            .camera-box {
+                background: rgba(255,255,255,0.1);
+                border-radius: 15px;
+                padding: 20px;
+                backdrop-filter: blur(10px);
+                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+                margin-bottom: 20px;
+            }
+            .camera-title {
+                font-size: 1.8em;
+                margin-bottom: 15px;
+                text-align: center;
+                font-weight: bold;
+            }
+            .camera-stream {
+                width: 100%;
+                border-radius: 10px;
+                background: #000;
+                min-height: 480px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .camera-stream img {
+                width: 100%;
+                border-radius: 10px;
+            }
+            .footer {
+                text-align: center;
+                margin-top: 20px;
+                opacity: 0.7;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🎯 템플릿 매칭 디버그 뷰어</h1>
+
+            <div class="info-panel">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">기준점 위치</div>
+                        <div class="info-value" id="reference-point">-</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">ROI 상태</div>
+                        <div class="info-value" id="confidence">-</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">검출 개수</div>
+                        <div class="info-value" id="template-size">-</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">프레임 크기</div>
+                        <div class="info-value" id="frame-size">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="camera-box">
+                <div class="camera-title">📷 좌측 카메라 (실시간 스트리밍 + ROI 기반 YOLO)</div>
+                <div class="camera-stream">
+                    <img id="camera-stream" alt="템플릿 매칭 결과" style="display:none;">
+                    <div id="loading-text">프레임 대기 중...</div>
+                </div>
+            </div>
+
+            <div class="footer">
+                ✨ 템플릿 매칭 디버그 시스템 v1.0 | Flask Server | WebSocket Real-time
+            </div>
+        </div>
+
+        <script>
+            // WebSocket 연결
+            const socket = io();
+
+            // WebSocket 연결 이벤트
+            socket.on('connect', () => {
+                console.log('✅ WebSocket 연결 성공');
+            });
+
+            socket.on('disconnect', () => {
+                console.log('❌ WebSocket 연결 종료');
+            });
+
+            socket.on('connect_error', (error) => {
+                console.error('❌ WebSocket 연결 오류:', error);
+            });
+
+            // DOM 요소
+            const imgElement = document.getElementById('camera-stream');
+            const loadingText = document.getElementById('loading-text');
+            const refPointElement = document.getElementById('reference-point');
+            const confidenceElement = document.getElementById('confidence');
+            const templateSizeElement = document.getElementById('template-size');
+            const frameSizeElement = document.getElementById('frame-size');
+
+            // 원본 프레임 수신 (라즈베리파이에서 직접 전송)
+            socket.on('frame_update', (data) => {
+                console.log('📥 원본 프레임 수신:', data.camera_id);
+
+                // 원본 이미지 업데이트
+                if (data.image && data.camera_id === 'left') {
+                    imgElement.src = 'data:image/jpeg;base64,' + data.image;
+                    imgElement.style.display = 'block';
+                    loadingText.style.display = 'none';
+                }
+            });
+
+            // ROI 상태 수신
+            socket.on('roi_status', (data) => {
+                console.log('📥 ROI 상태 수신:', data);
+
+                if (data.camera_id === 'left') {
+                    // 기준점 위치 업데이트
+                    if (data.reference_point) {
+                        const [x, y] = data.reference_point;
+                        refPointElement.textContent = `(${x}, ${y})`;
+
+                        if (data.status === 'in_roi') {
+                            refPointElement.style.color = '#4CAF50';  // 초록 - ROI 안
+                        } else {
+                            refPointElement.style.color = '#FFC107';  // 노랑 - ROI 밖
+                        }
+                    }
+                }
+            });
+
+            // YOLO 검출 결과 수신 (ROI 안에 있을 때만)
+            socket.on('yolo_result', (data) => {
+                console.log('📥 YOLO 결과 수신:', data);
+
+                if (data.camera_id === 'left') {
+                    // YOLO 박싱 이미지 업데이트
+                    if (data.image) {
+                        imgElement.src = 'data:image/jpeg;base64,' + data.image;
+                        imgElement.style.display = 'block';
+                        loadingText.style.display = 'none';
+                    }
+
+                    // 매칭 신뢰도 업데이트 (YOLO 신뢰도)
+                    if (data.confidence !== undefined) {
+                        const conf = (data.confidence * 100).toFixed(2);
+                        confidenceElement.textContent = `${conf}%`;
+
+                        // 신뢰도에 따라 색상 변경
+                        if (data.confidence >= 0.9) {
+                            confidenceElement.style.color = '#4CAF50';  // 초록
+                        } else if (data.confidence >= 0.7) {
+                            confidenceElement.style.color = '#FFC107';  // 노랑
+                        } else {
+                            confidenceElement.style.color = '#ff5555';  // 빨강
+                        }
+                    }
+
+                    // 템플릿 크기 → YOLO 검출 개수로 변경
+                    if (data.boxes_count !== undefined) {
+                        templateSizeElement.textContent = `${data.boxes_count}개`;
+                    }
+
+                    // 프레임 크기 업데이트
+                    if (data.image) {
+                        const sizeKB = (data.image.length / 1024).toFixed(1);
+                        frameSizeElement.textContent = `${sizeKB} KB`;
+                    }
+                }
+            });
+
+            // ROI 건너뛰기 알림
+            socket.on('roi_skipped', (data) => {
+                console.log('⚠️ YOLO 건너뛰기:', data);
+
+                if (data.camera_id === 'left') {
+                    confidenceElement.textContent = 'ROI 밖';
+                    confidenceElement.style.color = '#FFC107';
+                    templateSizeElement.textContent = '-';
+                }
+            });
+
+            console.log('✅ 실시간 프레임 수신 대기 중...');
+        </script>
+    </body>
+    </html>
+    """
+    return render_template_string(html_template)
+
+
 @app.route('/video_feed/<camera_id>', methods=['GET'])
 def video_feed(camera_id):
     """MJPEG 스트림 제공"""
@@ -1656,10 +2053,20 @@ def handle_frame_request(data):
     클라이언트가 100ms 간격으로 요청
 
     Args:
-        data (dict): {'camera_id': 'left' or 'right'}
+        data (dict): {
+            'camera_id': 'left' or 'right',
+            'edge_detection': bool (optional),
+            'thresholds': {'top': int, 'bottom': int, 'left': int, 'right': int} (optional)
+        }
     """
     try:
         camera_id = data.get('camera_id')
+        edge_detection = data.get('edge_detection', False)
+        thresholds = data.get('thresholds', None)
+        rois = data.get('rois', None)
+
+        # DEBUG: ROI 파라미터 확인용 로그
+        logger.info(f"[WebSocket] request_frame 수신: camera={camera_id}, edge={edge_detection}, rois={rois}")
 
         if camera_id not in ['left', 'right']:
             logger.warning(f"[WebSocket] 잘못된 camera_id: {camera_id}")
@@ -1669,6 +2076,8 @@ def handle_frame_request(data):
         # 캐시된 JPEG 가져오기 (WebSocket 성능 최적화) ⭐
         with frame_lock:
             frame_base64 = latest_frames_jpeg.get(camera_id)
+            # Edge Detection을 위해 원본 프레임도 가져오기
+            original_frame = latest_frames.get(camera_id)
 
         # 캐시가 없으면 더미 프레임 생성 및 인코딩
         if frame_base64 is None:
@@ -1691,23 +2100,294 @@ def handle_frame_request(data):
                 return
 
             frame_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
+            corners = None
             logger.debug(f"[WebSocket] {camera_id} 프레임 없음 → 더미 프레임 전송 (640x640)")
         else:
+            # Edge Detection이 활성화되고 원본 프레임이 있으면 테두리 검출 수행
+            corners = None
+            if edge_detection and original_frame is not None:
+                try:
+                    # PCB 테두리 검출 수행
+                    detected_corners, debug_img = detect_pcb_edges(
+                        original_frame,
+                        thresholds=thresholds,
+                        rois=rois,
+                        draw_debug=True
+                    )
+
+                    if detected_corners:
+                        corners = detected_corners
+                        logger.info(f"[WebSocket] {camera_id} 테두리 검출 성공: {len(corners)}개 코너")
+
+                    # 디버그 이미지가 있으면 그것을 전송
+                    if debug_img is not None:
+                        encode_params = [
+                            cv2.IMWRITE_JPEG_QUALITY, 85,
+                            cv2.IMWRITE_JPEG_PROGRESSIVE, 0,
+                            cv2.IMWRITE_JPEG_OPTIMIZE, 1
+                        ]
+                        ret, buffer = cv2.imencode('.jpg', debug_img, encode_params)
+                        if ret:
+                            frame_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
+                            logger.info(f"[WebSocket] {camera_id} 테두리 검출 이미지 전송")
+
+                except Exception as e:
+                    logger.error(f"[WebSocket] 테두리 검출 실패: {e}", exc_info=True)
+
             logger.debug(f"[WebSocket] {camera_id} 캐시된 JPEG 전송 (인코딩 생략)")
 
-        # NOTE: 'frame' 필드명을 'frameData'로 변경하여 Flask-SocketIO의 binary 자동 변환 방지
-        emit('frame_data', {
+        # 응답 데이터 준비
+        response_data = {
             'camera_id': camera_id,
             'frameData': frame_base64,  # 필드명 변경: frame → frameData
             'timestamp': time.time(),
             'size': len(frame_base64)  # Base64 문자열 길이
-        })
+        }
+
+        # 코너 좌표 추가 (있을 경우)
+        if corners:
+            response_data['corners'] = corners
+
+        # NOTE: 'frame' 필드명을 'frameData'로 변경하여 Flask-SocketIO의 binary 자동 변환 방지
+        emit('frame_data', response_data)
 
         logger.debug(f"[WebSocket] 프레임 전송 완료: {camera_id} ({len(frame_base64)} bytes)")
 
     except Exception as e:
         logger.error(f"[WebSocket] 프레임 요청 처리 실패: {str(e)}", exc_info=True)
         emit('error', {'message': f'Frame request failed: {str(e)}'})
+
+
+@socketio.on('request_template_match')
+def handle_template_match_request(data):
+    """
+    템플릿 매칭 요청 이벤트
+
+    Args:
+        data (dict): {
+            'camera_id': 'left' or 'right'
+        }
+    """
+    try:
+        camera_id = data.get('camera_id', 'left')
+        logger.info(f"[WebSocket] 템플릿 매칭 요청: camera={camera_id}")
+
+        # 템플릿 정렬 시스템이 없으면 에러
+        if template_alignment is None:
+            logger.error("[WebSocket] 템플릿 정렬 시스템이 초기화되지 않음")
+            emit('template_match_result', {
+                'error': 'Template alignment system not initialized',
+                'reference_point': None,
+                'confidence': None,
+                'image': None,
+                'template_size': None,
+                'frame_size': None
+            })
+            return
+
+        # 캐시된 프레임 가져오기
+        with frame_lock:
+            original_frame = latest_frames.get(camera_id)
+
+        # 프레임이 없으면 더미 데이터 전송
+        if original_frame is None:
+            logger.warning(f"[WebSocket] {camera_id} 프레임 없음 → 더미 응답")
+
+            # 더미 프레임 생성
+            dummy_frame = np.zeros((640, 640, 3), dtype=np.uint8)
+            dummy_frame[:] = (50, 50, 50)
+            cv2.putText(dummy_frame, f"Waiting for {camera_id} camera...",
+                       (100, 320), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+
+            encode_params = [cv2.IMWRITE_JPEG_QUALITY, 85]
+            ret, buffer = cv2.imencode('.jpg', dummy_frame, encode_params)
+            if not ret:
+                emit('template_match_result', {'error': 'JPEG encoding failed'})
+                return
+
+            frame_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
+
+            emit('template_match_result', {
+                'reference_point': None,
+                'confidence': None,
+                'image': frame_base64,
+                'template_size': None,
+                'frame_size': len(frame_base64)
+            })
+            return
+
+        # 템플릿 매칭 수행
+        try:
+            # 640x640 리사이즈
+            img_resized = cv2.resize(original_frame, (640, 640))
+
+            # ROI 영역 정의 (중앙, 세로로 길게)
+            # 640x640 이미지에서 중앙 440px 폭, 전체 높이의 90%
+            img_h, img_w = img_resized.shape[:2]
+            roi_width = 440  # 중앙 440px 폭 (40px 추가 증가)
+            roi_height_margin = 30  # 상하 각 30px 여유
+
+            roi_x1 = (img_w - roi_width) // 2  # (640 - 440) / 2 = 100
+            roi_x2 = roi_x1 + roi_width  # 100 + 440 = 540
+            roi_y1 = roi_height_margin  # 30
+            roi_y2 = img_h - roi_height_margin  # 640 - 30 = 610
+
+            roi = (roi_x1, roi_y1, roi_x2, roi_y2)
+            logger.info(f"[WebSocket] ROI 영역: x={roi_x1}~{roi_x2}, y={roi_y1}~{roi_y2}")
+
+            # 기준점 찾기 (ROI 검증 없이 먼저 템플릿 매칭)
+            reference_point = template_alignment.find_reference_point(
+                img_resized,
+                method=cv2.TM_CCORR_NORMED,
+                roi=None  # ROI 검증 비활성화 (시각화용)
+            )
+
+            if reference_point:
+                # ROI 검증 (경고만, 거부하지 않음)
+                ref_x, ref_y = reference_point
+                is_in_roi = (roi_x1 <= ref_x <= roi_x2 and roi_y1 <= ref_y <= roi_y2)
+
+                if not is_in_roi:
+                    logger.warning(f"[WebSocket] ⚠️ 기준점이 ROI 밖: ({ref_x}, {ref_y}), ROI=({roi_x1}, {roi_y1}, {roi_x2}, {roi_y2})")
+                else:
+                    logger.info(f"[WebSocket] ✅ 기준점이 ROI 안: ({ref_x}, {ref_y})")
+
+                # 시각화 이미지 생성 (ROI도 표시)
+                vis_img = template_alignment.visualize_reference_point(
+                    img_resized,
+                    reference_point,
+                    roi=roi
+                )
+
+                # 템플릿 영역도 표시
+                template_h, template_w = template_alignment.template.shape[:2]
+                top_left_x = ref_x - template_w // 2
+                top_left_y = ref_y - template_h // 2
+
+                cv2.rectangle(
+                    vis_img,
+                    (top_left_x, top_left_y),
+                    (top_left_x + template_w, top_left_y + template_h),
+                    (255, 0, 255),  # 보라색
+                    3
+                )
+
+                # ROI 안에 있을 때만 YOLO 검출 수행
+                yolo_detected_count = 0
+                if is_in_roi and yolo_model is not None:
+                    logger.info("[WebSocket] 🎯 ROI 안에 있음 - YOLO 검출 시작")
+
+                    # YOLO 추론
+                    yolo_results = yolo_model.predict(img_resized, conf=0.25, verbose=False)
+
+                    if len(yolo_results) > 0 and len(yolo_results[0].boxes) > 0:
+                        boxes = yolo_results[0].boxes
+                        yolo_detected_count = len(boxes)
+                        logger.info(f"[WebSocket] ✅ YOLO 검출 완료: {yolo_detected_count}개 부품")
+
+                        # YOLO 바운딩 박스 그리기
+                        for box in boxes:
+                            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                            conf = box.conf[0].cpu().numpy()
+                            cls = int(box.cls[0].cpu().numpy())
+
+                            # 바운딩 박스 그리기 (초록색)
+                            cv2.rectangle(
+                                vis_img,
+                                (int(x1), int(y1)),
+                                (int(x2), int(y2)),
+                                (0, 255, 0),  # 초록색
+                                2
+                            )
+
+                            # 클래스와 신뢰도 표시
+                            label = f"Class {cls}: {conf:.2f}"
+                            cv2.putText(
+                                vis_img,
+                                label,
+                                (int(x1), int(y1) - 5),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.5,
+                                (0, 255, 0),
+                                1
+                            )
+                    else:
+                        logger.info("[WebSocket] ℹ️ YOLO 검출 결과 없음")
+
+                # ROI 상태 텍스트 추가
+                if is_in_roi:
+                    if yolo_detected_count > 0:
+                        status_text = f"✅ IN ROI - {yolo_detected_count} COMPONENTS DETECTED"
+                    else:
+                        status_text = "✅ IN ROI - NO DETECTION"
+                    status_color = (0, 255, 0)
+                else:
+                    status_text = "⚠️ OUT OF ROI - YOLO SKIPPED"
+                    status_color = (0, 0, 255)
+
+                cv2.putText(
+                    vis_img,
+                    status_text,
+                    (10, img_h - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    status_color,
+                    2
+                )
+
+                # 매칭 신뢰도 계산
+                gray = cv2.cvtColor(img_resized, cv2.COLOR_BGR2GRAY)
+                template_gray = cv2.cvtColor(template_alignment.template, cv2.COLOR_BGR2GRAY)
+                result = cv2.matchTemplate(gray, template_gray, cv2.TM_CCORR_NORMED)
+                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+                confidence = max_val
+
+                logger.info(f"[WebSocket] 템플릿 매칭 성공: ref={reference_point}, conf={confidence:.4f}")
+
+                # 이미지 인코딩
+                encode_params = [cv2.IMWRITE_JPEG_QUALITY, 85]
+                ret, buffer = cv2.imencode('.jpg', vis_img, encode_params)
+                if not ret:
+                    logger.error("[WebSocket] JPEG 인코딩 실패")
+                    emit('template_match_result', {'error': 'JPEG encoding failed'})
+                    return
+
+                frame_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
+
+                # 응답 전송
+                emit('template_match_result', {
+                    'reference_point': [int(ref_x), int(ref_y)],
+                    'confidence': float(confidence),
+                    'image': frame_base64,
+                    'template_size': [int(template_w), int(template_h)],
+                    'frame_size': len(frame_base64)
+                })
+            else:
+                # 템플릿 매칭 실패
+                logger.warning("[WebSocket] 템플릿 매칭 실패 (기준점 검출 실패)")
+
+                # 원본 이미지만 전송
+                encode_params = [cv2.IMWRITE_JPEG_QUALITY, 85]
+                ret, buffer = cv2.imencode('.jpg', img_resized, encode_params)
+                if ret:
+                    frame_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
+                    emit('template_match_result', {
+                        'reference_point': None,
+                        'confidence': None,
+                        'image': frame_base64,
+                        'template_size': None,
+                        'frame_size': len(frame_base64)
+                    })
+                else:
+                    emit('template_match_result', {'error': 'JPEG encoding failed'})
+
+        except Exception as e:
+            logger.error(f"[WebSocket] 템플릿 매칭 실패: {e}", exc_info=True)
+            emit('template_match_result', {'error': str(e)})
+
+    except Exception as e:
+        logger.error(f"[WebSocket] 템플릿 매칭 요청 처리 실패: {str(e)}", exc_info=True)
+        emit('error', {'message': f'Template match request failed: {str(e)}'})
 
 
 if __name__ == '__main__':
