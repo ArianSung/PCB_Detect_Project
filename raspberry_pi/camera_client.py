@@ -23,6 +23,7 @@ import logging
 import subprocess
 from datetime import datetime
 from dotenv import load_dotenv
+from arduino_serial_handler import ArduinoSerialHandler
 
 # .env 파일 로드
 load_dotenv()
@@ -36,6 +37,11 @@ CAMERA_HEIGHT = int(os.getenv('CAMERA_HEIGHT', 640))  # 640x640 정사각형 해
 JPEG_QUALITY = int(os.getenv('JPEG_QUALITY', 85))
 TARGET_FPS = int(os.getenv('CAMERA_FPS', 30))
 
+# 아두이노 시리얼 통신 설정
+ARDUINO_ENABLED = os.getenv('ARDUINO_ENABLED', 'false').lower() == 'true'
+ARDUINO_PORT = os.getenv('ARDUINO_PORT', '/dev/ttyACM0')
+ARDUINO_BAUDRATE = int(os.getenv('ARDUINO_BAUDRATE', 115200))
+
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
@@ -47,7 +53,7 @@ logger = logging.getLogger(__name__)
 class CameraClient:
     """카메라 클라이언트 클래스"""
 
-    def __init__(self, server_url, camera_id, camera_index):
+    def __init__(self, server_url, camera_id, camera_index, arduino_handler=None):
         self.server_url = server_url
         self.camera_id = camera_id
         self.camera_index = camera_index
@@ -56,6 +62,7 @@ class CameraClient:
         self.frame_count = 0
         self.success_count = 0
         self.error_count = 0
+        self.arduino_handler = arduino_handler  # 아두이노 시리얼 핸들러
 
     def setup_camera_v4l2(self):
         """v4l2-ctl을 사용해 카메라 노출 설정"""
@@ -163,9 +170,25 @@ class CameraClient:
                 confidence = data.get('confidence', 0.0)
                 gpio_pin = data.get('gpio_pin', 0)
                 inference_time = data.get('inference_time_ms', 0.0)
+                serial_number = data.get('serial_number', '')
 
                 self.frame_count += 1
                 self.success_count += 1
+
+                # 아두이노로 판정 결과 전송 (좌측 카메라만)
+                if self.arduino_handler and self.camera_id == 'left':
+                    try:
+                        arduino_success = self.arduino_handler.send_classification_result(
+                            defect_type=defect_type,
+                            confidence=confidence,
+                            serial_number=serial_number
+                        )
+                        if arduino_success:
+                            logger.info(f"✅ 아두이노 전송 성공: {defect_type}")
+                        else:
+                            logger.warning(f"⚠️  아두이노 전송 실패: {defect_type}")
+                    except Exception as e:
+                        logger.error(f"❌ 아두이노 통신 오류: {e}")
 
                 # 10프레임마다 로그 출력
                 if self.frame_count % 10 == 0:
@@ -251,9 +274,39 @@ if __name__ == '__main__':
     print(f"프레임 크기: {CAMERA_WIDTH}x{CAMERA_HEIGHT}")
     print(f"JPEG 품질: {JPEG_QUALITY}")
     print(f"목표 FPS: {TARGET_FPS}")
+    print(f"아두이노 통신: {'활성화' if ARDUINO_ENABLED else '비활성화'}")
+    if ARDUINO_ENABLED:
+        print(f"아두이노 포트: {ARDUINO_PORT}")
+        print(f"아두이노 Baudrate: {ARDUINO_BAUDRATE}")
     print("=" * 60)
     print()
 
+    # 아두이노 핸들러 초기화 (좌측 카메라 + 활성화된 경우만)
+    arduino_handler = None
+    if ARDUINO_ENABLED and CAMERA_ID == 'left':
+        try:
+            print("아두이노 시리얼 통신 초기화 중...")
+            arduino_handler = ArduinoSerialHandler(
+                port=ARDUINO_PORT,
+                baudrate=ARDUINO_BAUDRATE,
+                auto_connect=True
+            )
+            if arduino_handler.is_connected:
+                print("✅ 아두이노 연결 성공")
+            else:
+                print("⚠️  아두이노 연결 실패 - 시리얼 통신 없이 계속 진행")
+                arduino_handler = None
+        except Exception as e:
+            print(f"❌ 아두이노 초기화 오류: {e}")
+            print("⚠️  시리얼 통신 없이 계속 진행")
+            arduino_handler = None
+
     # 클라이언트 실행
-    client = CameraClient(SERVER_URL, CAMERA_ID, CAMERA_INDEX)
-    client.run()
+    try:
+        client = CameraClient(SERVER_URL, CAMERA_ID, CAMERA_INDEX, arduino_handler)
+        client.run()
+    finally:
+        # 아두이노 연결 종료
+        if arduino_handler:
+            arduino_handler.disconnect()
+            print("아두이노 연결 종료")
