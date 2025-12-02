@@ -46,6 +46,11 @@ namespace pcb_monitoring_program.Views.Dashboard
         // "정상" / "불량" 레전드 라벨 캐시 (텍스트만 업데이트용)
         private Dictionary<string, Label> _defectRateLegendLabels = new Dictionary<string, Label>();
 
+        // 도넛 선택 상태 유지용
+        private string _selectedDefectRateCategory = "불량";       // "정상" or "불량"
+        private string _selectedDailyTargetCategory = "달성";      // "달성" or "미달성"
+        private string _selectedDefectCategoryName = "부품불량";   // "부품불량" / "S/N불량" / "폐기"
+
         public DashboardView()
         {
             InitializeComponent();
@@ -337,10 +342,10 @@ namespace pcb_monitoring_program.Views.Dashboard
                 var sRef = chart.Series["전체 불량률"];  // 클릭 핸들러에서 사용할 참조
 
                 var rateMeta = new (string name, Color color)[]
-                {
-            ("정상", Color.FromArgb(100, 181, 246)),
-            ("불량", Color.FromArgb(244, 67, 54))
-                };
+    {
+    ("정상", Color.FromArgb(100, 181, 246)),
+    ("불량", Color.FromArgb(244, 67, 54))
+    };
 
                 foreach (var item in rateMeta)
                 {
@@ -370,25 +375,35 @@ namespace pcb_monitoring_program.Views.Dashboard
                         ForeColor = Color.Gainsboro
                     };
 
-                    // 나중에 Text만 갱신할 수 있도록 캐싱
                     _defectRateLegendLabels[item.name] = lbl;
 
-                    // 클릭 시 해당 도넛 조각 강조
                     string categoryName = item.name;
                     EventHandler clickHandler = (_, __) =>
                     {
-                        // 모든 포인트 테두리 초기화
-                        foreach (var p in sRef.Points)
-                        {
-                            p.BorderWidth = 0;
-                        }
+                        _selectedDefectRateCategory = categoryName;
 
-                        // 현재 카테고리 이름과 같은 포인트 찾아서 강조
+                        // 도넛 하이라이트 갱신
+                        foreach (var p in sRef.Points) { p.BorderWidth = 0; }
+
                         var target = sRef.Points.FirstOrDefault(p => p.AxisLabel == categoryName);
                         if (target != null)
                         {
                             target.BorderColor = Color.White;
                             target.BorderWidth = 3;
+                        }
+
+                        // 선택된 조각 비율 계산
+                        double total = sRef.Points.Sum(p => p.YValues[0]);
+                        double val = target?.YValues[0] ?? 0;
+                        double rate = total > 0 ? (val * 100.0 / total) : 0.0;
+
+                        if (_lblDefectRate != null)
+                        {
+                            _lblDefectRate.Text = $"{rate:0.#}%";
+                            _lblDefectRate.ForeColor =
+                                (categoryName == "정상")
+                                    ? Color.FromArgb(100, 181, 246)
+                                    : Color.FromArgb(244, 67, 54);
                         }
                     };
 
@@ -405,6 +420,7 @@ namespace pcb_monitoring_program.Views.Dashboard
                     flowLegendRate.Controls.Add(row);
                 }
 
+
                 flowLegendRate.ResumeLayout();
 
                 _defectRateInitialized = true;
@@ -419,22 +435,55 @@ namespace pcb_monitoring_program.Views.Dashboard
             idx = series.Points.AddXY("불량", defectCount);
             series.Points[idx].Color = Color.FromArgb(244, 67, 54);
 
-            // ▷ 상단 요약 라벨 텍스트 업데이트
-            _lblDefectRate.Text = $"{defectRate:0.#}%";
+            // 선택값 유효성 체크
+            if (_selectedDefectRateCategory != "정상" && _selectedDefectRateCategory != "불량")
+                _selectedDefectRateCategory = "불량";
+
+            // 도넛 하이라이트 복원
+            foreach (var p in series.Points) p.BorderWidth = 0;
+
+            var selectedPoint = series.Points.FirstOrDefault(p => p.AxisLabel == _selectedDefectRateCategory)
+                                ?? series.Points.FirstOrDefault(p => p.AxisLabel == "불량");
+
+            if (selectedPoint != null)
+            {
+                selectedPoint.BorderColor = Color.White;
+                selectedPoint.BorderWidth = 3;
+            }
+
+            // 비율 계산
+            double normalRate = totalCount > 0 ? normalCount * 100.0 / totalCount : 0.0;
+            double defectRatePct = totalCount > 0 ? defectCount * 100.0 / totalCount : 0.0;
+
+            double displayRate;
+            Color displayColor;
+
+            if (_selectedDefectRateCategory == "정상")
+            {
+                displayRate = normalRate;
+                displayColor = Color.FromArgb(100, 181, 246);
+            }
+            else
+            {
+                _selectedDefectRateCategory = "불량";
+                displayRate = defectRatePct;
+                displayColor = Color.FromArgb(244, 67, 54);
+            }
+
+            // 상단 요약 라벨 텍스트 업데이트
+            _lblDefectRate.Text = $"{displayRate:0.#}%";
+            _lblDefectRate.ForeColor = displayColor;
             _lblTotal.Text = $"전체: {totalCount}개";
             _lblNormal.Text = $"정상: {normalCount}개";
             _lblDefect.Text = $"불량: {defectCount}개";
 
-            // ▷ 레전드 행의 텍스트도 현재 값으로 갱신
+            // 레전드 행 텍스트 갱신
             if (_defectRateLegendLabels.TryGetValue("정상", out var lblNormalLegend))
-            {
                 lblNormalLegend.Text = $"정상  {normalCount}개";
-            }
 
             if (_defectRateLegendLabels.TryGetValue("불량", out var lblDefectLegend))
-            {
                 lblDefectLegend.Text = $"불량  {defectCount}개";
-            }
+
         }
 
 
@@ -735,6 +784,8 @@ namespace pcb_monitoring_program.Views.Dashboard
                     string categoryName = item.name;
                     EventHandler clickHandler = (_, __) =>
                     {
+                        _selectedDailyTargetCategory = categoryName;
+
                         foreach (var p in sRef.Points) { p.BorderWidth = 0; }
 
                         var targetPoint = sRef.Points.FirstOrDefault(p => p.AxisLabel == categoryName);
@@ -742,6 +793,19 @@ namespace pcb_monitoring_program.Views.Dashboard
                         {
                             targetPoint.BorderColor = Color.White;
                             targetPoint.BorderWidth = 3;
+                        }
+
+                        double total = sRef.Points.Sum(p => p.YValues[0]); // 목표값
+                        double val = targetPoint?.YValues[0] ?? 0;
+                        double rate = total > 0 ? (val * 100.0 / total) : 0.0;
+
+                        if (_lblDailyRate != null)
+                        {
+                            _lblDailyRate.Text = $"{rate:0.#}%";
+                            _lblDailyRate.ForeColor =
+                                (categoryName == "달성")
+                                    ? Color.FromArgb(100, 181, 246)
+                                    : Color.FromArgb(244, 67, 54);
                         }
                     };
 
@@ -757,7 +821,6 @@ namespace pcb_monitoring_program.Views.Dashboard
                     row.Controls.Add(lbl);
                     flowLegendTarget.Controls.Add(row);
                 }
-
                 flowLegendTarget.ResumeLayout();
 
                 _dailyTargetInitialized = true;
@@ -777,13 +840,45 @@ namespace pcb_monitoring_program.Views.Dashboard
                 series.Points[idx].Color = item.color;
             }
 
-            // 달성률 계산 (0으로 나누기 방지)
+            // 선택값 유효성 체크
+            if (_selectedDailyTargetCategory != "달성" && _selectedDailyTargetCategory != "미달성")
+                _selectedDailyTargetCategory = "달성";
+
+            // 도넛 하이라이트 복원
+            foreach (var p in series.Points) p.BorderWidth = 0;
+
+            var selectedPoint = series.Points.FirstOrDefault(p => p.AxisLabel == _selectedDailyTargetCategory)
+                                ?? series.Points.FirstOrDefault(p => p.AxisLabel == "달성");
+
+            if (selectedPoint != null)
+            {
+                selectedPoint.BorderColor = Color.White;
+                selectedPoint.BorderWidth = 3;
+            }
+
+            // 달성률 계산
             double achievementRate = targetProduction > 0
                 ? (actualProduction * 100.0) / targetProduction
                 : 0.0;
 
-            // 상단 텍스트 갱신
-            _lblDailyRate.Text = $"{achievementRate:0.#}%";
+            // 상단 텍스트 갱신 (선택된 라벨 기준으로)
+            double displayRate;
+            Color displayColor;
+
+            if (_selectedDailyTargetCategory == "미달성")
+            {
+                displayRate = 100.0 - achievementRate;
+                displayColor = Color.FromArgb(244, 67, 54);
+            }
+            else
+            {
+                _selectedDailyTargetCategory = "달성";
+                displayRate = achievementRate;
+                displayColor = Color.FromArgb(100, 181, 246);
+            }
+
+            _lblDailyRate.Text = $"{displayRate:0.#}%";
+            _lblDailyRate.ForeColor = displayColor;
             _lblDailyTarget.Text = $"목표: {targetProduction}개";
             _lblDailyActual.Text = $"실제: {actualProduction}개";
 
@@ -791,26 +886,63 @@ namespace pcb_monitoring_program.Views.Dashboard
             foreach (var item in categories)
             {
                 if (_dailyTargetLegendLabels.TryGetValue(item.name, out var lbl))
-                {
                     lbl.Text = $"{item.name}  {item.value}개";
-                }
             }
+
         }
 
 
         private void SetupBoxRateChart()
         {
-            // 1) 데이터: 위에서 아래로 "정상 → 부품불량 → 납땜불량"
-            var boxData = new (string name, int current, int max, Color color)[]
+            // 1) DB에서 box_status 읽어오기
+            (string name, int current, int max, Color color)[] boxData;
+
+            try
             {
-                ("정상",     2, 3, Color.FromArgb(100, 181, 246)),
-                ("부품불량",  3, 3, Color.FromArgb(255, 167, 38)),
-                ("S/N불량",  1, 3, Color.FromArgb(158, 158, 158)),
-            };
+                string connectionString =
+                    "Server=100.80.24.53;Port=3306;Database=pcb_inspection;Uid=pcb_admin;Pwd=1234;CharSet=utf8mb4;";
+
+                using (var db = new DatabaseManager.DatabaseManager(connectionString))
+                {
+                    var list = db.GetAllBoxStatus();
+
+                    // 🔹 DB box_id: NORMAL / MISSING / POSITION_ERROR
+                    var normal = list.FirstOrDefault(b => b.BoxId == "NORMAL")
+                                 ?? new BoxStatus { BoxId = "NORMAL", Category = "normal", CurrentSlot = 0, MaxSlots = 3 };
+
+                    var missing = list.FirstOrDefault(b => b.BoxId == "MISSING")
+                                 ?? new BoxStatus { BoxId = "MISSING", Category = "missing", CurrentSlot = 0, MaxSlots = 3 };
+
+                    var position = list.FirstOrDefault(b => b.BoxId == "POSITION_ERROR")
+                                 ?? new BoxStatus { BoxId = "POSITION_ERROR", Category = "position_error", CurrentSlot = 0, MaxSlots = 3 };
+
+                    // 🔹 current_slot 그대로 = 찬 슬롯 개수 (0 ~ max_slots)
+                    int normalUsed = Math.Min(normal.CurrentSlot, normal.MaxSlots);
+                    int missingUsed = Math.Min(missing.CurrentSlot, missing.MaxSlots);
+                    int positionUsed = Math.Min(position.CurrentSlot, position.MaxSlots);
+
+                    boxData = new (string name, int current, int max, Color color)[]
+                    {
+                ("정상",     normalUsed,   normal.MaxSlots,   Color.FromArgb(100, 181, 246)),
+                ("부품불량", missingUsed,  missing.MaxSlots,  Color.FromArgb(255, 167, 38)),
+                ("S/N 불량", positionUsed, position.MaxSlots, Color.FromArgb(158, 158, 158)),
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                boxData = new (string name, int current, int max, Color color)[]
+                {
+            ("정상",     0, 3, Color.FromArgb(100, 181, 246)),
+            ("부품불량", 0, 3, Color.FromArgb(238,  99,  99)),
+            ("S/N 불량", 0, 3, Color.FromArgb(255, 170,   0)),
+                };
+
+                MessageBox.Show($"박스 상태를 불러오는 중 오류가 발생했습니다.\n{ex.Message}", "박스 상태 모니터링");
+            }
 
             var chart = BoxRateChart;
 
-            // 2) 완전 초기화 + 데이터바인딩 끊기
             chart.DataSource = null;
             chart.Series.Clear();
             chart.ChartAreas.Clear();
@@ -819,30 +951,27 @@ namespace pcb_monitoring_program.Views.Dashboard
             chart.BackColor = Color.FromArgb(40, 40, 40);
             chart.BorderlineWidth = 0;
 
-            // 3) ChartArea + 축 설정
             var area = new ChartArea("Main");
             area.BackColor = Color.Transparent;
 
-            // ─ 가로축(X) : 값 (0 ~ 3)
-            area.AxisX.Minimum = 0;
-            area.AxisX.Maximum = 4;
-            area.AxisX.Interval = 1;                      // 0,1,2,3
-            area.AxisX.MajorGrid.Enabled = true;
-            area.AxisX.MajorGrid.LineColor = Color.FromArgb(70, 70, 70);
+            // 🔹 AxisX = 카테고리 축 (세로) – 숫자 필요 없음
+            area.AxisX.MajorGrid.Enabled = false;
             area.AxisX.LabelStyle.ForeColor = Color.Gainsboro;
             area.AxisX.LabelStyle.Font = new Font("맑은 고딕", 9);
+            area.AxisX.Interval = 1;
+            area.AxisX.IsReversed = false;
 
-            // ─ 세로축(Y) : 카테고리 (정상 / 부품불량 / 납땜불량)
-            area.AxisY.MajorGrid.Enabled = false;
+            // 🔹 AxisY = 값 축 (가로) – 0~3 고정
+            area.AxisY.Minimum = 0;
+            area.AxisY.Maximum = 3;
+            area.AxisY.Interval = 1;
+            area.AxisY.MajorGrid.Enabled = true;
+            area.AxisY.MajorGrid.LineColor = Color.FromArgb(70, 70, 70);
             area.AxisY.LabelStyle.ForeColor = Color.Gainsboro;
             area.AxisY.LabelStyle.Font = new Font("맑은 고딕", 9);
-            area.AxisY.Interval = 1;          // 한 칸씩
-            area.AxisY.IsReversed = false;    // 0번째가 맨 위
-
 
             chart.ChartAreas.Add(area);
 
-            // 4) Series 설정 (가로 막대)
             var series = new Series("BoxRate");
             series.ChartArea = "Main";
             series.ChartType = SeriesChartType.Bar;   // 가로 막대
@@ -851,22 +980,19 @@ namespace pcb_monitoring_program.Views.Dashboard
             series.LabelForeColor = Color.Gainsboro;
             series.Font = new Font("맑은 고딕", 8, FontStyle.Bold);
 
-            // ⚠ 자동 인덱싱 / 자동 X값 사용 안 함
-            series.IsXValueIndexed = true;         // 기본값대로 두는 게 안전
+            series.IsXValueIndexed = true;
             series.XValueType = ChartValueType.String;
             series.YValueType = ChartValueType.Int32;
 
-            // 5) 포인트 추가 – DataPoint로 직접
             foreach (var item in boxData)
             {
                 var p = new DataPoint();
-                // X값은 안 쓰고, Y값만 사용 (막대 길이)
-                p.SetValueY(item.current);          // 0~3
-                p.AxisLabel = item.name;            // 세로축에 보일 텍스트
+                p.SetValueY(item.current);              // 0~3 (찬 슬롯 개수)
+                p.AxisLabel = item.name;                // 세로축: 정상/부품불량/납땜불량
                 p.Color = item.color;
-                p.Label = $"{item.current}/{item.max}";  // 막대 위/옆 텍스트
+                p.Label = $"{item.current}/{item.max}"; // 예: 1/3, 3/3
 
-                if (item.current >= item.max)
+                if (item.current >= item.max && item.max > 0)
                 {
                     p.BorderColor = Color.Yellow;
                     p.BorderWidth = 3;
