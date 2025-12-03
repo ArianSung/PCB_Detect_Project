@@ -88,11 +88,11 @@ db = DatabaseManager(**DB_CONFIG)
 # YOLO 모델 로드
 try:
     from ultralytics import YOLO
-    model_path = '../runs/detect/roboflow_pcb_balanced/weights/best.pt'  # 프로젝트 루트 기준
+    model_path = '../runs/detect/pcb_defect_v4_10class/weights/best.pt'  # 10 클래스 모델 (mAP50=88.8%)
     yolo_model = YOLO(model_path)
     logger.info(f"✅ YOLO 모델 로드 완료: {model_path}")
     logger.info(f"   - 모델 타입: YOLOv11l")
-    logger.info(f"   - 클래스 수: 12개 (PCB 부품 검출)")
+    logger.info(f"   - 클래스 수: 10개 (PCB 부품 검출)")
 except Exception as e:
     logger.error(f"⚠️  YOLO 모델 로드 실패: {e}")
     logger.warning("   - 추론 시 더미 결과 반환됨")
@@ -101,12 +101,13 @@ except Exception as e:
 # 템플릿 기반 정렬 시스템 초기화
 template_alignment = None
 try:
-    template_path = Path(__file__).parent / 'screw_hole_template.jpg'
+    template_path = Path(__file__).parent / 'reference_hole.jpg'
     if template_path.exists():
-        template_alignment = TemplateBasedAlignment(str(template_path))
+        template_alignment = TemplateBasedAlignment(str(template_path), threshold=0.90)  # 신뢰도 임계값 0.90 (90%) ⭐
         logger.info(f"✅ 템플릿 기반 정렬 시스템 로드 완료")
         logger.info(f"   - 템플릿 경로: {template_path}")
         logger.info(f"   - 템플릿 크기: {template_alignment.template.shape if template_alignment.template is not None else 'N/A'}")
+        logger.info(f"   - 신뢰도 임계값: {template_alignment.threshold:.2f} (90%)")
     else:
         logger.warning(f"⚠️  템플릿 파일 없음: {template_path}")
         logger.warning("   - 템플릿 매칭 기능 비활성화")
@@ -252,6 +253,115 @@ def health_check():
     })
 
 
+@app.route('/save_reference_components', methods=['POST'])
+def save_reference_components():
+    """
+    기준 부품 배치 정보를 데이터베이스에 저장
+
+    Request JSON:
+        {
+            "product_code": "BC",
+            "components": [
+                {
+                    "class_name": "resistor",
+                    "center": [100, 200],
+                    "relative_center": [10, 20],  # 템플릿 기준점 기준
+                    "bbox": [95, 195, 105, 205],
+                    "confidence": 0.95
+                },
+                ...
+            ],
+            "reference_point": [90, 180],  # 템플릿 기준점 위치
+            "tolerance_px": 30.0  # 카메라 거리 차이 고려한 허용 오차
+        }
+
+    Response JSON:
+        {
+            "status": "ok",
+            "product_code": "BC",
+            "components_saved": 22,
+            "message": "기준 부품 배치 정보가 저장되었습니다"
+        }
+    """
+    try:
+        data = request.get_json()
+
+        product_code = data.get('product_code', 'BC')
+        components = data.get('components', [])
+        tolerance_px = data.get('tolerance_px', 30.0)  # 카메라 거리 차이 고려
+
+        if not components:
+            return jsonify({
+                'status': 'error',
+                'error': 'No components provided'
+            }), 400
+
+        # 데이터베이스 연결 및 커서 가져오기
+        conn = db.get_connection()
+        with conn.cursor() as cursor:
+            # 기존 데이터 삭제 (업데이트 모드)
+            delete_query = "DELETE FROM product_components WHERE product_code = %s"
+            cursor.execute(delete_query, (product_code,))
+
+            # 새로운 기준 데이터 저장
+            insert_query = """
+                INSERT INTO product_components
+                (product_code, component_class, center_x, center_y,
+                 bbox_x1, bbox_y1, bbox_x2, bbox_y2, tolerance_px)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+
+            saved_count = 0
+            for comp in components:
+                # 상대 좌표를 사용 (템플릿 기준점 기준)
+                if 'relative_center' in comp:
+                    center_x, center_y = comp['relative_center']
+                else:
+                    center_x, center_y = comp['center']
+
+                bbox = comp['bbox']
+
+                params = (
+                    product_code,
+                    comp['class_name'],
+                    float(center_x),
+                    float(center_y),
+                    float(bbox[0]),
+                    float(bbox[1]),
+                    float(bbox[2]),
+                    float(bbox[3]),
+                    float(tolerance_px)
+                )
+
+                cursor.execute(insert_query, params)
+                saved_count += 1
+
+            # products 테이블의 component_count 업데이트
+            update_product_query = """
+                UPDATE products
+                SET component_count = %s
+                WHERE product_code = %s
+            """
+            cursor.execute(update_product_query, (saved_count, product_code))
+
+        logger.info(f"✅ 기준 부품 배치 저장 완료: {product_code} ({saved_count}개 부품)")
+
+        return jsonify({
+            'status': 'ok',
+            'product_code': product_code,
+            'components_saved': saved_count,
+            'tolerance_px': tolerance_px,
+            'message': f'기준 부품 배치 정보가 저장되었습니다 ({saved_count}개 부품)'
+        })
+
+    except Exception as e:
+        logger.error(f"기준 부품 배치 저장 실패: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
 @app.route('/predict_test', methods=['POST'])
 def predict_test():
     """
@@ -367,22 +477,22 @@ def predict_test():
         reference_point = None
 
         if template_alignment and template_alignment.template is not None:
-            # 템플릿 매칭용 ROI 영역 정의 (템플릿 중앙 기준)
+            # YOLO 검출용 ROI 영역 정의 (좌우 확장 + 위로 70픽셀 이동)
             img_h, img_w = frame.shape[:2]
-            roi_width = 80    # ROI 폭 (x축 축소: 120 → 80)
-            roi_height = 100  # ROI 높이 (y축 유지)
-            roi_center_x = 156  # 템플릿 중앙 X
-            roi_center_y = 99   # 템플릿 중앙 Y
-            roi_x1 = roi_center_x - roi_width // 2   # 116
-            roi_x2 = roi_center_x + roi_width // 2   # 196
-            roi_y1 = roi_center_y - roi_height // 2  # 49
-            roi_y2 = roi_center_y + roi_height // 2  # 149
+            yolo_width = 600  # 550 → 600 (+50)
+            yolo_height = 415
+            yolo_roi_x1 = (img_w - yolo_width) // 2   # 20
+            yolo_roi_y1 = (img_h - yolo_height) // 2 - 70  # 42 (112-70)
+            yolo_roi_x2 = yolo_roi_x1 + yolo_width    # 620
+            yolo_roi_y2 = yolo_roi_y1 + yolo_height   # 457
 
-            # YOLO 검출용 ROI 영역 정의 (템플릿 ROI 좌상단 기준)
-            yolo_roi_x1 = roi_x1  # 116
-            yolo_roi_y1 = roi_y1  # 49
-            yolo_roi_x2 = yolo_roi_x1 + 400  # 516
-            yolo_roi_y2 = yolo_roi_y1 + 500  # 549
+            # 템플릿 매칭용 ROI 영역 정의 (YOLO ROI 왼쪽 상단 모서리에 정렬)
+            roi_size = 60       # ROI 크기 (정사각형)
+            # YOLO ROI 왼쪽 상단 모서리 좌표를 그대로 사용
+            roi_x1 = yolo_roi_x1                    # 20
+            roi_y1 = yolo_roi_y1                    # 42
+            roi_x2 = roi_x1 + roi_size              # 80
+            roi_y2 = roi_y1 + roi_size              # 102
 
             # 템플릿 매칭
             reference_point = template_alignment.find_reference_point(
@@ -456,8 +566,27 @@ def predict_test():
 
                 logger.info(f"[TEST] YOLO 추론 완료: {camera_id} → 원본 {len(raw_boxes_data)}개 → 필터링 {len(filtered_boxes)}개 → 평활화 {len(smoothed_boxes)}개 객체")
 
-                # 최종 boxes_data는 평활화된 결과 사용
-                boxes_data = smoothed_boxes
+                # 디버그 뷰어용 데이터 구조 변환 (JavaScript가 기대하는 형식으로) ⭐
+                boxes_data = []
+                for box in filtered_boxes:
+                    cx = (box['x1'] + box['x2']) / 2
+                    cy = (box['y1'] + box['y2']) / 2
+
+                    box_data = {
+                        'class_name': box['class_name'],
+                        'bbox': [box['x1'], box['y1'], box['x2'], box['y2']],
+                        'center': [cx, cy],
+                        'confidence': box['confidence']
+                    }
+
+                    # 템플릿 기준점을 (0,0)으로 하는 상대 좌표 추가 ⭐
+                    if reference_point:
+                        ref_x, ref_y = reference_point
+                        rel_x = cx - ref_x
+                        rel_y = cy - ref_y
+                        box_data['relative_center'] = [rel_x, rel_y]
+
+                    boxes_data.append(box_data)
             except Exception as yolo_error:
                 logger.error(f"[TEST] YOLO 추론 실패: {yolo_error}")
                 defect_type = "정상"
@@ -479,21 +608,20 @@ def predict_test():
         if template_alignment and template_alignment.template is not None:
             img_h, img_w = annotated_frame.shape[:2]
 
-            # 템플릿 매칭용 ROI 재계산 (시각화용)
-            roi_width = 80    # ROI 폭 (x축 축소: 120 → 80)
-            roi_height = 100  # ROI 높이 (y축 유지)
-            roi_center_x = 156  # 템플릿 중앙 X
-            roi_center_y = 99   # 템플릿 중앙 Y
-            roi_x1 = roi_center_x - roi_width // 2   # 116
-            roi_x2 = roi_center_x + roi_width // 2   # 196
-            roi_y1 = roi_center_y - roi_height // 2  # 49
-            roi_y2 = roi_center_y + roi_height // 2  # 149
+            # YOLO 검출용 ROI 재계산 (시각화용, 좌우 확장 + 위로 70픽셀 이동)
+            yolo_width = 600  # 550 → 600 (+50)
+            yolo_height = 415
+            yolo_roi_x1 = (img_w - yolo_width) // 2   # 20
+            yolo_roi_y1 = (img_h - yolo_height) // 2 - 70  # 42 (112-70)
+            yolo_roi_x2 = yolo_roi_x1 + yolo_width    # 620
+            yolo_roi_y2 = yolo_roi_y1 + yolo_height   # 457
 
-            # YOLO 검출용 ROI 재계산 (시각화용)
-            yolo_roi_x1 = roi_x1  # 116
-            yolo_roi_y1 = roi_y1  # 49
-            yolo_roi_x2 = yolo_roi_x1 + 400  # 516
-            yolo_roi_y2 = yolo_roi_y1 + 500  # 549
+            # 템플릿 매칭용 ROI 재계산 (시각화용, YOLO ROI 왼쪽 상단 모서리에 정렬)
+            roi_size = 60       # ROI 크기 (정사각형)
+            roi_x1 = yolo_roi_x1                    # 20
+            roi_y1 = yolo_roi_y1                    # 42
+            roi_x2 = roi_x1 + roi_size              # 80
+            roi_y2 = roi_y1 + roi_size              # 102
 
             # YOLO ROI 박스 그리기 (초록색, 먼저 그려서 뒤에 표시)
             cv2.rectangle(annotated_frame, (yolo_roi_x1, yolo_roi_y1), (yolo_roi_x2, yolo_roi_y2), (0, 255, 0), 2)
@@ -556,7 +684,9 @@ def predict_test():
                     'defect_type': defect_type,
                     'confidence': confidence,
                     'boxes_count': len(boxes_data),
+                    'boxes_data': boxes_data,  # 컴포넌트 상세 정보 추가
                     'roi_status': roi_status,
+                    'frame_shape': list(annotated_frame.shape),  # 프레임 크기 [height, width, channels]
                     'timestamp': datetime.now().isoformat(),
                     'type': 'final_frame'
                 })
@@ -1350,6 +1480,95 @@ def debug_viewer():
                 margin-top: 20px;
                 opacity: 0.7;
             }
+            .components-panel {
+                background: rgba(255,255,255,0.1);
+                border-radius: 15px;
+                padding: 20px;
+                margin-top: 20px;
+                backdrop-filter: blur(10px);
+                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            }
+            .table-container {
+                overflow-x: auto;
+                border-radius: 10px;
+                background: rgba(0,0,0,0.3);
+            }
+            #components-table {
+                width: 100%;
+                border-collapse: collapse;
+                text-align: left;
+            }
+            #components-table th {
+                background: rgba(255,255,255,0.2);
+                padding: 12px;
+                font-weight: bold;
+                border-bottom: 2px solid rgba(255,255,255,0.3);
+            }
+            #components-table td {
+                padding: 10px 12px;
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+            }
+            #components-table tbody tr:hover {
+                background: rgba(255,255,255,0.05);
+            }
+            .save-btn {
+                display: block;
+                width: 100%;
+                max-width: 400px;
+                margin: 20px auto 0;
+                padding: 15px 30px;
+                font-size: 1.2em;
+                font-weight: bold;
+                color: #fff;
+                background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+                border: none;
+                border-radius: 10px;
+                cursor: pointer;
+                box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
+                transition: all 0.3s ease;
+            }
+            .save-btn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(76, 175, 80, 0.6);
+            }
+            .save-btn:active {
+                transform: translateY(0);
+            }
+            .save-btn:disabled {
+                background: rgba(150, 150, 150, 0.5);
+                cursor: not-allowed;
+                box-shadow: none;
+            }
+            .notification {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 15px 25px;
+                border-radius: 10px;
+                font-weight: bold;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+                z-index: 1000;
+                display: none;
+                animation: slideIn 0.3s ease;
+            }
+            .notification.success {
+                background: #4CAF50;
+                color: #fff;
+            }
+            .notification.error {
+                background: #f44336;
+                color: #fff;
+            }
+            @keyframes slideIn {
+                from {
+                    transform: translateX(400px);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+            }
         </style>
     </head>
     <body>
@@ -1385,10 +1604,37 @@ def debug_viewer():
                 </div>
             </div>
 
+            <div class="components-panel" style="display:none;" id="components-panel">
+                <h2 style="text-align: center; margin-bottom: 20px;">🔍 검출된 컴포넌트 상세 정보</h2>
+                <div class="table-container">
+                    <table id="components-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>부품 타입</th>
+                                <th>절대 좌표 (X, Y)</th>
+                                <th>상대 좌표 (기준점 0,0)</th>
+                                <th>바운딩 박스 (X1, Y1, X2, Y2)</th>
+                                <th>신뢰도</th>
+                            </tr>
+                        </thead>
+                        <tbody id="components-tbody">
+                            <tr><td colspan="6" style="text-align: center;">검출된 컴포넌트 없음</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <button class="save-btn" id="save-components-btn" onclick="saveReferenceComponents()" disabled>
+                    💾 기준 부품 배치 저장 (제품 코드: BC)
+                </button>
+            </div>
+
             <div class="footer">
-                ✨ 템플릿 매칭 디버그 시스템 v1.0 | Flask Server | WebSocket Real-time
+                ✨ 템플릿 매칭 디버그 시스템 v2.0 | Flask Server | WebSocket Real-time
             </div>
         </div>
+
+        <!-- 알림 메시지 -->
+        <div id="notification" class="notification"></div>
 
         <script>
             // WebSocket 연결
@@ -1414,18 +1660,99 @@ def debug_viewer():
             const confidenceElement = document.getElementById('confidence');
             const templateSizeElement = document.getElementById('template-size');
             const frameSizeElement = document.getElementById('frame-size');
+            const saveBtn = document.getElementById('save-components-btn');
+            const notification = document.getElementById('notification');
 
-            // 원본 프레임 수신 (라즈베리파이에서 직접 전송)
+            // 현재 검출된 컴포넌트 데이터를 저장하는 전역 변수
+            let currentComponentsData = [];
+
+            // 프레임 업데이트 수신 (모든 정보 포함)
             socket.on('frame_update', (data) => {
-                console.log('📥 원본 프레임 수신:', data.camera_id);
+                console.log('📥 프레임 업데이트 수신:', data.camera_id, data);
 
-                // 원본 이미지 업데이트
-                if (data.image && data.camera_id === 'left') {
-                    imgElement.src = 'data:image/jpeg;base64,' + data.image;
-                    imgElement.style.display = 'block';
-                    loadingText.style.display = 'none';
+                if (data.camera_id === 'left') {
+                    // 이미지 업데이트
+                    if (data.image) {
+                        imgElement.src = 'data:image/jpeg;base64,' + data.image;
+                        imgElement.style.display = 'block';
+                        loadingText.style.display = 'none';
+                    }
+
+                    // ROI 상태 업데이트
+                    if (data.roi_status) {
+                        if (data.roi_status === 'in_roi') {
+                            confidenceElement.textContent = '✅ ROI 안';
+                            confidenceElement.style.color = '#4CAF50';
+                        } else if (data.roi_status === 'out_of_roi') {
+                            confidenceElement.textContent = '⚠️ ROI 밖';
+                            confidenceElement.style.color = '#FFC107';
+                        } else {
+                            confidenceElement.textContent = data.roi_status;
+                            confidenceElement.style.color = '#FFF';
+                        }
+                    }
+
+                    // 검출 개수 업데이트
+                    if (data.boxes_count !== undefined) {
+                        templateSizeElement.textContent = `${data.boxes_count}개`;
+                        templateSizeElement.style.color = data.boxes_count > 0 ? '#4CAF50' : '#FFF';
+                    }
+
+                    // 프레임 크기 업데이트
+                    if (data.frame_shape) {
+                        const [height, width, channels] = data.frame_shape;
+                        frameSizeElement.textContent = `${width}x${height}`;
+                    }
+
+                    // 컴포넌트 상세 정보 업데이트
+                    const componentsData = data.boxes_data || [];
+                    currentComponentsData = componentsData;  // 전역 변수에 저장
+                    updateComponentsTable(componentsData);
+
+                    // 저장 버튼 활성화/비활성화
+                    if (componentsData.length > 0) {
+                        saveBtn.disabled = false;
+                    } else {
+                        saveBtn.disabled = true;
+                    }
                 }
             });
+
+            // 컴포넌트 테이블 업데이트 함수
+            function updateComponentsTable(components) {
+                const tbody = document.getElementById('components-tbody');
+                const panel = document.getElementById('components-panel');
+
+                if (!components || components.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">검출된 컴포넌트 없음</td></tr>';
+                    panel.style.display = 'none';
+                    return;
+                }
+
+                panel.style.display = 'block';
+                tbody.innerHTML = '';
+
+                components.forEach((comp, index) => {
+                    const row = tbody.insertRow();
+
+                    // 상대 좌표 표시 (기준점 기준)
+                    let relativeCoordsHtml = '-';
+                    if (comp.relative_center) {
+                        const relX = Math.round(comp.relative_center[0]);
+                        const relY = Math.round(comp.relative_center[1]);
+                        relativeCoordsHtml = `<span style="color: #4CAF50;">(${relX}, ${relY})</span>`;
+                    }
+
+                    row.innerHTML = `
+                        <td>${index + 1}</td>
+                        <td><strong>${comp.class_name || 'Unknown'}</strong></td>
+                        <td>(${Math.round(comp.center[0])}, ${Math.round(comp.center[1])})</td>
+                        <td>${relativeCoordsHtml}</td>
+                        <td>(${Math.round(comp.bbox[0])}, ${Math.round(comp.bbox[1])}, ${Math.round(comp.bbox[2])}, ${Math.round(comp.bbox[3])})</td>
+                        <td>${(comp.confidence * 100).toFixed(1)}%</td>
+                    `;
+                });
+            }
 
             // ROI 상태 수신
             socket.on('roi_status', (data) => {
@@ -1496,6 +1823,60 @@ def debug_viewer():
                     templateSizeElement.textContent = '-';
                 }
             });
+
+            // 알림 메시지 표시 함수
+            function showNotification(message, type = 'success') {
+                notification.textContent = message;
+                notification.className = `notification ${type}`;
+                notification.style.display = 'block';
+
+                setTimeout(() => {
+                    notification.style.display = 'none';
+                }, 3000);
+            }
+
+            // 기준 부품 배치 저장 함수
+            async function saveReferenceComponents() {
+                if (currentComponentsData.length === 0) {
+                    showNotification('검출된 컴포넌트가 없습니다.', 'error');
+                    return;
+                }
+
+                // 버튼 비활성화 (중복 클릭 방지)
+                saveBtn.disabled = true;
+                saveBtn.textContent = '💾 저장 중...';
+
+                try {
+                    const response = await fetch('/save_reference_components', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            product_code: 'BC',
+                            components: currentComponentsData,
+                            tolerance_px: 30.0  // 카메라 거리 차이 고려한 허용 오차
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok && result.status === 'ok') {
+                        showNotification(`✅ ${result.message} (${result.components_saved}개)`, 'success');
+                        console.log('✅ 기준 부품 배치 저장 성공:', result);
+                    } else {
+                        showNotification(`❌ 저장 실패: ${result.error || '알 수 없는 오류'}`, 'error');
+                        console.error('❌ 저장 실패:', result);
+                    }
+                } catch (error) {
+                    showNotification(`❌ 서버 오류: ${error.message}`, 'error');
+                    console.error('❌ 서버 오류:', error);
+                } finally {
+                    // 버튼 다시 활성화
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = '💾 기준 부품 배치 저장 (제품 코드: BC)';
+                }
+            }
 
             console.log('✅ 실시간 프레임 수신 대기 중...');
         </script>
