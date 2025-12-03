@@ -28,11 +28,20 @@ load_dotenv()
 
 # 환경 변수 읽기
 SERVER_URL = os.getenv('SERVER_URL', 'http://100.80.24.53:5000')
-CAMERA_INDEX = int(os.getenv('BACK_CAMERA_INDEX', 1))  # 뒷면 카메라는 인덱스 1
+CAMERA_INDEX = int(os.getenv('BACK_CAMERA_INDEX', 2))  # 뒷면 카메라는 인덱스 2
 CAMERA_WIDTH = int(os.getenv('CAMERA_WIDTH', 640))
 CAMERA_HEIGHT = int(os.getenv('CAMERA_HEIGHT', 480))
 JPEG_QUALITY = int(os.getenv('JPEG_QUALITY', 85))
 TARGET_FPS = int(os.getenv('CAMERA_FPS', 10))  # 뒷면은 10 FPS면 충분
+
+# --- 카메라 화질 파라미터 (camera_client.py와 동일한 설정) ---
+CAM_BRIGHTNESS = int(os.getenv('CAM_BRIGHTNESS', 41))   # 최적값: 41
+CAM_CONTRAST = int(os.getenv('CAM_CONTRAST', 52))       # 최적값: 52
+CAM_SATURATION = int(os.getenv('CAM_SATURATION', 59))   # 최적값: 59
+
+# --- 하드웨어 제어 (노출/초점) ---
+CAM_EXPOSURE_ABS = int(os.getenv('CAM_EXPOSURE', 1521)) # 최적값: 1521
+CAM_FOCUS_ABS = int(os.getenv('CAM_FOCUS', 402))        # 최적값: 402 (접사 중요!)
 
 # 로깅 설정
 logging.basicConfig(
@@ -56,7 +65,7 @@ class BackCameraClient:
         self.last_product_code = None  # 마지막으로 검출된 제품 코드
 
     def setup_camera_v4l2(self):
-        """v4l2-ctl을 사용해 카메라 설정"""
+        """v4l2-ctl을 사용해 카메라 고급 설정 (camera_client.py와 동일)"""
         try:
             device = f"/dev/video{self.camera_index}"
 
@@ -67,16 +76,44 @@ class BackCameraClient:
                 timeout=2
             )
 
-            # 노출 값 수동 설정 (밝게 - 시리얼 넘버 읽기 위해)
+            # 노출 값 수동 설정 (최적값 적용)
             subprocess.run(
-                ['v4l2-ctl', '-d', device, '-c', 'exposure_absolute=200'],
+                ['v4l2-ctl', '-d', device, '-c', f'exposure_absolute={CAM_EXPOSURE_ABS}'],
+                capture_output=True,
+                timeout=2
+            )
+
+            # 자동 초점 끄기
+            subprocess.run(
+                ['v4l2-ctl', '-d', device, '-c', 'focus_auto=0'],
+                capture_output=True,
+                timeout=2
+            )
+
+            # 초점 값 수동 설정 (접사 모드 - 가장 중요!)
+            subprocess.run(
+                ['v4l2-ctl', '-d', device, '-c', f'focus_absolute={CAM_FOCUS_ABS}'],
                 capture_output=True,
                 timeout=2
             )
 
             # 밝기 조정
             subprocess.run(
-                ['v4l2-ctl', '-d', device, '-c', 'brightness=140'],
+                ['v4l2-ctl', '-d', device, '-c', f'brightness={CAM_BRIGHTNESS}'],
+                capture_output=True,
+                timeout=2
+            )
+
+            # 대비 조정
+            subprocess.run(
+                ['v4l2-ctl', '-d', device, '-c', f'contrast={CAM_CONTRAST}'],
+                capture_output=True,
+                timeout=2
+            )
+
+            # 채도 조정
+            subprocess.run(
+                ['v4l2-ctl', '-d', device, '-c', f'saturation={CAM_SATURATION}'],
                 capture_output=True,
                 timeout=2
             )
@@ -88,10 +125,12 @@ class BackCameraClient:
                 timeout=2
             )
 
-            logger.info(f"✅ 뒷면 카메라 설정 완료 (device: {device})")
+            logger.info(f"✅ 뒷면 카메라 고급 설정 완료 (device: {device})")
             logger.info(f"   - 자동 노출: OFF")
-            logger.info(f"   - 노출 값: 200 (밝게)")
-            logger.info(f"   - 밝기: 140")
+            logger.info(f"   - 노출 값: {CAM_EXPOSURE_ABS}")
+            logger.info(f"   - 자동 초점: OFF")
+            logger.info(f"   - 초점 값: {CAM_FOCUS_ABS} (접사)")
+            logger.info(f"   - 밝기/대비/채도: {CAM_BRIGHTNESS}/{CAM_CONTRAST}/{CAM_SATURATION}")
             logger.info(f"   - 선명도: 4 (텍스트 읽기용)")
         except Exception as e:
             logger.warning(f"⚠️  v4l2-ctl 설정 실패 (계속 진행): {e}")
@@ -109,19 +148,37 @@ class BackCameraClient:
         if not self.cap.isOpened():
             raise RuntimeError(f"❌ 카메라를 열 수 없습니다 (인덱스: {self.camera_index})")
 
-        # 해상도 설정
+        # 해상도 및 FPS 설정
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
         self.cap.set(cv2.CAP_PROP_FPS, TARGET_FPS)
+
+        # 화질 설정 (밝기, 대비, 채도)
+        self.cap.set(cv2.CAP_PROP_BRIGHTNESS, CAM_BRIGHTNESS)
+        self.cap.set(cv2.CAP_PROP_CONTRAST, CAM_CONTRAST)
+        self.cap.set(cv2.CAP_PROP_SATURATION, CAM_SATURATION)
+
+        # 노출 제어 (자동 노출 끄고 수동 설정)
+        self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)  # 1 = Manual mode
+        self.cap.set(cv2.CAP_PROP_EXPOSURE, CAM_EXPOSURE_ABS)
+
+        # 초점 제어 (자동 초점 끄고 수동 설정 - 가장 중요!)
+        self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+        self.cap.set(cv2.CAP_PROP_FOCUS, CAM_FOCUS_ABS)
 
         # 실제 설정된 값 확인
         actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         actual_fps = int(self.cap.get(cv2.CAP_PROP_FPS))
+        actual_focus = int(self.cap.get(cv2.CAP_PROP_FOCUS))
+        actual_exposure = int(self.cap.get(cv2.CAP_PROP_EXPOSURE))
 
         logger.info(f"✅ 뒷면 카메라 초기화 완료")
         logger.info(f"   - 해상도: {actual_width}x{actual_height}")
         logger.info(f"   - FPS: {actual_fps}")
+        logger.info(f"   - 초점(Focus): 설정값({CAM_FOCUS_ABS}) -> 실제값({actual_focus})")
+        logger.info(f"   - 노출(Exp): 설정값({CAM_EXPOSURE_ABS}) -> 실제값({actual_exposure})")
+        logger.info(f"   - B/C/S: {CAM_BRIGHTNESS}/{CAM_CONTRAST}/{CAM_SATURATION}")
         logger.info(f"   - JPEG 품질: {JPEG_QUALITY}")
 
     def capture_frame(self):
