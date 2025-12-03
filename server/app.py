@@ -43,6 +43,7 @@ from db_manager import DatabaseManager
 from pcb_alignment import PCBAligner
 from component_verification import ComponentVerifier
 from template_based_alignment import TemplateBasedAlignment
+from serial_number_detector import SerialNumberDetector
 import json
 
 # Flask 앱 초기화
@@ -114,6 +115,19 @@ try:
 except Exception as e:
     logger.error(f"⚠️  템플릿 기반 정렬 시스템 초기화 실패: {e}")
     template_alignment = None
+
+# 시리얼 넘버 OCR 검출기 초기화
+serial_detector = None
+try:
+    serial_detector = SerialNumberDetector(
+        languages=['en'],  # 영어 OCR
+        gpu=True,  # GPU 사용
+        min_confidence=0.3  # 최소 신뢰도 30%
+    )
+    logger.info("✅ 시리얼 넘버 OCR 검출기 초기화 완료")
+except Exception as e:
+    logger.error(f"⚠️  시리얼 넘버 OCR 검출기 초기화 실패: {e}")
+    serial_detector = None
 
 # PCB 정렬 및 컴포넌트 검증 모듈 초기화
 pcb_aligner_left = None
@@ -359,6 +373,120 @@ def save_reference_components():
         return jsonify({
             'status': 'error',
             'error': str(e)
+        }), 500
+
+
+@app.route('/predict_serial', methods=['POST'])
+def predict_serial():
+    """
+    시리얼 넘버 OCR 검출 API (뒷면 카메라용)
+
+    Request JSON:
+        {
+            "camera_id": "right",  # 뒷면 카메라
+            "frame": "<base64_encoded_image>",  # Base64 인코딩된 JPEG 이미지
+            "timestamp": "2025-12-03T14:35:22.123Z"  # ISO 포맷 타임스탬프
+        }
+
+    Response JSON:
+        {
+            "status": "ok" or "error",
+            "serial_number": "MBBC-00000001",  # 전체 시리얼 넘버
+            "product_code": "BC",  # 제품 코드 (2자리)
+            "sequence_number": "00000001",  # 일련번호 (8자리)
+            "confidence": 0.95,  # OCR 신뢰도 (0.0~1.0)
+            "detected_text": "S/N MBBC-00000001",  # 원본 검출 텍스트
+            "inference_time_ms": 123.45,  # OCR 처리 시간 (ms)
+            "error": "에러 메시지 (실패 시)"
+        }
+    """
+    try:
+        start_time = time.time()
+
+        # 요청 데이터 파싱
+        data = request.get_json()
+        camera_id = data.get('camera_id', 'right')
+        frame_base64 = data.get('frame')
+        timestamp = data.get('timestamp', datetime.now().isoformat())
+
+        if not frame_base64:
+            return jsonify({
+                'status': 'error',
+                'error': '프레임 데이터가 없습니다'
+            }), 400
+
+        # Base64 디코딩
+        try:
+            image_data = base64.b64decode(frame_base64)
+            np_arr = np.frombuffer(image_data, np.uint8)
+            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+            if frame is None:
+                raise ValueError("이미지 디코딩 실패")
+
+        except Exception as e:
+            logger.error(f"이미지 디코딩 실패: {e}")
+            return jsonify({
+                'status': 'error',
+                'error': f'이미지 디코딩 실패: {str(e)}'
+            }), 400
+
+        # 시리얼 넘버 검출기가 초기화되지 않았을 경우
+        if serial_detector is None:
+            logger.error("시리얼 넘버 검출기가 초기화되지 않았습니다")
+            return jsonify({
+                'status': 'error',
+                'error': '시리얼 넘버 검출기가 초기화되지 않았습니다',
+                'serial_number': None,
+                'product_code': None,
+                'confidence': 0.0
+            }), 500
+
+        # 시리얼 넘버 검출
+        ocr_result = serial_detector.detect_serial_number(frame)
+
+        # 처리 시간 계산
+        inference_time_ms = (time.time() - start_time) * 1000
+
+        # 응답 구성
+        response = {
+            'status': ocr_result['status'],
+            'serial_number': ocr_result.get('serial_number'),
+            'product_code': ocr_result.get('product_code'),
+            'sequence_number': ocr_result.get('sequence_number'),
+            'confidence': ocr_result.get('confidence', 0.0),
+            'detected_text': ocr_result.get('detected_text', ''),
+            'inference_time_ms': inference_time_ms,
+            'timestamp': timestamp,
+            'camera_id': camera_id
+        }
+
+        # 에러가 있을 경우 추가
+        if 'error' in ocr_result:
+            response['error'] = ocr_result['error']
+
+        # 성공 시 로그
+        if ocr_result['status'] == 'ok':
+            logger.info(
+                f"✅ [{camera_id}] 시리얼 넘버 검출 성공: {ocr_result['serial_number']} "
+                f"(제품: {ocr_result['product_code']}, 신뢰도: {ocr_result['confidence']:.2%}, "
+                f"처리 시간: {inference_time_ms:.1f}ms)"
+            )
+        else:
+            logger.warning(
+                f"⚠️  [{camera_id}] 시리얼 넘버 검출 실패: {ocr_result.get('error', 'Unknown')}"
+            )
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        logger.error(f"❌ /predict_serial 처리 실패: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'serial_number': None,
+            'product_code': None,
+            'confidence': 0.0
         }), 500
 
 
