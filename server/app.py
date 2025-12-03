@@ -449,6 +449,10 @@ def predict_serial():
         # 처리 시간 계산
         inference_time_ms = (time.time() - start_time) * 1000
 
+        # 원본 이미지를 JPEG로 인코딩 (디버그 뷰어용)
+        _, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+        frame_base64_for_debug = base64.b64encode(buffer).decode('utf-8')
+
         # 응답 구성
         response = {
             'status': ocr_result['status'],
@@ -478,7 +482,8 @@ def predict_serial():
                 'inference_time_ms': inference_time_ms,
                 'timestamp': timestamp,
                 'camera_id': camera_id,
-                'error': ocr_result.get('error')
+                'error': ocr_result.get('error'),
+                'image': frame_base64_for_debug  # Base64 인코딩된 원본 이미지
             }
 
         # 성공 시 로그
@@ -1856,6 +1861,15 @@ def debug_viewer():
                     <div class="ocr-label" style="text-align: center; font-size: 1.1em;">검출된 원본 텍스트</div>
                     <div class="detected-text-box" id="ocr-detected-text">텍스트 없음</div>
                 </div>
+
+                <!-- OCR 처리 이미지 표시 -->
+                <div style="margin-top: 20px;">
+                    <div class="ocr-label" style="text-align: center; font-size: 1.1em;">📷 OCR 처리 중인 이미지 (원본)</div>
+                    <div style="text-align: center; margin-top: 10px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 10px;">
+                        <img id="ocr-image" src="" alt="OCR 이미지 없음" style="max-width: 100%; height: auto; border-radius: 8px; display: none;">
+                        <div id="ocr-image-placeholder" style="color: #999; padding: 40px;">이미지 대기 중...</div>
+                    </div>
+                </div>
             </div>
 
             <div class="footer">
@@ -2065,6 +2079,18 @@ def debug_viewer():
                     detectedTextEl.textContent = '텍스트 없음';
                     detectedTextEl.style.color = '#999';
                 }
+
+                // OCR 이미지 업데이트
+                const ocrImageEl = document.getElementById('ocr-image');
+                const ocrImagePlaceholderEl = document.getElementById('ocr-image-placeholder');
+                if (ocrData.image) {
+                    ocrImageEl.src = 'data:image/jpeg;base64,' + ocrData.image;
+                    ocrImageEl.style.display = 'block';
+                    ocrImagePlaceholderEl.style.display = 'none';
+                } else {
+                    ocrImageEl.style.display = 'none';
+                    ocrImagePlaceholderEl.style.display = 'block';
+                }
             }
 
             // OCR 결과 주기적으로 가져오기 (500ms마다)
@@ -2256,7 +2282,8 @@ def get_latest_results():
     with frame_lock:
         results = {
             'left': latest_results.get('left', {}),
-            'right': latest_results.get('right', {})
+            'right': latest_results.get('right', {}),
+            'serial_ocr': latest_results.get('serial_ocr', {})
         }
     return jsonify(results)
 
