@@ -105,11 +105,11 @@ template_alignment = None
 try:
     template_path = Path(__file__).parent / 'reference_hole.jpg'
     if template_path.exists():
-        template_alignment = TemplateBasedAlignment(str(template_path), threshold=0.90)  # 신뢰도 임계값 0.90 (90%) ⭐
+        template_alignment = TemplateBasedAlignment(str(template_path), threshold=0.87)  # 신뢰도 임계값 0.87 (87%) ⭐
         logger.info(f"✅ 템플릿 기반 정렬 시스템 로드 완료")
         logger.info(f"   - 템플릿 경로: {template_path}")
         logger.info(f"   - 템플릿 크기: {template_alignment.template.shape if template_alignment.template is not None else 'N/A'}")
-        logger.info(f"   - 신뢰도 임계값: {template_alignment.threshold:.2f} (90%)")
+        logger.info(f"   - 신뢰도 임계값: {template_alignment.threshold:.2f} (87%)")
     else:
         logger.warning(f"⚠️  템플릿 파일 없음: {template_path}")
         logger.warning("   - 템플릿 매칭 기능 비활성화")
