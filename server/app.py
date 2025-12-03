@@ -201,7 +201,8 @@ latest_frames_jpeg = {
 }
 latest_results = {
     'left': {},
-    'right': {}
+    'right': {},
+    'serial_ocr': {}  # 시리얼 넘버 OCR 결과 (우측 카메라)
 }
 frame_lock = threading.Lock()
 
@@ -464,6 +465,21 @@ def predict_serial():
         # 에러가 있을 경우 추가
         if 'error' in ocr_result:
             response['error'] = ocr_result['error']
+
+        # latest_results에 OCR 결과 저장 (디버그 뷰어용)
+        with frame_lock:
+            latest_results['serial_ocr'] = {
+                'status': ocr_result['status'],
+                'serial_number': ocr_result.get('serial_number'),
+                'product_code': ocr_result.get('product_code'),
+                'sequence_number': ocr_result.get('sequence_number'),
+                'confidence': ocr_result.get('confidence', 0.0),
+                'detected_text': ocr_result.get('detected_text', ''),
+                'inference_time_ms': inference_time_ms,
+                'timestamp': timestamp,
+                'camera_id': camera_id,
+                'error': ocr_result.get('error')
+            }
 
         # 성공 시 로그
         if ocr_result['status'] == 'ok':
@@ -1697,6 +1713,59 @@ def debug_viewer():
                     opacity: 1;
                 }
             }
+            /* OCR 결과 패널 스타일 */
+            .ocr-panel {
+                background: rgba(255,255,255,0.1);
+                border-radius: 15px;
+                padding: 20px;
+                margin-top: 20px;
+                backdrop-filter: blur(10px);
+                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            }
+            .ocr-title {
+                font-size: 1.5em;
+                text-align: center;
+                margin-bottom: 15px;
+                font-weight: bold;
+            }
+            .ocr-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 15px;
+                margin-top: 15px;
+            }
+            .ocr-item {
+                background: rgba(255,255,255,0.05);
+                padding: 12px;
+                border-radius: 10px;
+            }
+            .ocr-label {
+                font-size: 0.9em;
+                opacity: 0.8;
+                margin-bottom: 5px;
+            }
+            .ocr-value {
+                font-size: 1.3em;
+                font-weight: bold;
+            }
+            .ocr-value.success {
+                color: #4CAF50;
+            }
+            .ocr-value.error {
+                color: #f44336;
+            }
+            .ocr-value.warning {
+                color: #ff9800;
+            }
+            .detected-text-box {
+                background: rgba(0,0,0,0.3);
+                padding: 15px;
+                border-radius: 10px;
+                margin-top: 15px;
+                font-family: 'Courier New', monospace;
+                font-size: 1.1em;
+                word-break: break-all;
+            }
         </style>
     </head>
     <body>
@@ -1754,6 +1823,39 @@ def debug_viewer():
                 <button class="save-btn" id="save-components-btn" onclick="saveReferenceComponents()" disabled>
                     💾 기준 부품 배치 저장 (제품 코드: BC)
                 </button>
+            </div>
+
+            <!-- 시리얼 넘버 OCR 결과 패널 -->
+            <div class="ocr-panel" id="ocr-panel">
+                <div class="ocr-title">🔤 시리얼 넘버 OCR 검출 결과 (우측 카메라)</div>
+
+                <div class="ocr-grid">
+                    <div class="ocr-item">
+                        <div class="ocr-label">상태</div>
+                        <div class="ocr-value" id="ocr-status">대기 중...</div>
+                    </div>
+                    <div class="ocr-item">
+                        <div class="ocr-label">시리얼 넘버</div>
+                        <div class="ocr-value" id="ocr-serial">-</div>
+                    </div>
+                    <div class="ocr-item">
+                        <div class="ocr-label">제품 코드</div>
+                        <div class="ocr-value" id="ocr-product-code">-</div>
+                    </div>
+                    <div class="ocr-item">
+                        <div class="ocr-label">OCR 신뢰도</div>
+                        <div class="ocr-value" id="ocr-confidence">-</div>
+                    </div>
+                    <div class="ocr-item">
+                        <div class="ocr-label">처리 시간</div>
+                        <div class="ocr-value" id="ocr-time">-</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <div class="ocr-label" style="text-align: center; font-size: 1.1em;">검출된 원본 텍스트</div>
+                    <div class="detected-text-box" id="ocr-detected-text">텍스트 없음</div>
+                </div>
             </div>
 
             <div class="footer">
@@ -1881,6 +1983,103 @@ def debug_viewer():
                     `;
                 });
             }
+
+            // OCR 결과 업데이트 함수
+            function updateOCRPanel(ocrData) {
+                const statusEl = document.getElementById('ocr-status');
+                const serialEl = document.getElementById('ocr-serial');
+                const productCodeEl = document.getElementById('ocr-product-code');
+                const confidenceEl = document.getElementById('ocr-confidence');
+                const timeEl = document.getElementById('ocr-time');
+                const detectedTextEl = document.getElementById('ocr-detected-text');
+
+                if (!ocrData || Object.keys(ocrData).length === 0) {
+                    statusEl.textContent = '대기 중...';
+                    statusEl.className = 'ocr-value';
+                    serialEl.textContent = '-';
+                    productCodeEl.textContent = '-';
+                    confidenceEl.textContent = '-';
+                    timeEl.textContent = '-';
+                    detectedTextEl.textContent = '텍스트 없음';
+                    return;
+                }
+
+                // 상태 업데이트
+                if (ocrData.status === 'ok') {
+                    statusEl.textContent = '✅ 검출 성공';
+                    statusEl.className = 'ocr-value success';
+
+                    // 시리얼 넘버
+                    serialEl.textContent = ocrData.serial_number || '-';
+                    serialEl.className = 'ocr-value success';
+
+                    // 제품 코드
+                    productCodeEl.textContent = ocrData.product_code || '-';
+                    productCodeEl.className = 'ocr-value success';
+                } else {
+                    statusEl.textContent = '❌ 검출 실패';
+                    statusEl.className = 'ocr-value error';
+
+                    serialEl.textContent = '미검출';
+                    serialEl.className = 'ocr-value error';
+
+                    productCodeEl.textContent = '미검출';
+                    productCodeEl.className = 'ocr-value error';
+                }
+
+                // 신뢰도
+                if (ocrData.confidence !== undefined && ocrData.confidence > 0) {
+                    const conf = (ocrData.confidence * 100).toFixed(1);
+                    confidenceEl.textContent = `${conf}%`;
+
+                    // 신뢰도에 따라 색상 변경
+                    if (ocrData.confidence >= 0.7) {
+                        confidenceEl.className = 'ocr-value success';
+                    } else if (ocrData.confidence >= 0.4) {
+                        confidenceEl.className = 'ocr-value warning';
+                    } else {
+                        confidenceEl.className = 'ocr-value error';
+                    }
+                } else {
+                    confidenceEl.textContent = '-';
+                    confidenceEl.className = 'ocr-value';
+                }
+
+                // 처리 시간
+                if (ocrData.inference_time_ms !== undefined) {
+                    timeEl.textContent = `${ocrData.inference_time_ms.toFixed(1)} ms`;
+                    timeEl.className = 'ocr-value';
+                } else {
+                    timeEl.textContent = '-';
+                }
+
+                // 검출된 텍스트
+                if (ocrData.detected_text) {
+                    detectedTextEl.textContent = ocrData.detected_text;
+                    if (ocrData.status === 'ok') {
+                        detectedTextEl.style.color = '#4CAF50';
+                    } else {
+                        detectedTextEl.style.color = '#ff9800';
+                    }
+                } else {
+                    detectedTextEl.textContent = '텍스트 없음';
+                    detectedTextEl.style.color = '#999';
+                }
+            }
+
+            // OCR 결과 주기적으로 가져오기 (500ms마다)
+            setInterval(() => {
+                fetch('/api/latest_results')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.serial_ocr) {
+                            updateOCRPanel(data.serial_ocr);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('OCR 결과 가져오기 실패:', error);
+                    });
+            }, 500);
 
             // ROI 상태 수신
             socket.on('roi_status', (data) => {
