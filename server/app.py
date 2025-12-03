@@ -89,11 +89,12 @@ db = DatabaseManager(**DB_CONFIG)
 # YOLO 모델 로드
 try:
     from ultralytics import YOLO
-    model_path = '../runs/detect/pcb_defect_v4_10class/weights/best.pt'  # 10 클래스 모델 (mAP50=88.8%)
+    model_path = '../models/component_detector_v4_9class_best.pt'  # 9 클래스 모델 (mAP50=93.1%) ⭐
     yolo_model = YOLO(model_path)
     logger.info(f"✅ YOLO 모델 로드 완료: {model_path}")
     logger.info(f"   - 모델 타입: YOLOv11l")
-    logger.info(f"   - 클래스 수: 10개 (PCB 부품 검출)")
+    logger.info(f"   - 클래스 수: 9개 (PCB 부품 검출)")
+    logger.info(f"   - 성능: mAP@0.5=93.1%, Precision=93.3%")
 except Exception as e:
     logger.error(f"⚠️  YOLO 모델 로드 실패: {e}")
     logger.warning("   - 추론 시 더미 결과 반환됨")
@@ -449,8 +450,9 @@ def predict_serial():
         # 처리 시간 계산
         inference_time_ms = (time.time() - start_time) * 1000
 
-        # 원본 이미지를 JPEG로 인코딩 (디버그 뷰어용)
-        _, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+        # 회전된 이미지를 디버그 뷰어용으로 저장 (OCR이 처리하는 이미지와 동일하게)
+        rotated_frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+        _, buffer = cv2.imencode('.jpg', rotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
         frame_base64_for_debug = base64.b64encode(buffer).decode('utf-8')
 
         # 응답 구성
@@ -689,7 +691,7 @@ def predict_test():
             try:
                 # YOLO 추론 실행 (ROI 영역만 사용)
                 # 참고: ROI 마스크를 직접 적용하지 않고, 추론 후 필터링으로 처리
-                results = yolo_model(frame, verbose=False)
+                results = yolo_model.predict(frame, conf=0.3, iou=0.7, verbose=False)
                 defect_type, confidence, raw_boxes_data = parse_yolo_results(results)
 
                 # 신뢰도 필터링 (낮은 신뢰도 제거)
@@ -716,8 +718,9 @@ def predict_test():
                 logger.info(f"[TEST] YOLO 추론 완료: {camera_id} → 원본 {len(raw_boxes_data)}개 → 필터링 {len(filtered_boxes)}개 → 평활화 {len(smoothed_boxes)}개 객체")
 
                 # 디버그 뷰어용 데이터 구조 변환 (JavaScript가 기대하는 형식으로) ⭐
+                # smoothed_boxes를 사용해야 이미지에 그려진 박스와 테이블이 일치함
                 boxes_data = []
-                for box in filtered_boxes:
+                for box in smoothed_boxes:
                     cx = (box['x1'] + box['x2']) / 2
                     cy = (box['y1'] + box['y2']) / 2
 
@@ -944,7 +947,7 @@ def predict_single():
         if yolo_model is not None:
             try:
                 # YOLO 추론 실행
-                results = yolo_model(frame, verbose=False)
+                results = yolo_model.predict(frame, conf=0.3, iou=0.7, verbose=False)
                 defect_type, confidence, boxes = parse_yolo_results(results)
                 logger.info(f"YOLO 추론 완료: {len(boxes)}개 객체 검출")
             except Exception as yolo_error:
@@ -1137,7 +1140,7 @@ def predict_dual():
 
         if yolo_model is not None:
             # 좌측 YOLO 추론
-            left_yolo_results = yolo_model.predict(left_aligned_frame, conf=0.25, verbose=False)
+            left_yolo_results = yolo_model.predict(left_aligned_frame, conf=0.3, iou=0.7, verbose=False)
             if len(left_yolo_results) > 0 and len(left_yolo_results[0].boxes) > 0:
                 boxes = left_yolo_results[0].boxes
                 for box in boxes:
@@ -1155,7 +1158,7 @@ def predict_dual():
                     })
 
             # 우측 YOLO 추론
-            right_yolo_results = yolo_model.predict(right_aligned_frame, conf=0.25, verbose=False)
+            right_yolo_results = yolo_model.predict(right_aligned_frame, conf=0.3, iou=0.7, verbose=False)
             if len(right_yolo_results) > 0 and len(right_yolo_results[0].boxes) > 0:
                 boxes = right_yolo_results[0].boxes
                 for box in boxes:
@@ -3013,7 +3016,7 @@ def handle_template_match_request(data):
                     logger.info("[WebSocket] 🎯 ROI 안에 있음 - YOLO 검출 시작")
 
                     # YOLO 추론
-                    yolo_results = yolo_model.predict(img_resized, conf=0.25, verbose=False)
+                    yolo_results = yolo_model.predict(img_resized, conf=0.3, iou=0.7, verbose=False)
 
                     if len(yolo_results) > 0 and len(yolo_results[0].boxes) > 0:
                         boxes = yolo_results[0].boxes

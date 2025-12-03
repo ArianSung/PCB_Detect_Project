@@ -40,7 +40,7 @@ class SerialNumberDetector:
         re.IGNORECASE
     )
 
-    def __init__(self, languages=['en'], gpu=True, min_confidence=0.3):
+    def __init__(self, languages=['en'], gpu=True, min_confidence=0.1):
         """
         Args:
             languages: OCR 언어 설정 (기본: 영어)
@@ -70,7 +70,7 @@ class SerialNumberDetector:
 
     def preprocess_image(self, image: np.ndarray) -> np.ndarray:
         """
-        OCR 전처리
+        OCR 전처리 (90도 회전 + ROI 추출 + 업스케일링)
 
         Args:
             image: 입력 이미지
@@ -78,29 +78,37 @@ class SerialNumberDetector:
         Returns:
             전처리된 이미지
         """
-        # 그레이스케일 변환
-        if len(image.shape) == 3:
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        else:
-            gray = image
+        # **1단계: 오른쪽으로 90도 회전** (시리얼 넘버가 옆으로 돌아가 있음)
+        rotated = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
 
-        # 대비 향상 (CLAHE)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        enhanced = clahe.apply(gray)
+        # **2단계: ROI 추출 (상단 30% 영역만)** - 시리얼 넘버가 상단에 있음
+        height, width = rotated.shape[:2]
+        roi_height = int(height * 0.3)  # 상단 30%
+        roi = rotated[0:roi_height, :]  # 상단 영역만 잘라냄
 
-        # 이진화 (Otsu)
-        _, binary = cv2.threshold(
-            enhanced,
-            0,
-            255,
-            cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        # **3단계: 업스케일링 (2배 확대)** - 텍스트를 더 크게
+        scale_factor = 2.0
+        roi_upscaled = cv2.resize(
+            roi,
+            None,
+            fx=scale_factor,
+            fy=scale_factor,
+            interpolation=cv2.INTER_CUBIC
         )
 
-        # 노이즈 제거 (Morphology)
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-        denoised = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+        # **4단계: 그레이스케일 변환**
+        if len(roi_upscaled.shape) == 3:
+            gray = cv2.cvtColor(roi_upscaled, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = roi_upscaled
 
-        return denoised
+        # **5단계: 대비 향상 (CLAHE) - 약하게 적용**
+        clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8, 8))
+        enhanced = clahe.apply(gray)
+
+        # 이진화는 하지 않고 enhanced 이미지를 그대로 사용
+        # (이진화가 오히려 텍스트를 망가뜨릴 수 있음)
+        return enhanced
 
     def detect_text(self, image: np.ndarray) -> list:
         """
@@ -122,12 +130,25 @@ class SerialNumberDetector:
             # OCR 수행
             results = self.reader.readtext(preprocessed)
 
+            # 디버그: 모든 검출 결과 로깅 (신뢰도 무관)
+            if results:
+                logger.info(f"🔍 EasyOCR 원본 결과 (총 {len(results)}개):")
+                for bbox, text, conf in results:
+                    logger.info(f"   - 텍스트: '{text}' | 신뢰도: {conf:.2%}")
+            else:
+                logger.warning("⚠️  EasyOCR이 아무 텍스트도 검출하지 못했습니다")
+
             # 신뢰도 필터링
             filtered_results = [
                 (bbox, text, conf)
                 for bbox, text, conf in results
                 if conf >= self.min_confidence
             ]
+
+            if filtered_results:
+                logger.info(f"✅ 신뢰도 필터링 후: {len(filtered_results)}개 유지 (임계값: {self.min_confidence:.0%})")
+            else:
+                logger.warning(f"⚠️  신뢰도 {self.min_confidence:.0%} 이상인 텍스트가 없습니다")
 
             return filtered_results
 
