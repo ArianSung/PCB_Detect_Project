@@ -167,12 +167,21 @@ class CameraClient:
                 self.frame_count += 1
                 self.success_count += 1
 
+                # PCB 검출 여부 판단 (템플릿 매칭 실패 시 신뢰도 0.0)
+                # 신뢰도가 매우 낮고 defect_type이 "정상"이면 PCB가 없는 상태로 판단
+                if confidence <= 0.05 and defect_type == "정상":
+                    display_status = "대기중"
+                    display_confidence = ""  # 신뢰도 표시하지 않음
+                else:
+                    display_status = defect_type
+                    display_confidence = f" | 신뢰도: {confidence:.2f}"
+
                 # 10프레임마다 로그 출력
                 if self.frame_count % 10 == 0:
                     logger.info(
                         f"[{self.camera_id}] 프레임 #{self.frame_count} | "
-                        f"판정: {defect_type} | "
-                        f"신뢰도: {confidence:.2f} | "
+                        f"판정: {display_status}"
+                        f"{display_confidence} | "
                         f"GPIO: {gpio_pin} | "
                         f"추론: {inference_time:.1f}ms | "
                         f"요청: {request_time_ms:.1f}ms"
