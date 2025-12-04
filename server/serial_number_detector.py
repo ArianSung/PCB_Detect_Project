@@ -108,8 +108,8 @@ class SerialNumberDetector:
         Returns:
             전처리된 이미지
         """
-        # **1단계: 오른쪽으로 90도 회전** (시리얼 넘버가 옆으로 누워있음)
-        rotated = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
+        # **1단계: 왼쪽으로 90도 회전** (시리얼 넘버가 180도 회전되어 있음)
+        rotated = cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
         # **2단계: 그레이스케일 변환**
         if len(rotated.shape) == 3:
