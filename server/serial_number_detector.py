@@ -27,22 +27,28 @@ logger = logging.getLogger(__name__)
 class SerialNumberDetector:
     """시리얼 넘버 OCR 검출기 (EasyOCR 개선 버전)"""
 
-    # 시리얼 넘버 정규식 패턴 (매우 유연하게)
-    # 형식: S/N MBXX-00000001 (XX는 2자리 제품 코드, 00000001은 8자리 일련번호)
+    # 시리얼 넘버 정규식 패턴 (숫자 개수 유연하게 - 6~10자리)
+    # 형식: S/N MBXX-00000001 (XX는 2자리 제품 코드, 일련번호는 6~10자리)
     SERIAL_PATTERN = re.compile(
-        r'S[/\\]?N[\s:]*MB([A-Z]{2})[\s-]*(\d{8})',
+        r'S[/\\]?N[\s:]*MB([A-Z]{2})[\s-]*(\d{6,10})',
         re.IGNORECASE
     )
 
-    # 간단한 패턴 (S/N 없이 MBXX-00000001만, 공백/하이픈 관대하게)
+    # 간단한 패턴 (S/N 없이, 숫자 6~10자리)
     SIMPLE_PATTERN = re.compile(
-        r'MB([A-Z]{2})[\s-]*(\d{8})',
+        r'MB([A-Z]{2})[\s-]*(\d{6,10})',
         re.IGNORECASE
     )
 
-    # 더 유연한 패턴 (MB와 숫자 사이에 어떤 문자든 허용)
+    # 더 유연한 패턴 (숫자 6~10자리, 구분자 관대)
     FLEXIBLE_PATTERN = re.compile(
-        r'MB[\s]*([A-Z]{2})[\s\-_:]*(\d{8})',
+        r'MB[\s]*([A-Z]{2})[\s\-_:]*(\d{6,10})',
+        re.IGNORECASE
+    )
+
+    # 초완화 패턴 (숫자만 4자리 이상이면 일단 허용)
+    ULTRA_FLEXIBLE_PATTERN = re.compile(
+        r'MB[\s]*([A-Z]{2})[\s\-_:]*(\d{4,12})',
         re.IGNORECASE
     )
 
@@ -181,7 +187,7 @@ class SerialNumberDetector:
 
     def parse_serial_number(self, text: str) -> Optional[Tuple[str, str, str]]:
         """
-        시리얼 넘버 파싱 (3가지 패턴 시도)
+        시리얼 넘버 파싱 (4가지 패턴 시도 + 숫자 보정)
 
         Args:
             text: OCR로 검출된 텍스트
@@ -192,36 +198,53 @@ class SerialNumberDetector:
         예시:
             "S/N MBBC-00000001" → ("MBBC-00000001", "BC", "00000001")
             "MBFT-12345678" → ("MBFT-12345678", "FT", "12345678")
-            "MBBC 12345678" → ("MBBC-12345678", "BC", "12345678")
+            "MBBC 123456" → ("MBBC-00123456", "BC", "00123456") (6자리 → 8자리 보정)
         """
-        # 공백 제거 및 대문자 변환
-        cleaned_text = text.upper().replace(' ', '')
+        def normalize_serial(serial_num: str) -> str:
+            """일련번호를 8자리로 보정 (앞에 0 추가 또는 뒤에서 8자리만 사용)"""
+            if len(serial_num) < 8:
+                # 8자리보다 짧으면 앞에 0 추가
+                return serial_num.zfill(8)
+            elif len(serial_num) > 8:
+                # 8자리보다 길면 뒤에서 8자리만 사용
+                logger.warning(f"⚠️  일련번호가 8자리보다 김: {serial_num} → {serial_num[-8:]}")
+                return serial_num[-8:]
+            return serial_num
 
         # 1. 전체 패턴 매칭 (S/N 포함)
         match = self.SERIAL_PATTERN.search(text)
         if match:
             product_code = match.group(1).upper()
-            serial_num = match.group(2)
+            serial_num = normalize_serial(match.group(2))
             full_serial = f"MB{product_code}-{serial_num}"
-            logger.info(f"✅ SERIAL_PATTERN 매칭: {full_serial}")
+            logger.info(f"✅ SERIAL_PATTERN 매칭: {full_serial} (원본: {match.group(2)})")
             return (full_serial, product_code, serial_num)
 
         # 2. 간단한 패턴 매칭 (S/N 없이)
         match = self.SIMPLE_PATTERN.search(text)
         if match:
             product_code = match.group(1).upper()
-            serial_num = match.group(2)
+            serial_num = normalize_serial(match.group(2))
             full_serial = f"MB{product_code}-{serial_num}"
-            logger.info(f"✅ SIMPLE_PATTERN 매칭: {full_serial}")
+            logger.info(f"✅ SIMPLE_PATTERN 매칭: {full_serial} (원본: {match.group(2)})")
             return (full_serial, product_code, serial_num)
 
         # 3. 유연한 패턴 매칭
         match = self.FLEXIBLE_PATTERN.search(text)
         if match:
             product_code = match.group(1).upper()
-            serial_num = match.group(2)
+            serial_num = normalize_serial(match.group(2))
             full_serial = f"MB{product_code}-{serial_num}"
-            logger.info(f"✅ FLEXIBLE_PATTERN 매칭: {full_serial}")
+            logger.info(f"✅ FLEXIBLE_PATTERN 매칭: {full_serial} (원본: {match.group(2)})")
+            return (full_serial, product_code, serial_num)
+
+        # 4. 초완화 패턴 매칭 (4~12자리 숫자)
+        match = self.ULTRA_FLEXIBLE_PATTERN.search(text)
+        if match:
+            product_code = match.group(1).upper()
+            serial_num = normalize_serial(match.group(2))
+            full_serial = f"MB{product_code}-{serial_num}"
+            logger.info(f"✅ ULTRA_FLEXIBLE_PATTERN 매칭: {full_serial} (원본: {match.group(2)})")
             return (full_serial, product_code, serial_num)
 
         logger.warning(f"⚠️  모든 패턴 매칭 실패. 원본 텍스트: '{text}'")
