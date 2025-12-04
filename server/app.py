@@ -1325,6 +1325,46 @@ def predict_dual():
             f"판정={decision}, GPIO={gpio_pin}, 총 시간={total_time_ms:.1f}ms"
         )
 
+        # latest_results 업데이트 (디버그 뷰어용)
+        with frame_lock:
+            latest_results['verification'] = {
+                'serial_number': serial_number,
+                'product_code': product_code,
+                'decision': decision,
+                'decision_text': {
+                    'normal': '정상',
+                    'missing': '부품 누락',
+                    'position_error': '위치 오류',
+                    'discard': '폐기'
+                }.get(decision, decision),
+                'summary': {
+                    'missing_count': verification_result['summary']['missing_count'],
+                    'position_error_count': verification_result['summary']['misplaced_count'],
+                    'extra_count': verification_result['summary']['extra_count'],
+                    'correct_count': verification_result['summary']['correct_count'],
+                    'total_reference': verification_result['summary']['total_reference'],
+                    'total_detected': verification_result['summary']['total_detected']
+                },
+                'details': {
+                    'missing': [
+                        {'class': comp['class_name'], 'center': comp['center']}
+                        for comp in verification_result['missing'][:5]  # 최대 5개만
+                    ],
+                    'misplaced': [
+                        {
+                            'class': item['detected']['class_name'],
+                            'expected': item['reference']['center'],
+                            'actual': item['detected']['center'],
+                            'offset': item['offset']
+                        }
+                        for item in verification_result['misplaced'][:5]  # 최대 5개만
+                    ]
+                },
+                'gpio_pin': gpio_pin,
+                'template_match_success': template_match_success,
+                'timestamp': datetime.now().isoformat()
+            }
+
         return jsonify(response)
 
     except Exception as e:
@@ -1897,6 +1937,84 @@ def debug_viewer():
                 </div>
             </div>
 
+            <!-- 부품 검증 결과 패널 -->
+            <div class="ocr-panel" id="verification-panel" style="display: none;">
+                <div class="ocr-title">✅ 부품 검증 결과 (제품별 부품 배치 검증)</div>
+
+                <div class="ocr-grid">
+                    <div class="ocr-item">
+                        <div class="ocr-label">최종 판정</div>
+                        <div class="ocr-value" id="verification-decision" style="font-size: 1.5em;">대기 중...</div>
+                    </div>
+                    <div class="ocr-item">
+                        <div class="ocr-label">제품 코드</div>
+                        <div class="ocr-value" id="verification-product-code">-</div>
+                    </div>
+                    <div class="ocr-item">
+                        <div class="ocr-label">시리얼 넘버</div>
+                        <div class="ocr-value" id="verification-serial">-</div>
+                    </div>
+                    <div class="ocr-item">
+                        <div class="ocr-label">GPIO 핀</div>
+                        <div class="ocr-value" id="verification-gpio">-</div>
+                    </div>
+                    <div class="ocr-item">
+                        <div class="ocr-label">템플릿 매칭</div>
+                        <div class="ocr-value" id="verification-template">-</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <div class="ocr-label" style="text-align: center; font-size: 1.2em; margin-bottom: 15px;">📊 검증 요약</div>
+                    <div class="ocr-grid">
+                        <div class="ocr-item" style="background: rgba(76, 175, 80, 0.2);">
+                            <div class="ocr-label">정상 부품</div>
+                            <div class="ocr-value success" id="verification-correct">0</div>
+                        </div>
+                        <div class="ocr-item" style="background: rgba(255, 152, 0, 0.2);">
+                            <div class="ocr-label">위치 오류</div>
+                            <div class="ocr-value warning" id="verification-misplaced">0</div>
+                        </div>
+                        <div class="ocr-item" style="background: rgba(244, 67, 54, 0.2);">
+                            <div class="ocr-label">부품 누락</div>
+                            <div class="ocr-value error" id="verification-missing">0</div>
+                        </div>
+                        <div class="ocr-item" style="background: rgba(156, 39, 176, 0.2);">
+                            <div class="ocr-label">추가 부품</div>
+                            <div class="ocr-value" id="verification-extra">0</div>
+                        </div>
+                        <div class="ocr-item">
+                            <div class="ocr-label">기준 부품 수</div>
+                            <div class="ocr-value" id="verification-total-ref">0</div>
+                        </div>
+                        <div class="ocr-item">
+                            <div class="ocr-label">검출 부품 수</div>
+                            <div class="ocr-value" id="verification-total-detected">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px;" id="verification-details-container">
+                    <div class="ocr-label" style="text-align: center; font-size: 1.1em; margin-bottom: 10px;">🔍 상세 정보</div>
+
+                    <!-- 누락 부품 목록 -->
+                    <div id="missing-details" style="display: none; margin-top: 15px;">
+                        <div style="background: rgba(244, 67, 54, 0.1); padding: 15px; border-radius: 10px; border-left: 4px solid #f44336;">
+                            <div style="font-weight: bold; margin-bottom: 10px; color: #f44336;">❌ 누락 부품</div>
+                            <div id="missing-list" style="font-family: 'Courier New', monospace; font-size: 0.95em;"></div>
+                        </div>
+                    </div>
+
+                    <!-- 위치 오류 부품 목록 -->
+                    <div id="misplaced-details" style="display: none; margin-top: 15px;">
+                        <div style="background: rgba(255, 152, 0, 0.1); padding: 15px; border-radius: 10px; border-left: 4px solid #ff9800;">
+                            <div style="font-weight: bold; margin-bottom: 10px; color: #ff9800;">⚠️ 위치 오류 부품</div>
+                            <div id="misplaced-list" style="font-family: 'Courier New', monospace; font-size: 0.95em;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="footer">
                 ✨ 템플릿 매칭 디버그 시스템 v2.0 | Flask Server | WebSocket Real-time
             </div>
@@ -2118,17 +2236,109 @@ def debug_viewer():
                 }
             }
 
-            // OCR 결과 주기적으로 가져오기 (500ms마다)
+            // 검증 결과 업데이트 함수
+            function updateVerificationPanel(verificationData) {
+                const panelEl = document.getElementById('verification-panel');
+
+                if (!verificationData || Object.keys(verificationData).length === 0) {
+                    panelEl.style.display = 'none';
+                    return;
+                }
+
+                // 패널 표시
+                panelEl.style.display = 'block';
+
+                // 최종 판정
+                const decisionEl = document.getElementById('verification-decision');
+                const decisionText = verificationData.decision_text || verificationData.decision || '-';
+                decisionEl.textContent = decisionText;
+
+                // 판정에 따른 색상 설정
+                if (verificationData.decision === 'normal') {
+                    decisionEl.className = 'ocr-value success';
+                    decisionEl.textContent = '🟢 ' + decisionText;
+                } else if (verificationData.decision === 'missing') {
+                    decisionEl.className = 'ocr-value warning';
+                    decisionEl.textContent = '🟡 ' + decisionText;
+                } else if (verificationData.decision === 'position_error') {
+                    decisionEl.className = 'ocr-value warning';
+                    decisionEl.textContent = '🟡 ' + decisionText;
+                } else if (verificationData.decision === 'discard') {
+                    decisionEl.className = 'ocr-value error';
+                    decisionEl.textContent = '🔴 ' + decisionText;
+                } else {
+                    decisionEl.className = 'ocr-value';
+                }
+
+                // 제품 정보
+                document.getElementById('verification-product-code').textContent = verificationData.product_code || '-';
+                document.getElementById('verification-serial').textContent = verificationData.serial_number || '-';
+                document.getElementById('verification-gpio').textContent = verificationData.gpio_pin ? `GPIO ${verificationData.gpio_pin}` : '-';
+
+                // 템플릿 매칭 상태
+                const templateEl = document.getElementById('verification-template');
+                if (verificationData.template_match_success) {
+                    templateEl.textContent = '✅ 성공';
+                    templateEl.className = 'ocr-value success';
+                } else {
+                    templateEl.textContent = '❌ 실패';
+                    templateEl.className = 'ocr-value error';
+                }
+
+                // 검증 요약
+                if (verificationData.summary) {
+                    document.getElementById('verification-correct').textContent = verificationData.summary.correct_count || 0;
+                    document.getElementById('verification-misplaced').textContent = verificationData.summary.position_error_count || 0;
+                    document.getElementById('verification-missing').textContent = verificationData.summary.missing_count || 0;
+                    document.getElementById('verification-extra').textContent = verificationData.summary.extra_count || 0;
+                    document.getElementById('verification-total-ref').textContent = verificationData.summary.total_reference || 0;
+                    document.getElementById('verification-total-detected').textContent = verificationData.summary.total_detected || 0;
+                }
+
+                // 상세 정보 - 누락 부품
+                const missingDetailsEl = document.getElementById('missing-details');
+                const missingListEl = document.getElementById('missing-list');
+                if (verificationData.details && verificationData.details.missing && verificationData.details.missing.length > 0) {
+                    missingDetailsEl.style.display = 'block';
+                    const missingHtml = verificationData.details.missing.map((item, index) => {
+                        return `${index + 1}. ${item.class} - 기준 위치: (${Math.round(item.center[0])}, ${Math.round(item.center[1])})`;
+                    }).join('<br>');
+                    missingListEl.innerHTML = missingHtml;
+                } else {
+                    missingDetailsEl.style.display = 'none';
+                }
+
+                // 상세 정보 - 위치 오류 부품
+                const misplacedDetailsEl = document.getElementById('misplaced-details');
+                const misplacedListEl = document.getElementById('misplaced-list');
+                if (verificationData.details && verificationData.details.misplaced && verificationData.details.misplaced.length > 0) {
+                    misplacedDetailsEl.style.display = 'block';
+                    const misplacedHtml = verificationData.details.misplaced.map((item, index) => {
+                        const offset = item.offset ? Math.round(item.offset) : '-';
+                        return `${index + 1}. ${item.class} - 기준: (${Math.round(item.expected[0])}, ${Math.round(item.expected[1])}) → 실제: (${Math.round(item.actual[0])}, ${Math.round(item.actual[1])}) (오차: ${offset}px)`;
+                    }).join('<br>');
+                    misplacedListEl.innerHTML = misplacedHtml;
+                } else {
+                    misplacedDetailsEl.style.display = 'none';
+                }
+            }
+
+            // OCR 및 검증 결과 주기적으로 가져오기 (500ms마다)
             setInterval(() => {
                 fetch('/api/latest_results')
                     .then(response => response.json())
                     .then(data => {
+                        // OCR 결과 업데이트
                         if (data.serial_ocr) {
                             updateOCRPanel(data.serial_ocr);
                         }
+                        // 검증 결과 업데이트
+                        if (data.verification) {
+                            updateVerificationPanel(data.verification);
+                        }
                     })
                     .catch(error => {
-                        console.error('OCR 결과 가져오기 실패:', error);
+                        console.error('결과 가져오기 실패:', error);
                     });
             }, 500);
 
