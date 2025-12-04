@@ -100,7 +100,7 @@ class SerialNumberDetector:
 
     def preprocess_image(self, image: np.ndarray) -> np.ndarray:
         """
-        OCR 전처리 개선 (90도 회전 + ROI 추출 + 업스케일링 + 고급 전처리)
+        OCR 전처리 (90도 회전 + 업스케일링 + CLAHE + 선명화)
 
         Args:
             image: 입력 이미지
@@ -111,50 +111,33 @@ class SerialNumberDetector:
         # **1단계: 오른쪽으로 90도 회전** (시리얼 넘버가 옆으로 누워있음)
         rotated = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
 
-        # **2단계: ROI 추출 (상단 30% 영역만)** - 시리얼 넘버가 상단에 있음
-        height, width = rotated.shape[:2]
-        roi_height = int(height * 0.3)  # 상단 30%
-        roi = rotated[0:roi_height, :]  # 상단 영역만 잘라냄
+        # **2단계: 그레이스케일 변환**
+        if len(rotated.shape) == 3:
+            gray = cv2.cvtColor(rotated, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = rotated
 
-        # **3단계: 업스케일링 (3배 확대)** - 텍스트를 더 크게 (2배 → 3배)
-        scale_factor = 3.0  # 더 크게 확대
-        roi_upscaled = cv2.resize(
-            roi,
+        # **3단계: 업스케일링 (3배)** - 텍스트를 더 크게
+        scale_factor = 3.0
+        upscaled = cv2.resize(
+            gray,
             None,
             fx=scale_factor,
             fy=scale_factor,
             interpolation=cv2.INTER_CUBIC
         )
 
-        # **4단계: 그레이스케일 변환**
-        if len(roi_upscaled.shape) == 3:
-            gray = cv2.cvtColor(roi_upscaled, cv2.COLOR_BGR2GRAY)
-        else:
-            gray = roi_upscaled
+        # **4단계: 대비 향상 (CLAHE)**
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(upscaled)
 
-        # **5단계: 노이즈 제거 (Bilateral Filter - 엣지 보존하면서 노이즈 제거)**
-        denoised = cv2.bilateralFilter(gray, 9, 75, 75)
-
-        # **6단계: 대비 향상 (CLAHE - 강하게 적용)**
-        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
-        enhanced = clahe.apply(denoised)
-
-        # **7단계: 선명화 (Sharpening) - 텍스트 엣지 강조**
-        kernel = np.array([[-1,-1,-1],
-                          [-1, 9,-1],
-                          [-1,-1,-1]])
+        # **5단계: 선명화 (Sharpening)**
+        kernel = np.array([[0,-1,0],
+                          [-1, 5,-1],
+                          [0,-1,0]])
         sharpened = cv2.filter2D(enhanced, -1, kernel)
 
-        # **8단계: 적응형 이진화 (Otsu + Gaussian)**
-        # Otsu 이진화가 더 좋은 결과를 낼 수 있음
-        blurred = cv2.GaussianBlur(sharpened, (5, 5), 0)
-        _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-        # **9단계: 모폴로지 연산 (작은 노이즈 제거)**
-        kernel_morph = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-        cleaned = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_morph)
-
-        return cleaned
+        return sharpened
 
     def detect_text(self, image: np.ndarray) -> tuple:
         """
