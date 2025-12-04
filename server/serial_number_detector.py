@@ -200,7 +200,7 @@ class SerialNumberDetector:
 
     def parse_serial_number(self, text: str) -> Optional[Tuple[str, str, str]]:
         """
-        시리얼 넘버 파싱 (4가지 패턴 시도 + 숫자 보정)
+        시리얼 넘버 파싱 (4가지 패턴 시도 + 숫자 보정 + OCR 오류 교정)
 
         Args:
             text: OCR로 검출된 텍스트
@@ -213,52 +213,90 @@ class SerialNumberDetector:
             "MBFT-12345678" → ("MBFT-12345678", "FT", "12345678")
             "MBBC 123456" → ("MBBC-00123456", "BC", "00123456") (6자리 → 8자리 보정)
         """
-        def normalize_serial(serial_num: str) -> str:
-            """일련번호를 8자리로 보정 (앞에 0 추가 또는 뒤에서 8자리만 사용)"""
-            if len(serial_num) < 8:
+        # **1단계: OCR 오류 교정** (S/N 패턴 복원)
+        def clean_ocr_text(raw_text: str) -> str:
+            """OCR 오류를 교정하여 정확한 텍스트로 복원"""
+            cleaned = raw_text.upper()
+
+            # S/N 패턴 복원 (S|N, SIN, S1N → S/N)
+            cleaned = re.sub(r'S[\|I1ilL]N', 'S/N', cleaned)
+            cleaned = re.sub(r'S\s*[I1ilL]\s*N', 'S/N', cleaned)
+
+            # 제품 코드 앞뒤 노이즈 제거 (알파벳이 아닌 문자)
+            cleaned = re.sub(r'(?<=MB)[^A-Z]+(?=[A-Z]{2})', '', cleaned)
+
+            # 숫자 앞뒤 노이즈 제거 (숫자가 아닌 문자, 단 하이픈/공백은 유지)
+            # 예: "00000002I" → "00000002", "12345678X" → "12345678"
+            cleaned = re.sub(r'(\d{8})[^\d\s\-]+', r'\1', cleaned)
+
+            return cleaned
+
+        text = clean_ocr_text(text)
+        logger.info(f"🧹 OCR 텍스트 정제 완료: {text}")
+
+        # **2단계: 허용된 제품 코드 정의** (확장 가능)
+        VALID_PRODUCT_CODES = {'BC', 'FT', 'RS', 'XT', 'LP'}  # 알려진 제품 코드들
+
+        def normalize_serial(serial_num: str, product_code: str) -> Optional[str]:
+            """
+            일련번호를 8자리로 보정 및 검증
+
+            Args:
+                serial_num: 원본 일련번호 (4~10자리)
+                product_code: 제품 코드 (검증용)
+
+            Returns:
+                8자리 일련번호 또는 None (유효하지 않을 경우)
+            """
+            # 숫자만 추출 (하이픈, 공백 제거)
+            digits_only = ''.join(c for c in serial_num if c.isdigit())
+
+            # **제품 코드 검증**
+            if product_code not in VALID_PRODUCT_CODES:
+                logger.warning(f"⚠️  알 수 없는 제품 코드: {product_code} (허용: {VALID_PRODUCT_CODES})")
+                # 유효하지 않은 제품 코드는 무시하지 않고 경고만 표시 (유연성 유지)
+
+            # **정확히 8자리 검증**
+            if len(digits_only) == 8:
+                return digits_only
+            elif len(digits_only) < 8:
                 # 8자리보다 짧으면 앞에 0 추가
-                return serial_num.zfill(8)
-            elif len(serial_num) > 8:
-                # 8자리보다 길면 뒤에서 8자리만 사용
-                logger.warning(f"⚠️  일련번호가 8자리보다 김: {serial_num} → {serial_num[-8:]}")
-                return serial_num[-8:]
-            return serial_num
+                normalized = digits_only.zfill(8)
+                logger.info(f"📏 일련번호 보정: {serial_num} ({len(digits_only)}자리) → {normalized} (8자리)")
+                return normalized
+            elif len(digits_only) > 8:
+                # 8자리보다 길면 **앞 8자리만 사용** (뒷부분은 노이즈일 가능성 높음)
+                normalized = digits_only[:8]
+                logger.warning(f"⚠️  일련번호가 8자리 초과: {serial_num} ({len(digits_only)}자리) → {normalized} (앞 8자리)")
+                return normalized
 
-        # 1. 전체 패턴 매칭 (S/N 포함)
-        match = self.SERIAL_PATTERN.search(text)
-        if match:
-            product_code = match.group(1).upper()
-            serial_num = normalize_serial(match.group(2))
-            full_serial = f"MB{product_code}-{serial_num}"
-            logger.info(f"✅ SERIAL_PATTERN 매칭: {full_serial} (원본: {match.group(2)})")
-            return (full_serial, product_code, serial_num)
+            return None
 
-        # 2. 간단한 패턴 매칭 (S/N 없이)
-        match = self.SIMPLE_PATTERN.search(text)
-        if match:
-            product_code = match.group(1).upper()
-            serial_num = normalize_serial(match.group(2))
-            full_serial = f"MB{product_code}-{serial_num}"
-            logger.info(f"✅ SIMPLE_PATTERN 매칭: {full_serial} (원본: {match.group(2)})")
-            return (full_serial, product_code, serial_num)
+        # **3단계: 패턴 매칭 (우선순위 순서)**
+        patterns = [
+            ('SERIAL_PATTERN', self.SERIAL_PATTERN),
+            ('SIMPLE_PATTERN', self.SIMPLE_PATTERN),
+            ('FLEXIBLE_PATTERN', self.FLEXIBLE_PATTERN),
+            ('ULTRA_FLEXIBLE_PATTERN', self.ULTRA_FLEXIBLE_PATTERN)
+        ]
 
-        # 3. 유연한 패턴 매칭
-        match = self.FLEXIBLE_PATTERN.search(text)
-        if match:
-            product_code = match.group(1).upper()
-            serial_num = normalize_serial(match.group(2))
-            full_serial = f"MB{product_code}-{serial_num}"
-            logger.info(f"✅ FLEXIBLE_PATTERN 매칭: {full_serial} (원본: {match.group(2)})")
-            return (full_serial, product_code, serial_num)
+        for pattern_name, pattern in patterns:
+            match = pattern.search(text)
+            if match:
+                product_code = match.group(1).upper()
+                raw_serial_num = match.group(2)
 
-        # 4. 초완화 패턴 매칭 (4~12자리 숫자)
-        match = self.ULTRA_FLEXIBLE_PATTERN.search(text)
-        if match:
-            product_code = match.group(1).upper()
-            serial_num = normalize_serial(match.group(2))
-            full_serial = f"MB{product_code}-{serial_num}"
-            logger.info(f"✅ ULTRA_FLEXIBLE_PATTERN 매칭: {full_serial} (원본: {match.group(2)})")
-            return (full_serial, product_code, serial_num)
+                # 일련번호 정규화 및 검증
+                serial_num = normalize_serial(raw_serial_num, product_code)
+
+                if serial_num is None:
+                    logger.warning(f"⚠️  {pattern_name} 매칭했으나 일련번호 검증 실패: {raw_serial_num}")
+                    continue  # 다음 패턴 시도
+
+                # 최종 시리얼 넘버 생성
+                full_serial = f"MB{product_code}-{serial_num}"
+                logger.info(f"✅ {pattern_name} 매칭 성공: {full_serial} (원본: {raw_serial_num} → 보정: {serial_num})")
+                return (full_serial, product_code, serial_num)
 
         logger.warning(f"⚠️  모든 패턴 매칭 실패. 원본 텍스트: '{text}'")
         return None
