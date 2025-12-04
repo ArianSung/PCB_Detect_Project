@@ -27,20 +27,26 @@ logger = logging.getLogger(__name__)
 class SerialNumberDetector:
     """시리얼 넘버 OCR 검출기 (EasyOCR 개선 버전)"""
 
-    # 시리얼 넘버 정규식 패턴
+    # 시리얼 넘버 정규식 패턴 (매우 유연하게)
     # 형식: S/N MBXX-00000001 (XX는 2자리 제품 코드, 00000001은 8자리 일련번호)
     SERIAL_PATTERN = re.compile(
-        r'S/N\s*MB([A-Z]{2})-(\d{8})',
+        r'S[/\\]?N[\s:]*MB([A-Z]{2})[\s-]*(\d{8})',
         re.IGNORECASE
     )
 
-    # 간단한 패턴 (S/N 없이 MBXX-00000001만)
+    # 간단한 패턴 (S/N 없이 MBXX-00000001만, 공백/하이픈 관대하게)
     SIMPLE_PATTERN = re.compile(
-        r'MB([A-Z]{2})-(\d{8})',
+        r'MB([A-Z]{2})[\s-]*(\d{8})',
         re.IGNORECASE
     )
 
-    def __init__(self, languages=['en'], gpu=True, min_confidence=0.1,
+    # 더 유연한 패턴 (MB와 숫자 사이에 어떤 문자든 허용)
+    FLEXIBLE_PATTERN = re.compile(
+        r'MB[\s]*([A-Z]{2})[\s\-_:]*(\d{8})',
+        re.IGNORECASE
+    )
+
+    def __init__(self, languages=['en'], gpu=True, min_confidence=0.01,
                  detector='craft', recognizer='english_g2'):
         """
         Args:
@@ -86,7 +92,7 @@ class SerialNumberDetector:
 
     def preprocess_image(self, image: np.ndarray) -> np.ndarray:
         """
-        OCR 전처리 단순화 (최소한의 전처리로 원본 보존)
+        OCR 전처리 최소화 (원본을 최대한 보존)
 
         Args:
             image: 입력 이미지
@@ -94,36 +100,26 @@ class SerialNumberDetector:
         Returns:
             전처리된 이미지
         """
-        # **1단계: 오른쪽으로 90도 회전** (시리얼 넘버가 옆으로 돌아가 있음)
-        rotated = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
+        # 원본 그대로 사용 (90도 회전도 하지 않음)
+        # EasyOCR이 자동으로 회전을 감지하고 처리함
 
-        # **2단계: ROI 추출 (상단 40% 영역)** - 시리얼 넘버가 상단에 있음
-        height, width = rotated.shape[:2]
-        roi_height = int(height * 0.4)  # 30% → 40% (더 넓게)
-        roi = rotated[0:roi_height, :]  # 상단 영역만 잘라냄
+        # 그레이스케일 변환만 수행
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image
 
-        # **3단계: 업스케일링 (2배 확대)** - 적당한 크기로
+        # 업스케일링 (2배만 - 텍스트가 너무 작을 경우 대비)
         scale_factor = 2.0
-        roi_upscaled = cv2.resize(
-            roi,
+        upscaled = cv2.resize(
+            gray,
             None,
             fx=scale_factor,
             fy=scale_factor,
             interpolation=cv2.INTER_CUBIC
         )
 
-        # **4단계: 그레이스케일 변환**
-        if len(roi_upscaled.shape) == 3:
-            gray = cv2.cvtColor(roi_upscaled, cv2.COLOR_BGR2GRAY)
-        else:
-            gray = roi_upscaled
-
-        # **5단계: 가벼운 CLAHE** (너무 강하지 않게)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        enhanced = clahe.apply(gray)
-
-        # 이진화 없이 그대로 반환 (EasyOCR이 알아서 처리)
-        return enhanced
+        return upscaled
 
     def detect_text(self, image: np.ndarray) -> list:
         """
@@ -185,7 +181,7 @@ class SerialNumberDetector:
 
     def parse_serial_number(self, text: str) -> Optional[Tuple[str, str, str]]:
         """
-        시리얼 넘버 파싱
+        시리얼 넘버 파싱 (3가지 패턴 시도)
 
         Args:
             text: OCR로 검출된 텍스트
@@ -196,23 +192,39 @@ class SerialNumberDetector:
         예시:
             "S/N MBBC-00000001" → ("MBBC-00000001", "BC", "00000001")
             "MBFT-12345678" → ("MBFT-12345678", "FT", "12345678")
+            "MBBC 12345678" → ("MBBC-12345678", "BC", "12345678")
         """
-        # 우선 전체 패턴 매칭 (S/N 포함)
+        # 공백 제거 및 대문자 변환
+        cleaned_text = text.upper().replace(' ', '')
+
+        # 1. 전체 패턴 매칭 (S/N 포함)
         match = self.SERIAL_PATTERN.search(text)
         if match:
-            product_code = match.group(1).upper()  # BC, FT, RS 등
-            serial_num = match.group(2)  # 8자리 숫자
+            product_code = match.group(1).upper()
+            serial_num = match.group(2)
             full_serial = f"MB{product_code}-{serial_num}"
+            logger.info(f"✅ SERIAL_PATTERN 매칭: {full_serial}")
             return (full_serial, product_code, serial_num)
 
-        # 간단한 패턴 매칭 (S/N 없이)
+        # 2. 간단한 패턴 매칭 (S/N 없이)
         match = self.SIMPLE_PATTERN.search(text)
         if match:
             product_code = match.group(1).upper()
             serial_num = match.group(2)
             full_serial = f"MB{product_code}-{serial_num}"
+            logger.info(f"✅ SIMPLE_PATTERN 매칭: {full_serial}")
             return (full_serial, product_code, serial_num)
 
+        # 3. 유연한 패턴 매칭
+        match = self.FLEXIBLE_PATTERN.search(text)
+        if match:
+            product_code = match.group(1).upper()
+            serial_num = match.group(2)
+            full_serial = f"MB{product_code}-{serial_num}"
+            logger.info(f"✅ FLEXIBLE_PATTERN 매칭: {full_serial}")
+            return (full_serial, product_code, serial_num)
+
+        logger.warning(f"⚠️  모든 패턴 매칭 실패. 원본 텍스트: '{text}'")
         return None
 
     def detect_serial_number(self, image: np.ndarray) -> Dict:
