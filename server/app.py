@@ -13,7 +13,7 @@ PCB 불량 검사 Flask 추론 서버
 # import eventlet
 # eventlet.monkey_patch()
 
-from flask import Flask, request, jsonify, Response, render_template_string
+from flask import Flask, request, jsonify, Response, render_template_string, render_template
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit  # WebSocket 지원
 import base64
