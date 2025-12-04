@@ -2560,6 +2560,57 @@ def debug_viewer():
                     } else {
                         saveBtn.disabled = true;
                     }
+                } else if (data.camera_id === 'right') {
+                    // 우측 카메라 (OCR) 데이터 처리
+                    const ocrStatus = document.getElementById('ocr-status');
+                    const ocrSerial = document.getElementById('ocr-serial');
+                    const ocrProductCode = document.getElementById('ocr-product-code');
+                    const ocrConfidence = document.getElementById('ocr-confidence');
+                    const ocrTime = document.getElementById('ocr-time');
+                    const ocrDetectedText = document.getElementById('ocr-detected-text');
+
+                    // 상태 업데이트
+                    if (data.serial_number) {
+                        ocrStatus.textContent = '✅ 검출 성공';
+                        ocrStatus.className = 'ocr-value success';
+                    } else if (data.error) {
+                        ocrStatus.textContent = '❌ 검출 실패';
+                        ocrStatus.className = 'ocr-value error';
+                    } else {
+                        ocrStatus.textContent = '⚠️ 처리 중...';
+                        ocrStatus.className = 'ocr-value warning';
+                    }
+
+                    // 시리얼 넘버
+                    ocrSerial.textContent = data.serial_number || '-';
+                    ocrSerial.className = data.serial_number ? 'ocr-value success' : 'ocr-value';
+
+                    // 제품 코드
+                    ocrProductCode.textContent = data.product_code || '-';
+                    ocrProductCode.className = data.product_code ? 'ocr-value success' : 'ocr-value';
+
+                    // OCR 신뢰도
+                    if (data.ocr_confidence !== undefined && data.ocr_confidence !== null) {
+                        const confidencePercent = (data.ocr_confidence * 100).toFixed(1) + '%';
+                        ocrConfidence.textContent = confidencePercent;
+                        ocrConfidence.className = data.ocr_confidence > 0.8 ? 'ocr-value success' : 'ocr-value warning';
+                    } else {
+                        ocrConfidence.textContent = '-';
+                        ocrConfidence.className = 'ocr-value';
+                    }
+
+                    // 처리 시간
+                    if (data.timestamp) {
+                        const time = new Date(data.timestamp).toLocaleTimeString('ko-KR');
+                        ocrTime.textContent = time;
+                    }
+
+                    // 검출된 원본 텍스트
+                    if (data.detected_text) {
+                        ocrDetectedText.textContent = data.detected_text;
+                    } else {
+                        ocrDetectedText.textContent = '텍스트 없음';
+                    }
                 }
             });
 
