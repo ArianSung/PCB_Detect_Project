@@ -98,7 +98,7 @@ class SerialNumberDetector:
 
     def preprocess_image(self, image: np.ndarray) -> np.ndarray:
         """
-        OCR 전처리 최소화 (원본을 최대한 보존)
+        OCR 전처리 (90도 회전 + 최소 전처리)
 
         Args:
             image: 입력 이미지
@@ -106,16 +106,16 @@ class SerialNumberDetector:
         Returns:
             전처리된 이미지
         """
-        # 원본 그대로 사용 (90도 회전도 하지 않음)
-        # EasyOCR이 자동으로 회전을 감지하고 처리함
+        # **1단계: 오른쪽으로 90도 회전** (시리얼 넘버가 옆으로 누워있음)
+        rotated = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
 
-        # 그레이스케일 변환만 수행
-        if len(image.shape) == 3:
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        # **2단계: 그레이스케일 변환**
+        if len(rotated.shape) == 3:
+            gray = cv2.cvtColor(rotated, cv2.COLOR_BGR2GRAY)
         else:
-            gray = image
+            gray = rotated
 
-        # 업스케일링 (2배만 - 텍스트가 너무 작을 경우 대비)
+        # **3단계: 업스케일링 (2배)** - 텍스트를 더 크게
         scale_factor = 2.0
         upscaled = cv2.resize(
             gray,
