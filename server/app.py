@@ -878,6 +878,178 @@ def predict_test():
         }), 500
 
 
+@app.route('/predict_dual', methods=['POST'])
+def predict_dual():
+    """
+    양면 동시 추론 (좌측 앞면 + 우측 뒷면)
+
+    뒷면: 시리얼 넘버 OCR → 제품 코드 추출 → 제품별 부품 배치 기준 로드
+    앞면: YOLO 부품 검출 → 부품 위치 검증 → 최종 판정
+
+    Request JSON:
+        {
+            "left_image": "base64_encoded_jpeg_image",  # 앞면 (부품 검증용)
+            "right_image": "base64_encoded_jpeg_image"  # 뒷면 (시리얼 넘버 OCR용)
+        }
+
+    Response JSON:
+        {
+            "status": "ok",
+            "serial_number": "MBFT12345678",
+            "product_code": "FT",
+            "decision": "normal",  # normal / missing / position_error / discard
+            "verification": {
+                "missing_count": 0,
+                "position_error_count": 0,
+                "correct_count": 15
+            },
+            "gpio_signal": {
+                "pin": 23,
+                "duration_ms": 300
+            }
+        }
+    """
+    start_time = time.time()
+
+    try:
+        # 1. 요청 데이터 검증
+        data = request.get_json()
+        if not data:
+            logger.error("요청 데이터가 비어있음")
+            return jsonify({
+                'status': 'error',
+                'error': 'Request body is empty'
+            }), 400
+
+        left_image = data.get('left_image')
+        right_image = data.get('right_image')
+
+        if not left_image or not right_image:
+            logger.error(f"필수 필드 누락: left_image={'있음' if left_image else '없음'}, right_image={'있음' if right_image else '없음'}")
+            return jsonify({
+                'status': 'error',
+                'error': 'Missing required fields: left_image, right_image'
+            }), 400
+
+        # 2. 좌측 프레임 처리 (앞면 - 부품 검증용)
+        try:
+            left_bytes = base64.b64decode(left_image)
+            left_nparr = np.frombuffer(left_bytes, np.uint8)
+            left_frame = cv2.imdecode(left_nparr, cv2.IMREAD_COLOR)
+
+            if left_frame is None or left_frame.size == 0:
+                raise ValueError("좌측 프레임 디코딩 실패")
+
+            logger.info(f"좌측 프레임 (앞면) 수신 성공 (shape: {left_frame.shape})")
+        except Exception as e:
+            logger.error(f"좌측 이미지 처리 실패: {e}")
+            return jsonify({
+                'status': 'error',
+                'error': f'Failed to process left image: {str(e)}'
+            }), 400
+
+        # 3. 우측 프레임 처리 (뒷면 - 시리얼 넘버 OCR용)
+        try:
+            right_bytes = base64.b64decode(right_image)
+            right_nparr = np.frombuffer(right_bytes, np.uint8)
+            right_frame = cv2.imdecode(right_nparr, cv2.IMREAD_COLOR)
+
+            if right_frame is None or right_frame.size == 0:
+                raise ValueError("우측 프레임 디코딩 실패")
+
+            logger.info(f"우측 프레임 (뒷면) 수신 성공 (shape: {right_frame.shape})")
+        except Exception as e:
+            logger.error(f"우측 이미지 처리 실패: {e}")
+            return jsonify({
+                'status': 'error',
+                'error': f'Failed to process right image: {str(e)}'
+            }), 400
+
+        # 4. 뒷면 처리: 시리얼 넘버 OCR (임시 구현 - 실제로는 OCR 모듈 사용)
+        serial_number = "MBFT12345678"  # TODO: 실제 OCR 구현
+        product_code = "FT"  # TODO: 시리얼 넘버에서 제품 코드 추출
+
+        logger.info(f"시리얼 넘버 인식: {serial_number}, 제품 코드: {product_code}")
+
+        # 5. 제품 데이터베이스 조회 (TODO: 실제 DB 구현)
+        # product_components = db.get_product_components(product_code)
+
+        # 6. 앞면 처리: YOLO 부품 검출
+        detections = []
+        if yolo_model is not None:
+            yolo_results = yolo_model.predict(left_frame, conf=0.3, iou=0.7, verbose=False)
+            if len(yolo_results) > 0 and len(yolo_results[0].boxes) > 0:
+                boxes = yolo_results[0].boxes
+                for box in boxes:
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+                    class_id = int(box.cls[0])
+                    class_name = yolo_model.names[class_id]
+                    confidence = float(box.conf[0])
+
+                    detections.append({
+                        'class_name': class_name,
+                        'bbox': [float(x1), float(y1), float(x2), float(y2)],
+                        'center': [float(cx), float(cy)],
+                        'confidence': confidence
+                    })
+
+        logger.info(f"YOLO 부품 검출 완료: {len(detections)}개")
+
+        # 7. 부품 위치 검증 (임시 구현)
+        missing_count = 0
+        position_error_count = 0
+        correct_count = len(detections)
+
+        # TODO: 실제 제품별 부품 배치 기준과 비교하여 검증
+
+        # 8. 최종 판정
+        if missing_count >= 3 or position_error_count >= 5 or (missing_count + position_error_count) >= 7:
+            decision = "discard"
+            gpio_pin = 22
+        elif missing_count > 0:
+            decision = "missing"
+            gpio_pin = 17
+        elif position_error_count > 0:
+            decision = "position_error"
+            gpio_pin = 27
+        else:
+            decision = "normal"
+            gpio_pin = 23
+
+        # 9. 응답 생성
+        inference_time_ms = (time.time() - start_time) * 1000
+
+        response = {
+            'status': 'ok',
+            'serial_number': serial_number,
+            'product_code': product_code,
+            'decision': decision,
+            'verification': {
+                'missing_count': missing_count,
+                'position_error_count': position_error_count,
+                'correct_count': correct_count,
+                'total_components': len(detections)
+            },
+            'gpio_signal': {
+                'pin': gpio_pin,
+                'duration_ms': 300
+            },
+            'inference_time_ms': round(inference_time_ms, 2),
+            'timestamp': datetime.now().isoformat()
+        }
+
+        logger.info(f"✅ 양면 검증 완료: {decision} (GPIO: {gpio_pin}, 시간: {inference_time_ms:.1f}ms)")
+        return jsonify(response)
+
+    except Exception as e:
+        logger.error(f"❌ 양면 추론 실패: {str(e)}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
 @app.route('/predict', methods=['POST'])
 def predict_single():
     """
