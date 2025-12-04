@@ -965,14 +965,32 @@ def predict_dual():
                 'error': f'Failed to process right image: {str(e)}'
             }), 400
 
-        # 4. 뒷면 처리: 시리얼 넘버 OCR (임시 구현 - 실제로는 OCR 모듈 사용)
-        serial_number = "MBFT12345678"  # TODO: 실제 OCR 구현
-        product_code = "FT"  # TODO: 시리얼 넘버에서 제품 코드 추출
+        # 4. 뒷면 처리: 시리얼 넘버 OCR
+        serial_number = None
+        product_code = None
+        ocr_confidence = 0.0
+        ocr_error = None
 
-        logger.info(f"시리얼 넘버 인식: {serial_number}, 제품 코드: {product_code}")
+        if serial_detector is not None:
+            # 회전된 이미지로 OCR 처리 (카메라 방향 보정)
+            rotated_right_frame = cv2.rotate(right_frame, cv2.ROTATE_90_CLOCKWISE)
+            ocr_result = serial_detector.detect_serial_number(rotated_right_frame)
+
+            if ocr_result['status'] == 'ok':
+                serial_number = ocr_result.get('serial_number')
+                product_code = ocr_result.get('product_code')
+                ocr_confidence = ocr_result.get('confidence', 0.0)
+                logger.info(f"✅ 시리얼 넘버 검출 성공: {serial_number} (제품: {product_code}, 신뢰도: {ocr_confidence:.2%})")
+            else:
+                ocr_error = ocr_result.get('error', 'OCR 실패')
+                logger.warning(f"⚠️ 시리얼 넘버 검출 실패: {ocr_error}")
+        else:
+            ocr_error = "시리얼 넘버 검출기가 초기화되지 않았습니다"
+            logger.error(ocr_error)
 
         # 5. 제품 데이터베이스 조회 (TODO: 실제 DB 구현)
-        # product_components = db.get_product_components(product_code)
+        # if product_code:
+        #     product_components = db.get_product_components(product_code)
 
         # 6. 앞면 처리: YOLO 부품 검출
         detections = []
@@ -1017,7 +1035,45 @@ def predict_dual():
             decision = "normal"
             gpio_pin = 23
 
-        # 9. 응답 생성
+        # 9. 전역 변수 업데이트 (디버그 뷰어용)
+        with frame_lock:
+            # 좌측 프레임 (앞면) - JPEG 인코딩
+            _, left_buffer = cv2.imencode('.jpg', left_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+            left_frame_base64 = base64.b64encode(left_buffer).decode('utf-8')
+
+            latest_frames['left'] = left_frame
+            latest_frames_jpeg['left'] = left_frame_base64
+
+            # 우측 프레임 (뒷면) - 회전된 버전으로 저장
+            rotated_right_display = cv2.rotate(right_frame, cv2.ROTATE_90_CLOCKWISE)
+            _, right_buffer = cv2.imencode('.jpg', rotated_right_display, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+            right_frame_base64 = base64.b64encode(right_buffer).decode('utf-8')
+
+            latest_frames['right'] = rotated_right_display
+            latest_frames_jpeg['right'] = right_frame_base64
+
+            # 좌측 검증 결과
+            latest_results['left'] = {
+                'decision': decision,
+                'detections': detections,
+                'verification': {
+                    'missing_count': missing_count,
+                    'position_error_count': position_error_count,
+                    'correct_count': correct_count,
+                    'total_components': len(detections)
+                }
+            }
+
+            # 우측 OCR 결과
+            latest_results['serial_ocr'] = {
+                'status': 'ok' if serial_number else 'error',
+                'serial_number': serial_number,
+                'product_code': product_code,
+                'confidence': ocr_confidence,
+                'error': ocr_error
+            }
+
+        # 10. 응답 생성
         inference_time_ms = (time.time() - start_time) * 1000
 
         response = {
@@ -1039,7 +1095,7 @@ def predict_dual():
             'timestamp': datetime.now().isoformat()
         }
 
-        logger.info(f"✅ 양면 검증 완료: {decision} (GPIO: {gpio_pin}, 시간: {inference_time_ms:.1f}ms)")
+        logger.info(f"✅ 양면 검증 완료: 시리얼={serial_number}, 제품={product_code}, 판정={decision}, GPIO={gpio_pin}, 누락={missing_count}, 위치오류={position_error_count}")
         return jsonify(response)
 
     except Exception as e:
