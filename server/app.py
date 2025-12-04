@@ -1294,7 +1294,7 @@ def predict_dual():
                 'type': 'final_frame'
             })
 
-            logger.info(f"[DUAL] 양면 프레임 broadcast 완료 (좌: {len(detections)}개 부품, 우: OCR={serial_number})")
+            logger.info(f"[DUAL] 양면 프레임 broadcast 완료 (좌: {len(boxes_data)}개 부품, 우: OCR={serial_number})")
 
         # 10. 응답 생성
         inference_time_ms = (time.time() - start_time) * 1000
