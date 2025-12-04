@@ -970,6 +970,7 @@ def predict_dual():
         product_code = None
         ocr_confidence = 0.0
         ocr_error = None
+        ocr_result = None  # 초기화 추가
 
         if serial_detector is not None:
             # 회전된 이미지로 OCR 처리 (카메라 방향 보정)
@@ -1064,13 +1065,24 @@ def predict_dual():
                 }
             }
 
-            # 우측 OCR 결과
+            # 우측 프레임 결과 (OCR용)
+            latest_results['right'] = {
+                'serial_number': serial_number,
+                'product_code': product_code,
+                'confidence': ocr_confidence,
+                'error': ocr_error,
+                'detected_text': ocr_result.get('detected_text', '') if serial_detector else '',
+                'image': right_frame_base64  # 디버그 뷰어용
+            }
+
+            # 우측 OCR 결과 (하위 호환성 유지)
             latest_results['serial_ocr'] = {
                 'status': 'ok' if serial_number else 'error',
                 'serial_number': serial_number,
                 'product_code': product_code,
                 'confidence': ocr_confidence,
-                'error': ocr_error
+                'error': ocr_error,
+                'detected_text': ocr_result.get('detected_text', '') if serial_detector else ''
             }
 
         # 10. 응답 생성
