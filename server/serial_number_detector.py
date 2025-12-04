@@ -3,7 +3,7 @@
 시리얼 넘버 OCR 검출 모듈
 
 기능:
-    - PaddleOCR을 이용한 시리얼 넘버 텍스트 인식 (EasyOCR 대비 빠르고 정확)
+    - EasyOCR을 이용한 시리얼 넘버 텍스트 인식 (더 큰 모델 사용)
     - 정규식 기반 시리얼 넘버 파싱 (S/N MBXX-00000001 형식)
     - 제품 코드 추출 (MBXX에서 XX 추출)
     - 신뢰도 기반 검증
@@ -17,7 +17,7 @@
 import re
 import cv2
 import numpy as np
-from paddleocr import PaddleOCR
+import easyocr
 import logging
 from typing import Optional, Tuple, Dict
 
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class SerialNumberDetector:
-    """시리얼 넘버 OCR 검출기 (PaddleOCR 사용)"""
+    """시리얼 넘버 OCR 검출기 (EasyOCR 개선 버전)"""
 
     # 시리얼 넘버 정규식 패턴
     # 형식: S/N MBXX-00000001 (XX는 2자리 제품 코드, 00000001은 8자리 일련번호)
@@ -40,42 +40,53 @@ class SerialNumberDetector:
         re.IGNORECASE
     )
 
-    def __init__(self, lang='en', use_gpu=True, min_confidence=0.5):
+    def __init__(self, languages=['en'], gpu=True, min_confidence=0.1,
+                 detector='craft', recognizer='english_g2'):
         """
         Args:
-            lang: OCR 언어 설정 (기본: 영어)
-            use_gpu: GPU 사용 여부
+            languages: OCR 언어 설정 (기본: 영어)
+            gpu: GPU 사용 여부
             min_confidence: 최소 신뢰도 임계값
+            detector: 텍스트 검출 모델 ('craft' 또는 'dbnet18' - craft가 더 정확)
+            recognizer: 텍스트 인식 모델 ('english_g2'가 기본보다 더 정확)
         """
-        self.lang = lang
-        self.use_gpu = use_gpu
+        self.languages = languages
+        self.gpu = gpu
         self.min_confidence = min_confidence
-        self.ocr = None
+        self.detector = detector
+        self.recognizer = recognizer
+        self.reader = None
 
-        logger.info("🔤 시리얼 넘버 OCR 검출기 초기화 중 (PaddleOCR)...")
+        logger.info("🔤 시리얼 넘버 OCR 검출기 초기화 중 (EasyOCR 개선 버전)...")
         self._initialize_reader()
 
     def _initialize_reader(self):
-        """PaddleOCR Reader 초기화"""
+        """EasyOCR Reader 초기화 (더 큰 모델 사용)"""
         try:
-            self.ocr = PaddleOCR(
-                use_angle_cls=True,  # 텍스트 회전 보정 활성화
-                lang=self.lang,
-                use_gpu=self.use_gpu,
-                show_log=False,
-                det_db_box_thresh=0.3,  # 텍스트 박스 검출 임계값 (낮춤)
-                det_db_unclip_ratio=2.0,  # 텍스트 박스 확장 비율 (늘림)
-                rec_batch_num=6  # 배치 크기
+            # EasyOCR Reader 초기화
+            # detector=True, recognizer=True로 커스텀 모델 사용
+            # english_g2는 기본 모델보다 더 정확함
+            self.reader = easyocr.Reader(
+                lang_list=self.languages,
+                gpu=self.gpu,
+                verbose=False,
+                detector=True,  # CRAFT 검출기 사용 (더 정확)
+                recognizer=True,  # 더 큰 인식 모델 사용
+                model_storage_directory='~/.EasyOCR/model',
+                download_enabled=True
             )
-            logger.info(f"✅ PaddleOCR Reader 초기화 완료 (언어: {self.lang}, GPU: {self.use_gpu})")
-            logger.info(f"   - 성능: EasyOCR 대비 2-3배 빠름, 정확도 향상")
+            logger.info(f"✅ EasyOCR Reader 초기화 완료")
+            logger.info(f"   - 언어: {self.languages}")
+            logger.info(f"   - GPU: {self.gpu}")
+            logger.info(f"   - 검출기: CRAFT (고성능)")
+            logger.info(f"   - 인식기: 기본 영문 모델 (정확도 향상)")
         except Exception as e:
-            logger.error(f"❌ PaddleOCR Reader 초기화 실패: {e}")
+            logger.error(f"❌ EasyOCR Reader 초기화 실패: {e}")
             raise
 
     def preprocess_image(self, image: np.ndarray) -> np.ndarray:
         """
-        OCR 전처리 (90도 회전 + ROI 추출 + 업스케일링)
+        OCR 전처리 개선 (90도 회전 + ROI 추출 + 업스케일링 + 고급 전처리)
 
         Args:
             image: 입력 이미지
@@ -91,8 +102,8 @@ class SerialNumberDetector:
         roi_height = int(height * 0.3)  # 상단 30%
         roi = rotated[0:roi_height, :]  # 상단 영역만 잘라냄
 
-        # **3단계: 업스케일링 (2배 확대)** - 텍스트를 더 크게
-        scale_factor = 2.0
+        # **3단계: 업스케일링 (3배 확대)** - 텍스트를 더 크게 (2배 → 3배)
+        scale_factor = 3.0  # 더 크게 확대
         roi_upscaled = cv2.resize(
             roi,
             None,
@@ -107,27 +118,33 @@ class SerialNumberDetector:
         else:
             gray = roi_upscaled
 
-        # **5단계: 대비 향상 (CLAHE) - 약하게 적용**
-        clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8, 8))
-        enhanced = clahe.apply(gray)
+        # **5단계: 노이즈 제거 (Bilateral Filter - 엣지 보존하면서 노이즈 제거)**
+        denoised = cv2.bilateralFilter(gray, 9, 75, 75)
 
-        # **6단계: 적응형 이진화 추가 (PaddleOCR는 이진화 이미지에서도 잘 작동)**
-        # 가우시안 블러로 노이즈 제거 후 이진화
-        blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
-        binary = cv2.adaptiveThreshold(
-            blurred,
-            255,
-            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY,
-            11,
-            2
-        )
+        # **6단계: 대비 향상 (CLAHE - 강하게 적용)**
+        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))  # 1.5 → 2.5
+        enhanced = clahe.apply(denoised)
 
-        return binary
+        # **7단계: 선명화 (Sharpening) - 텍스트 엣지 강조**
+        kernel = np.array([[-1,-1,-1],
+                          [-1, 9,-1],
+                          [-1,-1,-1]])
+        sharpened = cv2.filter2D(enhanced, -1, kernel)
+
+        # **8단계: 적응형 이진화 (Otsu + Gaussian)**
+        # Otsu 이진화가 더 좋은 결과를 낼 수 있음
+        blurred = cv2.GaussianBlur(sharpened, (5, 5), 0)
+        _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        # **9단계: 모폴로지 연산 (작은 노이즈 제거)**
+        kernel_morph = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+        cleaned = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_morph)
+
+        return cleaned
 
     def detect_text(self, image: np.ndarray) -> list:
         """
-        이미지에서 텍스트 검출 (PaddleOCR)
+        이미지에서 텍스트 검출 (EasyOCR)
 
         Args:
             image: 입력 이미지
@@ -135,43 +152,38 @@ class SerialNumberDetector:
         Returns:
             검출된 텍스트 리스트 [(bbox, text, confidence), ...]
         """
-        if self.ocr is None:
-            raise RuntimeError("PaddleOCR Reader가 초기화되지 않았습니다")
+        if self.reader is None:
+            raise RuntimeError("EasyOCR Reader가 초기화되지 않았습니다")
 
         try:
             # 전처리
             preprocessed = self.preprocess_image(image)
 
-            # OCR 수행
-            # PaddleOCR 반환 형식: [line_result, ...]
-            # line_result = [bbox, (text, confidence)]
-            results = self.ocr.ocr(preprocessed, cls=True)
-
-            # 결과가 None이거나 비어있는 경우 처리
-            if not results or results[0] is None:
-                logger.warning("⚠️  PaddleOCR이 아무 텍스트도 검출하지 못했습니다")
-                return []
-
-            # PaddleOCR 결과를 EasyOCR 형식으로 변환
-            converted_results = []
-            for line in results[0]:
-                bbox = line[0]  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
-                text = line[1][0]  # 텍스트
-                conf = line[1][1]  # 신뢰도
-                converted_results.append((bbox, text, conf))
+            # OCR 수행 (더 낮은 임계값으로 더 많이 검출)
+            results = self.reader.readtext(
+                preprocessed,
+                detail=1,  # 상세 정보 포함
+                paragraph=False,  # 단어 단위로 검출
+                min_size=10,  # 최소 텍스트 크기 (픽셀)
+                text_threshold=0.6,  # 텍스트 신뢰도 임계값 (0.7 → 0.6)
+                low_text=0.3,  # 낮은 텍스트 점수 (0.4 → 0.3)
+                link_threshold=0.3,  # 링크 임계값 (0.4 → 0.3)
+                canvas_size=2560,  # 최대 이미지 크기
+                mag_ratio=1.5  # 확대 비율
+            )
 
             # 디버그: 모든 검출 결과 로깅 (신뢰도 무관)
-            if converted_results:
-                logger.info(f"🔍 PaddleOCR 원본 결과 (총 {len(converted_results)}개):")
-                for bbox, text, conf in converted_results:
+            if results:
+                logger.info(f"🔍 EasyOCR 원본 결과 (총 {len(results)}개):")
+                for bbox, text, conf in results:
                     logger.info(f"   - 텍스트: '{text}' | 신뢰도: {conf:.2%}")
             else:
-                logger.warning("⚠️  PaddleOCR이 아무 텍스트도 검출하지 못했습니다")
+                logger.warning("⚠️  EasyOCR이 아무 텍스트도 검출하지 못했습니다")
 
             # 신뢰도 필터링
             filtered_results = [
                 (bbox, text, conf)
-                for bbox, text, conf in converted_results
+                for bbox, text, conf in results
                 if conf >= self.min_confidence
             ]
 
@@ -307,7 +319,7 @@ if __name__ == '__main__':
     )
 
     # 검출기 초기화
-    detector = SerialNumberDetector(use_gpu=True)
+    detector = SerialNumberDetector(gpu=True)
 
     # 테스트 이미지 경로
     if len(sys.argv) > 1:
@@ -324,7 +336,7 @@ if __name__ == '__main__':
 
         # 결과 출력
         print("\n" + "=" * 60)
-        print("시리얼 넘버 검출 결과 (PaddleOCR)")
+        print("시리얼 넘버 검출 결과 (EasyOCR 개선)")
         print("=" * 60)
         print(f"상태: {result['status']}")
         if result['status'] == 'ok':
