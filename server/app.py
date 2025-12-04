@@ -993,9 +993,67 @@ def predict_dual():
         # if product_code:
         #     product_components = db.get_product_components(product_code)
 
-        # 6. 앞면 처리: YOLO 부품 검출
+        # 6. 앞면 처리: 정사각형 크롭 (640x480 → 640x640)
+        logger.info(f"[DUAL-LEFT] 원본 프레임 shape: {left_frame.shape}")
+        left_frame = crop_to_square(left_frame, target_size=640)
+        logger.info(f"[DUAL-LEFT] 크롭 후 shape: {left_frame.shape}")
+
+        # 6-1. 템플릿 매칭 + ROI 체크
+        should_run_yolo = False
+        roi_status = "unknown"
+        reference_point = None
+
+        if template_alignment and template_alignment.template is not None:
+            # YOLO 검출용 ROI 영역 정의 (좌우 확장 + 위로 70픽셀 이동)
+            img_h, img_w = left_frame.shape[:2]
+            yolo_width = 600
+            yolo_height = 415
+            yolo_roi_x1 = (img_w - yolo_width) // 2
+            yolo_roi_y1 = (img_h - yolo_height) // 2 - 70
+            yolo_roi_x2 = yolo_roi_x1 + yolo_width
+            yolo_roi_y2 = yolo_roi_y1 + yolo_height
+
+            # 템플릿 매칭용 ROI 영역 정의
+            roi_size = 60
+            roi_x1 = yolo_roi_x1
+            roi_y1 = yolo_roi_y1
+            roi_x2 = roi_x1 + roi_size
+            roi_y2 = roi_y1 + roi_size
+
+            # 템플릿 매칭
+            reference_point = template_alignment.find_reference_point(
+                left_frame,
+                method=cv2.TM_CCORR_NORMED,
+                roi=None
+            )
+
+            if reference_point:
+                ref_x, ref_y = reference_point
+                is_in_roi = (roi_x1 <= ref_x <= roi_x2 and roi_y1 <= ref_y <= roi_y2)
+
+                if is_in_roi:
+                    should_run_yolo = True
+                    roi_status = "in_roi"
+                    logger.info(f"[DUAL-LEFT] ✅ 템플릿이 ROI 안: ({ref_x}, {ref_y}) → YOLO 실행")
+                else:
+                    should_run_yolo = False
+                    roi_status = "out_of_roi"
+                    logger.warning(f"[DUAL-LEFT] ⚠️ 템플릿이 ROI 밖: ({ref_x}, {ref_y}) → YOLO 건너뛰기")
+            else:
+                should_run_yolo = False
+                roi_status = "no_template"
+                logger.warning(f"[DUAL-LEFT] ⚠️ 템플릿 매칭 실패 → YOLO 건너뛰기")
+        else:
+            should_run_yolo = True
+            roi_status = "no_template_checker"
+            logger.warning(f"[DUAL-LEFT] ⚠️ 템플릿 체커 없음 → YOLO 강제 실행")
+
+        # 6-2. YOLO 부품 검출
         detections = []
-        if yolo_model is not None:
+        boxes_data = []
+        annotated_frame = left_frame.copy()
+
+        if should_run_yolo and yolo_model is not None:
             yolo_results = yolo_model.predict(left_frame, conf=0.3, iou=0.7, verbose=False)
             if len(yolo_results) > 0 and len(yolo_results[0].boxes) > 0:
                 boxes = yolo_results[0].boxes
@@ -1013,7 +1071,78 @@ def predict_dual():
                         'confidence': confidence
                     })
 
-        logger.info(f"YOLO 부품 검출 완료: {len(detections)}개")
+                    boxes_data.append({
+                        'class_name': class_name,
+                        'bbox': [float(x1), float(y1), float(x2), float(y2)],
+                        'center': [float(cx), float(cy)],
+                        'confidence': confidence
+                    })
+
+                    # 바운딩 박스 그리기
+                    color = (0, 255, 0)
+                    cv2.rectangle(annotated_frame, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
+                    label = f"{class_name} {confidence:.2f}"
+                    cv2.putText(annotated_frame, label, (int(x1), int(y1) - 10),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+                logger.info(f"[DUAL-LEFT] YOLO 검출 완료: {len(detections)}개 부품")
+        else:
+            logger.warning(f"[DUAL-LEFT] YOLO 건너뛰기 (should_run={should_run_yolo}, model={yolo_model is not None})")
+
+        # 6-3. ROI + 템플릿 시각화 오버레이
+        if template_alignment and template_alignment.template is not None:
+            img_h, img_w = annotated_frame.shape[:2]
+
+            # YOLO ROI 재계산
+            yolo_width = 600
+            yolo_height = 415
+            yolo_roi_x1 = (img_w - yolo_width) // 2
+            yolo_roi_y1 = (img_h - yolo_height) // 2 - 70
+            yolo_roi_x2 = yolo_roi_x1 + yolo_width
+            yolo_roi_y2 = yolo_roi_y1 + yolo_height
+
+            # 템플릿 ROI 재계산
+            roi_size = 60
+            roi_x1 = yolo_roi_x1
+            roi_y1 = yolo_roi_y1
+            roi_x2 = roi_x1 + roi_size
+            roi_y2 = roi_y1 + roi_size
+
+            # YOLO ROI 박스 그리기 (초록색)
+            cv2.rectangle(annotated_frame, (yolo_roi_x1, yolo_roi_y1), (yolo_roi_x2, yolo_roi_y2), (0, 255, 0), 2)
+            cv2.putText(annotated_frame, "YOLO ROI", (yolo_roi_x1 + 10, yolo_roi_y1 + 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+            # 템플릿 ROI 박스 그리기 (노란색)
+            cv2.rectangle(annotated_frame, (roi_x1, roi_y1), (roi_x2, roi_y2), (0, 255, 255), 3)
+            cv2.putText(annotated_frame, "Template ROI", (roi_x1 + 10, roi_y1 + 50),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+
+            # 템플릿 매칭 결과 그리기
+            if reference_point:
+                ref_x, ref_y = reference_point
+
+                # 템플릿 영역 그리기 (보라색)
+                template_h, template_w = template_alignment.template.shape[:2]
+                top_left_x = ref_x - template_w // 2
+                top_left_y = ref_y - template_h // 2
+                cv2.rectangle(annotated_frame,
+                            (top_left_x, top_left_y),
+                            (top_left_x + template_w, top_left_y + template_h),
+                            (255, 0, 255), 3)
+
+                # 기준점 원 그리기 (빨간색)
+                cv2.circle(annotated_frame, (ref_x, ref_y), 10, (0, 0, 255), -1)
+
+                # 좌표축 그리기
+                cv2.arrowedLine(annotated_frame, (ref_x, ref_y), (ref_x + 50, ref_y), (255, 0, 0), 2)
+                cv2.arrowedLine(annotated_frame, (ref_x, ref_y), (ref_x, ref_y + 50), (0, 255, 0), 2)
+
+                # ROI 상태 텍스트
+                status_text = "✅ IN ROI" if roi_status == "in_roi" else "⚠️ OUT OF ROI"
+                status_color = (0, 255, 0) if roi_status == "in_roi" else (0, 0, 255)
+                cv2.putText(annotated_frame, status_text, (10, img_h - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.8, status_color, 2)
 
         # 7. 부품 위치 검증 (임시 구현)
         missing_count = 0
@@ -1038,11 +1167,11 @@ def predict_dual():
 
         # 9. 전역 변수 업데이트 (디버그 뷰어용)
         with frame_lock:
-            # 좌측 프레임 (앞면) - JPEG 인코딩
-            _, left_buffer = cv2.imencode('.jpg', left_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+            # 좌측 프레임 (앞면) - annotated_frame 사용 (ROI+템플릿+박싱 모두 포함)
+            _, left_buffer = cv2.imencode('.jpg', annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
             left_frame_base64 = base64.b64encode(left_buffer).decode('utf-8')
 
-            latest_frames['left'] = left_frame
+            latest_frames['left'] = annotated_frame
             latest_frames_jpeg['left'] = left_frame_base64
 
             # 우측 프레임 (뒷면) - 회전된 버전으로 저장
@@ -1091,9 +1220,10 @@ def predict_dual():
                 'image': left_frame_base64,
                 'defect_type': decision,
                 'confidence': 1.0 if decision == 'normal' else 0.0,
-                'boxes_count': len(detections),
-                'boxes_data': detections,
-                'frame_shape': list(left_frame.shape),
+                'boxes_count': len(boxes_data),
+                'boxes_data': boxes_data,
+                'roi_status': roi_status,
+                'frame_shape': list(annotated_frame.shape),
                 'timestamp': datetime.now().isoformat(),
                 'type': 'final_frame'
             })
