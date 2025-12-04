@@ -27,28 +27,30 @@ logger = logging.getLogger(__name__)
 class SerialNumberDetector:
     """시리얼 넘버 OCR 검출기 (EasyOCR 개선 버전)"""
 
-    # 시리얼 넘버 정규식 패턴 (숫자 개수 유연하게 - 6~10자리)
-    # 형식: S/N MBXX-00000001 (XX는 2자리 제품 코드, 일련번호는 6~10자리)
+    # 시리얼 넘버 정규식 패턴 (OCR 오인식 패턴 포함)
+    # 형식: S/N MBXX-00000001
+    # S/N의 /를 I, l, |, 1 등으로 오인식 가능
     SERIAL_PATTERN = re.compile(
-        r'S[/\\]?N[\s:]*MB([A-Z]{2})[\s-]*(\d{6,10})',
+        r'S[/\\ILl|1]N[\s:]*MB([A-Z]{2})[\s-]*(\d{6,10})',
         re.IGNORECASE
     )
 
     # 간단한 패턴 (S/N 없이, 숫자 6~10자리)
+    # 앞뒤에 다른 MB 패턴이 없도록 제한
     SIMPLE_PATTERN = re.compile(
-        r'MB([A-Z]{2})[\s-]*(\d{6,10})',
+        r'(?<![A-Z])MB([A-Z]{2})[\s-]*(\d{6,10})(?!\d)',
         re.IGNORECASE
     )
 
-    # 더 유연한 패턴 (숫자 6~10자리, 구분자 관대)
+    # 유연한 패턴 (구분자 관대)
     FLEXIBLE_PATTERN = re.compile(
-        r'MB[\s]*([A-Z]{2})[\s\-_:]*(\d{6,10})',
+        r'(?<![A-Z])MB[\s]*([A-Z]{2})[\s\-_:]*(\d{6,10})(?!\d)',
         re.IGNORECASE
     )
 
-    # 초완화 패턴 (숫자만 4자리 이상이면 일단 허용)
+    # 초완화 패턴 (4~10자리로 제한 - 너무 길거나 짧으면 오검출)
     ULTRA_FLEXIBLE_PATTERN = re.compile(
-        r'MB[\s]*([A-Z]{2})[\s\-_:]*(\d{4,12})',
+        r'(?<![A-Z])MB[\s]*([A-Z]{2})[\s\-_:]*(\d{4,10})(?!\d)',
         re.IGNORECASE
     )
 
