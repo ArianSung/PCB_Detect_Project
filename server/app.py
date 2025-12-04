@@ -1048,46 +1048,74 @@ def predict_dual():
             roi_status = "no_template_checker"
             logger.warning(f"[DUAL-LEFT] ⚠️ 템플릿 체커 없음 → YOLO 강제 실행")
 
-        # 6-2. YOLO 부품 검출
-        detections = []
+        # 6-2. YOLO 부품 검출 (원래 /predict_test 방식)
         boxes_data = []
-        annotated_frame = left_frame.copy()
+        if yolo_model is not None and should_run_yolo:
+            try:
+                # YOLO 추론 실행
+                results = yolo_model.predict(left_frame, conf=0.3, iou=0.7, verbose=False)
+                defect_type, confidence, raw_boxes_data = parse_yolo_results(results)
 
-        if should_run_yolo and yolo_model is not None:
-            yolo_results = yolo_model.predict(left_frame, conf=0.3, iou=0.7, verbose=False)
-            if len(yolo_results) > 0 and len(yolo_results[0].boxes) > 0:
-                boxes = yolo_results[0].boxes
-                for box in boxes:
-                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-                    class_id = int(box.cls[0])
-                    class_name = yolo_model.names[class_id]
-                    confidence = float(box.conf[0])
+                # 신뢰도 필터링 (낮은 신뢰도 제거)
+                filtered_boxes = [box for box in raw_boxes_data if box['confidence'] >= CONFIDENCE_THRESHOLD]
 
-                    detections.append({
-                        'class_name': class_name,
-                        'bbox': [float(x1), float(y1), float(x2), float(y2)],
-                        'center': [float(cx), float(cy)],
-                        'confidence': confidence
-                    })
+                # YOLO ROI 필터링 (템플릿이 ROI 안에 있을 때만)
+                if template_alignment and template_alignment.template is not None and reference_point:
+                    roi_filtered_boxes = []
+                    for box in filtered_boxes:
+                        # 바운딩 박스 중심점이 YOLO ROI 안에 있는지 확인
+                        cx = (box['x1'] + box['x2']) / 2
+                        cy = (box['y1'] + box['y2']) / 2
+                        if yolo_roi_x1 <= cx <= yolo_roi_x2 and yolo_roi_y1 <= cy <= yolo_roi_y2:
+                            roi_filtered_boxes.append(box)
+                    logger.info(f"[DUAL-LEFT] YOLO ROI 필터링: {len(filtered_boxes)}개 → {len(roi_filtered_boxes)}개")
+                    filtered_boxes = roi_filtered_boxes
 
-                    boxes_data.append({
-                        'class_name': class_name,
-                        'bbox': [float(x1), float(y1), float(x2), float(y2)],
-                        'center': [float(cx), float(cy)],
-                        'confidence': confidence
-                    })
+                # 검출 결과 평활화 (Temporal Smoothing)
+                smoothed_boxes = smooth_detections('left', filtered_boxes)
 
-                    # 바운딩 박스 그리기
-                    color = (0, 255, 0)
-                    cv2.rectangle(annotated_frame, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
-                    label = f"{class_name} {confidence:.2f}"
-                    cv2.putText(annotated_frame, label, (int(x1), int(y1) - 10),
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                # 평활화된 결과로 바운딩 박스 그리기
+                annotated_frame = draw_bounding_boxes(left_frame.copy(), smoothed_boxes, None, None)
 
-                logger.info(f"[DUAL-LEFT] YOLO 검출 완료: {len(detections)}개 부품")
+                logger.info(f"[DUAL-LEFT] YOLO 추론 완료: 원본 {len(raw_boxes_data)}개 → 필터링 {len(filtered_boxes)}개 → 평활화 {len(smoothed_boxes)}개 객체")
+
+                # 디버그 뷰어용 데이터 구조 변환 (relative_center 포함!)
+                boxes_data = []
+                for box in smoothed_boxes:
+                    cx = (box['x1'] + box['x2']) / 2
+                    cy = (box['y1'] + box['y2']) / 2
+
+                    box_data = {
+                        'class_name': box['class_name'],
+                        'bbox': [box['x1'], box['y1'], box['x2'], box['y2']],
+                        'center': [cx, cy],
+                        'confidence': box['confidence']
+                    }
+
+                    # 템플릿 기준점을 (0,0)으로 하는 상대 좌표 추가
+                    if reference_point:
+                        ref_x, ref_y = reference_point
+                        rel_x = cx - ref_x
+                        rel_y = cy - ref_y
+                        box_data['relative_center'] = [rel_x, rel_y]
+
+                    boxes_data.append(box_data)
+            except Exception as yolo_error:
+                logger.error(f"[DUAL-LEFT] YOLO 추론 실패: {yolo_error}")
+                defect_type = "정상"
+                confidence = 0.0
+                annotated_frame = left_frame.copy()
+        elif not should_run_yolo:
+            # ROI 밖 또는 템플릿 매칭 실패 - YOLO 실행하지 않음
+            logger.info(f"[DUAL-LEFT] YOLO 건너뛰기 (ROI 상태: {roi_status})")
+            defect_type = "정상"
+            confidence = 0.0
+            annotated_frame = left_frame.copy()
         else:
-            logger.warning(f"[DUAL-LEFT] YOLO 건너뛰기 (should_run={should_run_yolo}, model={yolo_model is not None})")
+            logger.warning("[DUAL-LEFT] YOLO 모델이 로드되지 않음 - 더미 결과 반환")
+            defect_type = "정상"
+            confidence = 0.95
+            annotated_frame = left_frame.copy()
 
         # 6-3. ROI + 템플릿 시각화 오버레이
         if template_alignment and template_alignment.template is not None:
@@ -1147,7 +1175,7 @@ def predict_dual():
         # 7. 부품 위치 검증 (임시 구현)
         missing_count = 0
         position_error_count = 0
-        correct_count = len(detections)
+        correct_count = len(boxes_data)
 
         # TODO: 실제 제품별 부품 배치 기준과 비교하여 검증
 
@@ -1185,12 +1213,12 @@ def predict_dual():
             # 좌측 검증 결과
             latest_results['left'] = {
                 'decision': decision,
-                'detections': detections,
+                'detections': boxes_data,
                 'verification': {
                     'missing_count': missing_count,
                     'position_error_count': position_error_count,
                     'correct_count': correct_count,
-                    'total_components': len(detections)
+                    'total_components': len(boxes_data)
                 }
             }
 
@@ -1256,7 +1284,7 @@ def predict_dual():
                 'missing_count': missing_count,
                 'position_error_count': position_error_count,
                 'correct_count': correct_count,
-                'total_components': len(detections)
+                'total_components': len(boxes_data)
             },
             'gpio_signal': {
                 'pin': gpio_pin,
