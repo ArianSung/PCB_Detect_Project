@@ -977,9 +977,8 @@ def predict_dual():
 
         if serial_detector is not None:
             try:
-                # 회전된 이미지로 OCR 처리 (카메라 방향 보정)
-                rotated_right_frame = cv2.rotate(right_frame, cv2.ROTATE_90_CLOCKWISE)
-                ocr_result = serial_detector.detect_serial_number(rotated_right_frame)
+                # OCR 처리 (회전은 serial_detector 내부에서 처리)
+                ocr_result = serial_detector.detect_serial_number(right_frame)
 
                 # OCR이 실제로 처리한 전처리된 이미지 가져오기
                 ocr_processed_image = ocr_result.get('preprocessed_image')
