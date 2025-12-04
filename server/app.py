@@ -976,21 +976,29 @@ def predict_dual():
         ocr_processed_image = None
 
         if serial_detector is not None:
-            # 회전된 이미지로 OCR 처리 (카메라 방향 보정)
-            rotated_right_frame = cv2.rotate(right_frame, cv2.ROTATE_90_CLOCKWISE)
-            ocr_result = serial_detector.detect_serial_number(rotated_right_frame)
+            try:
+                # 회전된 이미지로 OCR 처리 (카메라 방향 보정)
+                rotated_right_frame = cv2.rotate(right_frame, cv2.ROTATE_90_CLOCKWISE)
+                ocr_result = serial_detector.detect_serial_number(rotated_right_frame)
 
-            # OCR이 실제로 처리한 전처리된 이미지 가져오기
-            ocr_processed_image = ocr_result.get('preprocessed_image')
+                # OCR이 실제로 처리한 전처리된 이미지 가져오기
+                ocr_processed_image = ocr_result.get('preprocessed_image')
 
-            if ocr_result['status'] == 'ok':
-                serial_number = ocr_result.get('serial_number')
-                product_code = ocr_result.get('product_code')
-                ocr_confidence = ocr_result.get('confidence', 0.0)
-                logger.info(f"✅ 시리얼 넘버 검출 성공: {serial_number} (제품: {product_code}, 신뢰도: {ocr_confidence:.2%})")
-            else:
-                ocr_error = ocr_result.get('error', 'OCR 실패')
-                logger.warning(f"⚠️ 시리얼 넘버 검출 실패: {ocr_error}")
+                if ocr_result['status'] == 'ok':
+                    serial_number = ocr_result.get('serial_number')
+                    product_code = ocr_result.get('product_code')
+                    ocr_confidence = ocr_result.get('confidence', 0.0)
+                    logger.info(f"✅ 시리얼 넘버 검출 성공: {serial_number} (제품: {product_code}, 신뢰도: {ocr_confidence:.2%})")
+                else:
+                    ocr_error = ocr_result.get('error', 'OCR 실패')
+                    logger.warning(f"⚠️ 시리얼 넘버 검출 실패: {ocr_error}")
+            except Exception as e:
+                ocr_error = f"OCR 처리 중 예외 발생: {str(e)}"
+                logger.error(ocr_error, exc_info=True)
+                return jsonify({
+                    'status': 'error',
+                    'error': ocr_error
+                }), 500
         else:
             ocr_error = "시리얼 넘버 검출기가 초기화되지 않았습니다"
             logger.error(ocr_error)
