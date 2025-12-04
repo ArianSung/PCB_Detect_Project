@@ -1,7 +1,19 @@
 {
   "permissions": {
     "allow": [
-      "WebSearch"
+      "WebSearch",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Read(//tmp/**)",
+      "Bash(python3:*)",
+      "Bash(awk:*)",
+      "Bash(conda run:*)",
+      "Bash(journalctl:*)",
+      "Bash(dmesg:*)",
+      "Bash(timeout 3 conda run:*)"
     ],
     "deny": [],
     "ask": []

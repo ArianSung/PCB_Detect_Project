@@ -1,0 +1,37 @@
+{
+  "alignment": {
+    "aligned": true,
+    "debug_info": {
+      "visibility_check": {
+        "area": false,
+        "distances": true,
+        "holes": true
+      }
+    },
+    "method": "holes",
+    "transform_matrix": [
+      [
+        0.9999999999999999,
+        5.087845227379633e-17,
+        8.323472761294024e-15
+      ],
+      [
+        -1.1422463151648909e-17,
+        0.9999999999999999,
+        3.893005216430744e-14
+      ],
+      [
+        -2.6701312556623327e-19,
+        1.355130320752807e-19,
+        1.0
+      ]
+    ]
+  },
+  "camera_id": "left",
+  "confidence": 0.0,
+  "defect_type": "정상",
+  "gpio_pin": 23,
+  "inference_time_ms": 154.19,
+  "status": "ok",
+  "timestamp": "2025-11-24T11:27:23.420758"
+}
