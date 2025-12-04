@@ -461,6 +461,165 @@ class DatabaseManager:
             return False
 
     # ========================================
+    # 제품별 부품 배치 기준 조회 (v3.0)
+    # ========================================
+
+    def get_reference_components(self, product_code: str) -> List[Dict]:
+        """
+        제품 코드로 기준 부품 배치 조회 (product_components 테이블)
+
+        Args:
+            product_code: 제품 코드 (예: 'BC', 'FT', 'RS')
+
+        Returns:
+            List[Dict]: ComponentVerifier 형식의 기준 부품 리스트
+                [
+                    {
+                        'class_name': 'resistor',
+                        'center': [100.5, 200.3],
+                        'bbox': [95.0, 195.0, 105.0, 205.0],
+                        'confidence': 1.0  # 기준 데이터이므로 항상 1.0
+                    },
+                    ...
+                ]
+        """
+        try:
+            conn = self.get_connection()
+            with conn.cursor() as cursor:
+                sql = """
+                    SELECT
+                        component_class,
+                        center_x,
+                        center_y,
+                        bbox_x1,
+                        bbox_y1,
+                        bbox_x2,
+                        bbox_y2,
+                        tolerance_px
+                    FROM product_components
+                    WHERE product_code = %s
+                    ORDER BY id
+                """
+                cursor.execute(sql, (product_code,))
+                results = cursor.fetchall()
+
+                # ComponentVerifier 형식으로 변환
+                components = []
+                for row in results:
+                    component = {
+                        'class_name': row['component_class'],
+                        'center': [float(row['center_x']), float(row['center_y'])],
+                        'bbox': [
+                            float(row['bbox_x1']),
+                            float(row['bbox_y1']),
+                            float(row['bbox_x2']),
+                            float(row['bbox_y2'])
+                        ],
+                        'confidence': 1.0  # 기준 데이터는 항상 1.0
+                    }
+                    components.append(component)
+
+                logger.info(f"제품 '{product_code}' 기준 부품 {len(components)}개 로드 완료")
+                return components
+
+        except pymysql.Error as e:
+            logger.error(f"기준 부품 조회 실패 (제품 코드: {product_code}): {e}")
+            return []
+
+    def insert_inspection_v3(
+        self,
+        serial_number: str,
+        product_code: str,
+        decision: str,
+        missing_count: int,
+        position_error_count: int,
+        extra_count: int,
+        correct_count: int,
+        missing_components: Optional[List] = None,
+        position_errors: Optional[List] = None,
+        extra_components: Optional[List] = None,
+        yolo_detections: Optional[List] = None,
+        detection_count: int = 0,
+        avg_confidence: Optional[float] = None,
+        inference_time_ms: Optional[float] = None,
+        verification_time_ms: Optional[float] = None,
+        total_time_ms: Optional[float] = None,
+        left_image_path: Optional[str] = None,
+        right_image_path: Optional[str] = None,
+        image_width: Optional[int] = None,
+        image_height: Optional[int] = None,
+        camera_id: Optional[str] = None,
+        client_ip: Optional[str] = None,
+        server_version: str = '1.0.0',
+        qr_data: Optional[str] = None,
+        qr_detected: bool = False,
+        serial_detected: bool = False
+    ) -> Optional[int]:
+        """
+        검사 결과를 v3.0 스키마에 저장 (제품별 검증 아키텍처)
+
+        Args:
+            serial_number: 시리얼 넘버 (MBXX-12345678)
+            product_code: 제품 코드 (XX)
+            decision: 최종 판정 (normal/missing/position_error/discard)
+            missing_count: 누락 부품 개수
+            position_error_count: 위치 오류 부품 개수
+            extra_count: 추가 부품 개수
+            correct_count: 정상 부품 개수
+            ... (기타 상세 정보)
+
+        Returns:
+            int: 삽입된 레코드 ID, 실패 시 None
+        """
+        try:
+            conn = self.get_connection()
+            with conn.cursor() as cursor:
+                sql = """
+                    INSERT INTO inspections (
+                        serial_number, product_code, qr_data, qr_detected, serial_detected,
+                        decision, missing_count, position_error_count, extra_count, correct_count,
+                        missing_components, position_errors, extra_components,
+                        yolo_detections, detection_count, avg_confidence,
+                        inference_time_ms, verification_time_ms, total_time_ms,
+                        left_image_path, right_image_path, image_width, image_height,
+                        camera_id, client_ip, server_version,
+                        inspection_time
+                    ) VALUES (
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s,
+                        %s, %s, %s,
+                        %s, %s, %s,
+                        %s, %s, %s, %s,
+                        %s, %s, %s,
+                        NOW()
+                    )
+                """
+                cursor.execute(sql, (
+                    serial_number, product_code, qr_data, qr_detected, serial_detected,
+                    decision, missing_count, position_error_count, extra_count, correct_count,
+                    json.dumps(missing_components, ensure_ascii=False) if missing_components else None,
+                    json.dumps(position_errors, ensure_ascii=False) if position_errors else None,
+                    json.dumps(extra_components, ensure_ascii=False) if extra_components else None,
+                    json.dumps(yolo_detections, ensure_ascii=False) if yolo_detections else None,
+                    detection_count, avg_confidence,
+                    inference_time_ms, verification_time_ms, total_time_ms,
+                    left_image_path, right_image_path, image_width, image_height,
+                    camera_id, client_ip, server_version
+                ))
+
+                inspection_id = cursor.lastrowid
+                logger.info(
+                    f"검사 이력 저장 완료 (ID: {inspection_id}, "
+                    f"시리얼: {serial_number}, 제품: {product_code}, 판정: {decision})"
+                )
+                return inspection_id
+
+        except pymysql.Error as e:
+            logger.error(f"검사 이력 저장 실패 (v3.0): {e}")
+            return None
+
+    # ========================================
     # 헬스 체크
     # ========================================
 
