@@ -972,10 +972,16 @@ def predict_dual():
         ocr_error = None
         ocr_result = None  # 초기화 추가
 
+        # OCR이 처리한 이미지 (전처리된 이미지 - 디버그 뷰어용)
+        ocr_processed_image = None
+
         if serial_detector is not None:
             # 회전된 이미지로 OCR 처리 (카메라 방향 보정)
             rotated_right_frame = cv2.rotate(right_frame, cv2.ROTATE_90_CLOCKWISE)
             ocr_result = serial_detector.detect_serial_number(rotated_right_frame)
+
+            # OCR이 실제로 처리한 전처리된 이미지 가져오기
+            ocr_processed_image = ocr_result.get('preprocessed_image')
 
             if ocr_result['status'] == 'ok':
                 serial_number = ocr_result.get('serial_number')
@@ -1202,8 +1208,18 @@ def predict_dual():
             latest_frames['left'] = annotated_frame
             latest_frames_jpeg['left'] = left_frame_base64
 
-            # 우측 프레임 (뒷면) - 회전된 버전으로 저장
-            rotated_right_display = cv2.rotate(right_frame, cv2.ROTATE_90_CLOCKWISE)
+            # 우측 프레임 (뒷면) - OCR 전처리된 이미지 사용
+            if ocr_processed_image is not None:
+                # OCR이 처리한 전처리된 이미지 사용 (그레이스케일 + 2배 업스케일)
+                # 그레이스케일 → BGR 변환 (디버그 뷰어 표시용)
+                if len(ocr_processed_image.shape) == 2:
+                    rotated_right_display = cv2.cvtColor(ocr_processed_image, cv2.COLOR_GRAY2BGR)
+                else:
+                    rotated_right_display = ocr_processed_image
+            else:
+                # OCR 실패 시 원본 회전 이미지 사용
+                rotated_right_display = cv2.rotate(right_frame, cv2.ROTATE_90_CLOCKWISE)
+
             _, right_buffer = cv2.imencode('.jpg', rotated_right_display, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
             right_frame_base64 = base64.b64encode(right_buffer).decode('utf-8')
 

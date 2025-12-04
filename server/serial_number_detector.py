@@ -268,10 +268,14 @@ class SerialNumberDetector:
                 'sequence_number': 일련번호 (00000001),
                 'confidence': OCR 신뢰도,
                 'detected_text': 원본 OCR 텍스트,
+                'preprocessed_image': 전처리된 이미지 (디버그 뷰어용),
                 'error': 에러 메시지 (실패 시)
             }
         """
         try:
+            # 전처리된 이미지 생성 (디버그 뷰어용으로 저장)
+            preprocessed = self.preprocess_image(image)
+
             # 텍스트 검출
             ocr_results = self.detect_text(image)
 
@@ -281,7 +285,8 @@ class SerialNumberDetector:
                     'error': '텍스트를 검출할 수 없습니다',
                     'serial_number': None,
                     'product_code': None,
-                    'confidence': 0.0
+                    'confidence': 0.0,
+                    'preprocessed_image': preprocessed
                 }
 
             # 검출된 모든 텍스트를 합쳐서 파싱
@@ -298,7 +303,8 @@ class SerialNumberDetector:
                     'serial_number': None,
                     'product_code': None,
                     'confidence': 0.0,
-                    'detected_text': all_text
+                    'detected_text': all_text,
+                    'preprocessed_image': preprocessed
                 }
 
             full_serial, product_code, sequence_number = parsed
@@ -317,7 +323,8 @@ class SerialNumberDetector:
                 'product_code': product_code,
                 'sequence_number': sequence_number,
                 'confidence': float(avg_confidence),
-                'detected_text': all_text
+                'detected_text': all_text,
+                'preprocessed_image': preprocessed
             }
 
         except Exception as e:
@@ -327,7 +334,8 @@ class SerialNumberDetector:
                 'error': str(e),
                 'serial_number': None,
                 'product_code': None,
-                'confidence': 0.0
+                'confidence': 0.0,
+                'preprocessed_image': None
             }
 
 
