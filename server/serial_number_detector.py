@@ -129,7 +129,7 @@ class SerialNumberDetector:
 
         return upscaled
 
-    def detect_text(self, image: np.ndarray) -> list:
+    def detect_text(self, image: np.ndarray) -> tuple:
         """
         이미지에서 텍스트 검출 (EasyOCR)
 
@@ -137,7 +137,8 @@ class SerialNumberDetector:
             image: 입력 이미지
 
         Returns:
-            검출된 텍스트 리스트 [(bbox, text, confidence), ...]
+            (검출된 텍스트 리스트, 전처리된 이미지)
+            [(bbox, text, confidence), ...], preprocessed_image
         """
         if self.reader is None:
             raise RuntimeError("EasyOCR Reader가 초기화되지 않았습니다")
@@ -181,11 +182,11 @@ class SerialNumberDetector:
             else:
                 logger.warning(f"⚠️  신뢰도 {self.min_confidence:.0%} 이상인 텍스트가 없습니다")
 
-            return filtered_results
+            return filtered_results, preprocessed
 
         except Exception as e:
             logger.error(f"텍스트 검출 실패: {e}")
-            return []
+            return [], None
 
     def parse_serial_number(self, text: str) -> Optional[Tuple[str, str, str]]:
         """
@@ -273,11 +274,8 @@ class SerialNumberDetector:
             }
         """
         try:
-            # 전처리된 이미지 생성 (디버그 뷰어용으로 저장)
-            preprocessed = self.preprocess_image(image)
-
-            # 텍스트 검출
-            ocr_results = self.detect_text(image)
+            # 텍스트 검출 (전처리된 이미지도 함께 반환)
+            ocr_results, preprocessed = self.detect_text(image)
 
             if not ocr_results:
                 return {
