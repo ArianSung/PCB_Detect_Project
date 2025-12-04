@@ -1082,8 +1082,37 @@ def predict_dual():
                 'product_code': product_code,
                 'confidence': ocr_confidence,
                 'error': ocr_error,
-                'detected_text': ocr_result.get('detected_text', '') if serial_detector else ''
+                'detected_text': ocr_result.get('detected_text', '') if serial_detector and ocr_result else ''
             }
+
+            # SocketIO: 좌측 프레임 broadcast (디버그 뷰어용)
+            socketio.emit('frame_update', {
+                'camera_id': 'left',
+                'image': left_frame_base64,
+                'defect_type': decision,
+                'confidence': 1.0 if decision == 'normal' else 0.0,
+                'boxes_count': len(detections),
+                'boxes_data': detections,
+                'frame_shape': list(left_frame.shape),
+                'timestamp': datetime.now().isoformat(),
+                'type': 'final_frame'
+            })
+
+            # SocketIO: 우측 프레임 broadcast (디버그 뷰어용)
+            socketio.emit('frame_update', {
+                'camera_id': 'right',
+                'image': right_frame_base64,
+                'serial_number': serial_number,
+                'product_code': product_code,
+                'ocr_confidence': ocr_confidence,
+                'detected_text': ocr_result.get('detected_text', '') if serial_detector and ocr_result else '',
+                'error': ocr_error,
+                'frame_shape': list(rotated_right_display.shape),
+                'timestamp': datetime.now().isoformat(),
+                'type': 'final_frame'
+            })
+
+            logger.info(f"[DUAL] 양면 프레임 broadcast 완료 (좌: {len(detections)}개 부품, 우: OCR={serial_number})")
 
         # 10. 응답 생성
         inference_time_ms = (time.time() - start_time) * 1000
