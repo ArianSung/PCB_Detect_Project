@@ -160,12 +160,12 @@ class ComponentVerifier:
             detected_components_relative = []
             for det_comp in detected_components:
                 det_copy = det_comp.copy()
-                # 'center' 키가 있으면 상대좌표로 변환, 없으면 'relative_center' 사용
-                if 'center' in det_comp:
+                # 'relative_center' 키가 있으면 우선 사용, 없으면 'center'를 상대좌표로 변환
+                if 'relative_center' in det_comp:
+                    det_copy['center'] = det_comp['relative_center']
+                elif 'center' in det_comp:
                     cx, cy = det_comp['center']
                     det_copy['center'] = [cx - ref_x, cy - ref_y]
-                elif 'relative_center' in det_comp:
-                    det_copy['center'] = det_comp['relative_center']
                 else:
                     logger.warning(f"검출 컴포넌트에 'center' 또는 'relative_center' 키 없음: {det_comp}")
                     continue
@@ -173,13 +173,14 @@ class ComponentVerifier:
 
             detected_components = detected_components_relative
 
-            # 기준 컴포넌트를 상대좌표로 변환
+            # 기준 컴포넌트는 DB에서 이미 상대좌표로 저장되어 있으므로 변환 불필요
+            # DB 'center' 키는 이미 템플릿 기준 상대좌표임
             reference_components_relative = []
             for ref_comp in self.reference_components:
                 ref_copy = ref_comp.copy()
+                # DB는 이미 상대좌표를 'center' 키에 저장하므로 그대로 사용
                 if 'center' in ref_comp:
-                    cx, cy = ref_comp['center']
-                    ref_copy['center'] = [cx - ref_x, cy - ref_y]
+                    ref_copy['center'] = ref_comp['center']  # 이미 상대좌표
                 elif 'relative_center' in ref_comp:
                     ref_copy['center'] = ref_comp['relative_center']
                 else:
