@@ -106,16 +106,40 @@ class DualCameraClient:
         self.error_count = 0
         self.arduino_handler = arduino_handler
 
-    def setup_camera_v4l2(self, camera_index, exposure_abs, focus_abs):
+    def setup_camera_v4l2(self, camera_index, brightness, contrast, saturation, exposure_abs, focus_abs):
         """v4l2-ctl을 사용해 카메라 고급 설정
 
         Args:
             camera_index: 카메라 인덱스
+            brightness: 밝기
+            contrast: 대비
+            saturation: 채도
             exposure_abs: 노출 절대값
             focus_abs: 초점 절대값
         """
         try:
             device = f"/dev/video{camera_index}"
+
+            # 밝기 설정
+            subprocess.run(
+                ['v4l2-ctl', '-d', device, '-c', f'brightness={brightness}'],
+                capture_output=True,
+                timeout=2
+            )
+
+            # 대비 설정
+            subprocess.run(
+                ['v4l2-ctl', '-d', device, '-c', f'contrast={contrast}'],
+                capture_output=True,
+                timeout=2
+            )
+
+            # 채도 설정
+            subprocess.run(
+                ['v4l2-ctl', '-d', device, '-c', f'saturation={saturation}'],
+                capture_output=True,
+                timeout=2
+            )
 
             # 자동 노출 끄기 (1 = manual mode)
             subprocess.run(
@@ -145,7 +169,11 @@ class DualCameraClient:
                 timeout=2
             )
 
-            logger.info(f"✅ 카메라 {camera_index} v4l2 고급 설정 완료 (노출={exposure_abs}, 초점={focus_abs})")
+            logger.info(
+                f"✅ 카메라 {camera_index} v4l2 설정 완료: "
+                f"밝기={brightness}, 대비={contrast}, 채도={saturation}, "
+                f"노출={exposure_abs}, 초점={focus_abs}"
+            )
 
         except Exception as e:
             logger.warning(f"⚠️  카메라 {camera_index} v4l2 설정 실패: {e}")
@@ -160,17 +188,20 @@ class DualCameraClient:
             if not self.left_cap.isOpened():
                 raise RuntimeError(f"좌측 카메라 열기 실패 (index: {self.left_camera_index})")
 
-            # 좌측 카메라 설정
+            # 좌측 카메라 기본 설정 (해상도, FPS)
             self.left_cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
             self.left_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
             self.left_cap.set(cv2.CAP_PROP_FPS, TARGET_FPS)
-            self.left_cap.set(cv2.CAP_PROP_BRIGHTNESS, LEFT_CAM_BRIGHTNESS)
-            self.left_cap.set(cv2.CAP_PROP_CONTRAST, LEFT_CAM_CONTRAST)
-            self.left_cap.set(cv2.CAP_PROP_SATURATION, LEFT_CAM_SATURATION)
-            self.left_cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
 
-            # v4l2 고급 설정 (좌측)
-            self.setup_camera_v4l2(self.left_camera_index, LEFT_CAM_EXPOSURE_ABS, LEFT_CAM_FOCUS_ABS)
+            # v4l2 고급 설정 (좌측) - 모든 화질 파라미터를 v4l2로 설정
+            self.setup_camera_v4l2(
+                self.left_camera_index,
+                LEFT_CAM_BRIGHTNESS,
+                LEFT_CAM_CONTRAST,
+                LEFT_CAM_SATURATION,
+                LEFT_CAM_EXPOSURE_ABS,
+                LEFT_CAM_FOCUS_ABS
+            )
 
             logger.info("✅ 좌측 카메라 초기화 성공")
 
@@ -181,17 +212,20 @@ class DualCameraClient:
             if not self.right_cap.isOpened():
                 raise RuntimeError(f"우측 카메라 열기 실패 (index: {self.right_camera_index})")
 
-            # 우측 카메라 설정
+            # 우측 카메라 기본 설정 (해상도, FPS)
             self.right_cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
             self.right_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
             self.right_cap.set(cv2.CAP_PROP_FPS, TARGET_FPS)
-            self.right_cap.set(cv2.CAP_PROP_BRIGHTNESS, RIGHT_CAM_BRIGHTNESS)
-            self.right_cap.set(cv2.CAP_PROP_CONTRAST, RIGHT_CAM_CONTRAST)
-            self.right_cap.set(cv2.CAP_PROP_SATURATION, RIGHT_CAM_SATURATION)
-            self.right_cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
 
-            # v4l2 고급 설정 (우측)
-            self.setup_camera_v4l2(self.right_camera_index, RIGHT_CAM_EXPOSURE_ABS, RIGHT_CAM_FOCUS_ABS)
+            # v4l2 고급 설정 (우측) - 모든 화질 파라미터를 v4l2로 설정
+            self.setup_camera_v4l2(
+                self.right_camera_index,
+                RIGHT_CAM_BRIGHTNESS,
+                RIGHT_CAM_CONTRAST,
+                RIGHT_CAM_SATURATION,
+                RIGHT_CAM_EXPOSURE_ABS,
+                RIGHT_CAM_FOCUS_ABS
+            )
 
             logger.info("✅ 우측 카메라 초기화 성공")
 
