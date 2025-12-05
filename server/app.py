@@ -117,17 +117,14 @@ except Exception as e:
     logger.error(f"⚠️  템플릿 기반 정렬 시스템 초기화 실패: {e}")
     template_alignment = None
 
-# 시리얼 넘버 OCR 검출기 초기화
+# 시리얼 넘버 OCR 검출기 초기화 (PaddleOCR 3.3.2 버전 + GPU)
 serial_detector = None
 try:
-    serial_detector = SerialNumberDetector(
-        languages=['en'],  # 영어 OCR
-        gpu=True,  # GPU 사용
-        min_confidence=0.3  # 최소 신뢰도 30%
-    )
-    logger.info("✅ 시리얼 넘버 OCR 검출기 초기화 완료")
+    serial_detector = SerialNumberDetector()  # EasyOCR GPU 자동 사용 ⭐
+    logger.info("✅ 시리얼 넘버 OCR 검출기 초기화 완료 (PaddleOCR 3.3.2 + GPU)")
 except Exception as e:
     logger.error(f"⚠️  시리얼 넘버 OCR 검출기 초기화 실패: {e}")
+    logger.exception(e)
     serial_detector = None
 
 # PCB 정렬 및 컴포넌트 검증 모듈 초기화
@@ -210,7 +207,7 @@ frame_lock = threading.Lock()
 # Temporal Smoothing 설정 (깜빡거림 최소화)
 HISTORY_SIZE = 15         # 최근 15프레임 저장
 MIN_DETECTION_FRAMES = 5  # 최소 5프레임 검출 시 표시 (매우 안정적) ⭐
-MAX_MISSING_FRAMES = 20   # 사라진 후 20프레임까지 유지 (매우 오래 유지) ⭐
+MAX_MISSING_FRAMES = 3    # 사라진 후 3프레임까지 유지 (0.3초, 빠른 사라짐) ⭐ 수정됨
 IOU_THRESHOLD = 0.05      # 5% 이상만 겹쳐도 같은 객체로 판단 (극도로 관대) ⭐⭐
 CONFIDENCE_THRESHOLD = 0.3  # 신뢰도 30% 이상만 사용
 FREEZE_AFTER_FRAMES = 9999  # 프로즌 기능 비활성화 (사용자 요청) ⭐⭐⭐
@@ -878,10 +875,14 @@ def predict_test():
         }), 500
 
 
-@app.route('/predict_dual', methods=['POST'])
-def predict_dual():
+# =====================================================================
+# OLD VERSION - DISABLED (ComponentVerifier 통합 전 버전)
+# 신버전은 line 1469에 있음 (제품별 부품 검증 워크플로우)
+# =====================================================================
+# @app.route('/predict_dual', methods=['POST'])  # 비활성화됨
+def predict_dual_old():
     """
-    양면 동시 추론 (좌측 앞면 + 우측 뒷면)
+    양면 동시 추론 (좌측 앞면 + 우측 뒷면) - OLD VERSION
 
     뒷면: 시리얼 넘버 OCR → 제품 코드 추출 → 제품별 부품 배치 기준 로드
     앞면: YOLO 부품 검출 → 부품 위치 검증 → 최종 판정
@@ -974,6 +975,9 @@ def predict_dual():
 
         # OCR이 처리한 이미지 (전처리된 이미지 - 디버그 뷰어용)
         ocr_processed_image = None
+
+        # 디버그: serial_detector 상태 확인
+        logger.info(f"[DEBUG] serial_detector is None: {serial_detector is None}")
 
         if serial_detector is not None:
             try:
@@ -1465,7 +1469,11 @@ def predict_single():
 
 
 
-# 이 함수를 app.py의 1009-1314줄 사이에 있는 기존 predict_dual() 함수와 교체
+# =====================================================================
+# NEW VERSION - ACTIVE (ComponentVerifier 통합 버전) ⭐
+# 제품별 부품 검증 워크플로우 (DB 연동 + 상세 로깅)
+# =====================================================================
+@app.route('/predict_dual', methods=['POST'])
 def predict_dual():
     """
     양면 동시 추론 (제품별 부품 검증 워크플로우)
@@ -1787,6 +1795,7 @@ def predict_dual():
         with frame_lock:
             # OCR 전처리 이미지를 Base64로 인코딩 (디버그 뷰어 전송용)
             ocr_image_base64 = None
+            ocr_processed_image = ocr_result.get('processed_image', None)  # OCR 전처리 이미지 가져오기
             if ocr_processed_image is not None:
                 try:
                     _, buffer = cv2.imencode('.jpg', ocr_processed_image, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
