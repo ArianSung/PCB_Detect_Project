@@ -1843,6 +1843,87 @@ def predict_dual():
                 'timestamp': datetime.now().isoformat()
             }
 
+        # =====================================================================
+        # SocketIO: 디버그 뷰어로 양면 프레임 전송 ⭐
+        # =====================================================================
+        # detected_components를 boxes_data 형식으로 변환
+        boxes_data = []
+        for comp in detected_components:
+            boxes_data.append({
+                'class_name': comp['class_name'],
+                'bbox': comp['bbox'],
+                'center': comp['center'],
+                'confidence': comp['confidence']
+            })
+
+        # 좌측 프레임에 바운딩 박스 그리기
+        annotated_frame = left_frame.copy()
+        for comp in detected_components:
+            x1, y1, x2, y2 = comp['bbox']
+            cv2.rectangle(annotated_frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+            label = f"{comp['class_name']} {comp['confidence']:.2f}"
+            cv2.putText(annotated_frame, label, (int(x1), int(y1) - 10),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+        # Base64 인코딩 (SocketIO 전송용)
+        _, left_buffer = cv2.imencode('.jpg', annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+        left_frame_base64 = base64.b64encode(left_buffer).decode('utf-8')
+
+        # 우측 프레임 Base64 인코딩 (OCR 전처리된 이미지 사용)
+        if ocr_processed_image is not None:
+            # 그레이스케일 → BGR 변환 (디버그 뷰어 표시용)
+            if len(ocr_processed_image.shape) == 2:
+                rotated_right_display = cv2.cvtColor(ocr_processed_image, cv2.COLOR_GRAY2BGR)
+            else:
+                rotated_right_display = ocr_processed_image
+        else:
+            # OCR 실패 시 원본 회전 이미지 사용
+            rotated_right_display = cv2.rotate(right_frame, cv2.ROTATE_90_CLOCKWISE)
+
+        _, right_buffer = cv2.imencode('.jpg', rotated_right_display, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+        right_frame_base64 = base64.b64encode(right_buffer).decode('utf-8')
+
+        try:
+            # 좌측 프레임 전송 (부품 검출 결과)
+            socketio.emit('frame_update', {
+                'camera_id': 'left',
+                'image': left_frame_base64,
+                'defect_type': decision,
+                'confidence': 1.0 if decision == 'normal' else 0.0,
+                'boxes_count': len(boxes_data),
+                'boxes_data': boxes_data,
+                'frame_shape': list(annotated_frame.shape),
+                'timestamp': datetime.now().isoformat(),
+                'type': 'final_frame',
+                # ComponentVerifier 결과 추가
+                'verification': {
+                    'missing_count': verification_result['summary']['missing_count'],
+                    'misplaced_count': verification_result['summary']['misplaced_count'],
+                    'extra_count': verification_result['summary']['extra_count'],
+                    'correct_count': verification_result['summary']['correct_count']
+                }
+            })
+            logger.debug(f"[SocketIO] 좌측 프레임 전송: boxes={len(boxes_data)}, decision={decision}")
+
+            # 우측 프레임 전송 (시리얼 넘버 + OCR 결과)
+            socketio.emit('frame_update', {
+                'camera_id': 'right',
+                'image': right_frame_base64,
+                'serial_number': serial_number,
+                'product_code': product_code,
+                'ocr_confidence': ocr_result.get('confidence', 0.0) if ocr_result else 0.0,
+                'detected_text': ocr_result.get('detected_text', '') if ocr_result else '',
+                'error': ocr_result.get('error', None) if ocr_result else None,
+                'ocr_preprocessed_image': ocr_image_base64,  # OCR 전처리 이미지 전송
+                'frame_shape': list(rotated_right_display.shape),
+                'timestamp': datetime.now().isoformat(),
+                'type': 'ocr_result'
+            })
+            logger.debug(f"[SocketIO] 우측 프레임 전송: serial={serial_number}, product={product_code}")
+
+        except Exception as emit_err:
+            logger.warning(f"[SocketIO] 프레임 전송 실패: {emit_err}")
+
         return jsonify(response)
 
     except Exception as e:
