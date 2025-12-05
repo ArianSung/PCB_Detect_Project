@@ -123,76 +123,110 @@ class DualCameraClient:
             logger.warning(f"⚠️  카메라 {camera_index} v4l2 설정 실패: {e}")
 
     def initialize_cameras(self):
-        """양면 카메라 초기화"""
+        """양면 카메라 초기화 (단일 카메라 모드 지원)"""
+        left_success = False
+        right_success = False
+
+        # 좌측 카메라 (앞면) 초기화
         try:
-            # 좌측 카메라 (앞면) 초기화
             logger.info(f"좌측 카메라 초기화 중 (index: {self.left_camera_index})...")
             self.left_cap = cv2.VideoCapture(self.left_camera_index, cv2.CAP_V4L2)
 
             if not self.left_cap.isOpened():
-                raise RuntimeError(f"좌측 카메라 열기 실패 (index: {self.left_camera_index})")
+                logger.warning(f"⚠️  좌측 카메라 열기 실패 (index: {self.left_camera_index})")
+                self.left_cap = None
+            else:
+                # 좌측 카메라 설정
+                self.left_cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
+                self.left_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
+                self.left_cap.set(cv2.CAP_PROP_FPS, TARGET_FPS)
+                self.left_cap.set(cv2.CAP_PROP_BRIGHTNESS, CAM_BRIGHTNESS)
+                self.left_cap.set(cv2.CAP_PROP_CONTRAST, CAM_CONTRAST)
+                self.left_cap.set(cv2.CAP_PROP_SATURATION, CAM_SATURATION)
+                self.left_cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
 
-            # 좌측 카메라 설정
-            self.left_cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
-            self.left_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
-            self.left_cap.set(cv2.CAP_PROP_FPS, TARGET_FPS)
-            self.left_cap.set(cv2.CAP_PROP_BRIGHTNESS, CAM_BRIGHTNESS)
-            self.left_cap.set(cv2.CAP_PROP_CONTRAST, CAM_CONTRAST)
-            self.left_cap.set(cv2.CAP_PROP_SATURATION, CAM_SATURATION)
-            self.left_cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+                # v4l2 고급 설정
+                self.setup_camera_v4l2(self.left_camera_index)
 
-            # v4l2 고급 설정
-            self.setup_camera_v4l2(self.left_camera_index)
+                logger.info("✅ 좌측 카메라 초기화 성공")
+                left_success = True
+        except Exception as e:
+            logger.warning(f"⚠️  좌측 카메라 초기화 실패: {e}")
+            self.left_cap = None
 
-            logger.info("✅ 좌측 카메라 초기화 성공")
-
-            # 우측 카메라 (뒷면) 초기화
+        # 우측 카메라 (뒷면) 초기화
+        try:
             logger.info(f"우측 카메라 초기화 중 (index: {self.right_camera_index})...")
             self.right_cap = cv2.VideoCapture(self.right_camera_index, cv2.CAP_V4L2)
 
             if not self.right_cap.isOpened():
-                raise RuntimeError(f"우측 카메라 열기 실패 (index: {self.right_camera_index})")
+                logger.warning(f"⚠️  우측 카메라 열기 실패 (index: {self.right_camera_index})")
+                self.right_cap = None
+            else:
+                # 우측 카메라 설정
+                self.right_cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
+                self.right_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
+                self.right_cap.set(cv2.CAP_PROP_FPS, TARGET_FPS)
+                self.right_cap.set(cv2.CAP_PROP_BRIGHTNESS, CAM_BRIGHTNESS)
+                self.right_cap.set(cv2.CAP_PROP_CONTRAST, CAM_CONTRAST)
+                self.right_cap.set(cv2.CAP_PROP_SATURATION, CAM_SATURATION)
+                self.right_cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
 
-            # 우측 카메라 설정
-            self.right_cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
-            self.right_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
-            self.right_cap.set(cv2.CAP_PROP_FPS, TARGET_FPS)
-            self.right_cap.set(cv2.CAP_PROP_BRIGHTNESS, CAM_BRIGHTNESS)
-            self.right_cap.set(cv2.CAP_PROP_CONTRAST, CAM_CONTRAST)
-            self.right_cap.set(cv2.CAP_PROP_SATURATION, CAM_SATURATION)
-            self.right_cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+                # v4l2 고급 설정
+                self.setup_camera_v4l2(self.right_camera_index)
 
-            # v4l2 고급 설정
-            self.setup_camera_v4l2(self.right_camera_index)
-
-            logger.info("✅ 우측 카메라 초기화 성공")
-
-            # 초기 프레임 버리기 (카메라 안정화)
-            for _ in range(10):
-                self.left_cap.read()
-                self.right_cap.read()
-                time.sleep(0.1)
-
-            logger.info("✅ 양면 카메라 초기화 완료")
-            return True
-
+                logger.info("✅ 우측 카메라 초기화 성공")
+                right_success = True
         except Exception as e:
-            logger.error(f"❌ 카메라 초기화 실패: {e}")
+            logger.warning(f"⚠️  우측 카메라 초기화 실패: {e}")
+            self.right_cap = None
+
+        # 최소 하나의 카메라는 성공해야 함
+        if not left_success and not right_success:
+            logger.error("❌ 모든 카메라 초기화 실패. 최소 하나의 카메라가 필요합니다.")
             return False
 
+        # 초기 프레임 버리기 (카메라 안정화)
+        for _ in range(10):
+            if self.left_cap:
+                self.left_cap.read()
+            if self.right_cap:
+                self.right_cap.read()
+            time.sleep(0.1)
+
+        # 초기화 결과 로깅
+        if left_success and right_success:
+            logger.info("✅ 양면 카메라 초기화 완료 (양면 모드)")
+        elif left_success:
+            logger.info("✅ 카메라 초기화 완료 (좌측 단일 모드)")
+        else:
+            logger.info("✅ 카메라 초기화 완료 (우측 단일 모드)")
+
+        return True
+
     def capture_frames(self):
-        """양면 프레임 동시 촬영"""
+        """양면 프레임 동시 촬영 (단일 카메라 지원)"""
         try:
+            left_frame = None
+            right_frame = None
+
             # 좌측 프레임 (앞면)
-            ret_left, left_frame = self.left_cap.read()
-            if not ret_left or left_frame is None:
-                logger.error("좌측 프레임 촬영 실패")
-                return None, None
+            if self.left_cap:
+                ret_left, left_frame = self.left_cap.read()
+                if not ret_left or left_frame is None:
+                    logger.warning("좌측 프레임 촬영 실패")
+                    left_frame = None
 
             # 우측 프레임 (뒷면)
-            ret_right, right_frame = self.right_cap.read()
-            if not ret_right or right_frame is None:
-                logger.error("우측 프레임 촬영 실패")
+            if self.right_cap:
+                ret_right, right_frame = self.right_cap.read()
+                if not ret_right or right_frame is None:
+                    logger.warning("우측 프레임 촬영 실패")
+                    right_frame = None
+
+            # 최소 하나의 프레임은 성공해야 함
+            if left_frame is None and right_frame is None:
+                logger.error("모든 프레임 촬영 실패")
                 return None, None
 
             return left_frame, right_frame
@@ -202,17 +236,21 @@ class DualCameraClient:
             return None, None
 
     def send_frames(self, left_frame, right_frame):
-        """양면 프레임을 서버로 전송"""
+        """양면 프레임을 서버로 전송 (단일 카메라 지원)"""
         try:
             # 프레임 인코딩
-            _, left_buffer = cv2.imencode('.jpg', left_frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
-            _, right_buffer = cv2.imencode('.jpg', right_frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
+            left_image_base64 = None
+            right_image_base64 = None
 
-            # Base64 인코딩
-            left_image_base64 = base64.b64encode(left_buffer).decode('utf-8')
-            right_image_base64 = base64.b64encode(right_buffer).decode('utf-8')
+            if left_frame is not None:
+                _, left_buffer = cv2.imencode('.jpg', left_frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
+                left_image_base64 = base64.b64encode(left_buffer).decode('utf-8')
 
-            # 요청 데이터 구성
+            if right_frame is not None:
+                _, right_buffer = cv2.imencode('.jpg', right_frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
+                right_image_base64 = base64.b64encode(right_buffer).decode('utf-8')
+
+            # 요청 데이터 구성 (None도 전송 가능)
             payload = {
                 'left_image': left_image_base64,
                 'right_image': right_image_base64
