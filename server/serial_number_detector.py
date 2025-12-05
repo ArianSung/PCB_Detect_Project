@@ -254,8 +254,17 @@ class SerialNumberDetector:
             Returns:
                 8자리 일련번호 또는 None (유효하지 않을 경우)
             """
+            # **OCR 오인식 문자 치환** (O/o → 0, I/l → 1)
+            # 시리얼 넘버는 숫자만 포함하므로 알파벳을 숫자로 변환
+            corrected = serial_num.upper()
+            corrected = corrected.replace('O', '0')  # 알파벳 O → 숫자 0
+            corrected = corrected.replace('I', '1')  # 알파벳 I → 숫자 1
+            corrected = corrected.replace('L', '1')  # 알파벳 L → 숫자 1
+            corrected = corrected.replace('Z', '2')  # 알파벳 Z → 숫자 2 (가끔 발생)
+            corrected = corrected.replace('S', '5')  # 알파벳 S → 숫자 5 (가끔 발생)
+
             # 숫자만 추출 (하이픈, 공백 제거)
-            digits_only = ''.join(c for c in serial_num if c.isdigit())
+            digits_only = ''.join(c for c in corrected if c.isdigit())
 
             # **제품 코드 검증**
             if product_code not in VALID_PRODUCT_CODES:
