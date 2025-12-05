@@ -100,7 +100,7 @@ class SerialNumberDetector:
 
     def preprocess_image(self, image: np.ndarray) -> np.ndarray:
         """
-        OCR 전처리 (90도 회전 + 업스케일링 + CLAHE + 선명화)
+        OCR 전처리 (90도 회전 + 업스케일링 + CLAHE + 선명화 + 텍스트 굵게)
 
         Args:
             image: 입력 이미지
@@ -137,7 +137,13 @@ class SerialNumberDetector:
                           [0,-1,0]])
         sharpened = cv2.filter2D(enhanced, -1, kernel)
 
-        return sharpened
+        # **6단계: 텍스트 굵게 만들기 (Morphological Dilation)**
+        # - S/N의 '/' 같은 얇은 문자를 더 굵게 만들어 OCR 정확도 향상
+        # - 2x2 커널로 1회 팽창 (과도한 팽창 방지)
+        morph_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+        bold = cv2.dilate(sharpened, morph_kernel, iterations=1)
+
+        return bold
 
     def detect_text(self, image: np.ndarray) -> tuple:
         """
