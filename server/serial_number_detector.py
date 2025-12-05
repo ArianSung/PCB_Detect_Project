@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
 """
-시리얼 넘버 OCR 검출 모듈 (Tesseract OCR 버전)
+시리얼 넘버 OCR 검출 모듈 (PaddleOCR 버전)
 
 기능:
-    - Tesseract OCR을 이용한 시리얼 넘버 텍스트 인식
+    - PaddleOCR을 이용한 시리얼 넘버 텍스트 인식
     - 정규식 기반 시리얼 넘버 파싱 (S/N MBXX-00000001 형식)
     - 제품 코드 추출 (MBXX에서 XX 추출)
-    - PSM (Page Segmentation Mode) 최적화
+    - 딥러닝 기반 고정확도 OCR
 
 예시:
     S/N MBBC-00000001 → 제품 코드: BC
     S/N MBFT-12345678 → 제품 코드: FT
     S/N MBRS-99999999 → 제품 코드: RS
 
-Tesseract 장점:
-    - EasyOCR보다 훨씬 빠름 (CPU에서도 실시간 처리 가능)
-    - 영어/숫자 인식 정확도 매우 높음
-    - PSM 모드로 단일 라인 텍스트 최적화
-    - 화이트리스트로 인식 문자 제한 가능
+PaddleOCR 장점:
+    - 딥러닝 기반, 매우 높은 정확도
+    - 다양한 폰트와 각도에 강인함
+    - CPU/GPU 모두 지원
+    - 영어/숫자 인식 우수
 """
 
 import re
 import cv2
 import numpy as np
-import pytesseract
+from paddleocr import PaddleOCR
 import logging
 from typing import Optional, Tuple, Dict
 
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class SerialNumberDetector:
-    """시리얼 넘버 OCR 검출기 (Tesseract OCR 버전)"""
+    """시리얼 넘버 OCR 검출기 (PaddleOCR 버전)"""
 
     # 시리얼 넘버 정규식 패턴 (OCR 오인식 패턴 포함)
     # 형식: S/N MBXX-00000001
@@ -59,49 +59,56 @@ class SerialNumberDetector:
         re.IGNORECASE
     )
 
-    def __init__(self, psm_mode=7, oem_mode=3, whitelist=None):
+    def __init__(self, use_gpu=False, lang='en', det_db_thresh=0.3, det_db_box_thresh=0.5):
         """
         Args:
-            psm_mode: Tesseract PSM (Page Segmentation Mode)
-                - 3: Fully automatic page segmentation (기본값)
-                - 6: Uniform block of text (단일 텍스트 블록)
-                - 7: Single text line (단일 라인 - 시리얼 넘버에 최적) ⭐
-                - 8: Single word (단일 단어)
-                - 13: Raw line (원시 라인 - 매우 빠름)
-            oem_mode: OCR Engine Mode
-                - 0: Legacy engine only
-                - 1: Neural nets LSTM engine only
-                - 2: Legacy + LSTM engines
-                - 3: Default, based on what is available ⭐
-            whitelist: 인식할 문자 화이트리스트 (예: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-/ ')
+            use_gpu: GPU 사용 여부 (기본값: False, CPU 사용)
+            lang: OCR 언어 ('en' = 영어, 'ch' = 중국어+영어)
+            det_db_thresh: 텍스트 검출 임계값 (낮을수록 더 많이 검출, 기본 0.3)
+            det_db_box_thresh: 박스 임계값 (낮을수록 더 많이 검출, 기본 0.5)
         """
-        self.psm_mode = psm_mode
-        self.oem_mode = oem_mode
-        self.whitelist = whitelist
+        self.use_gpu = use_gpu
+        self.lang = lang
+        self.det_db_thresh = det_db_thresh
+        self.det_db_box_thresh = det_db_box_thresh
+        self.ocr = None
 
-        logger.info("🔤 시리얼 넘버 OCR 검출기 초기화 중 (Tesseract OCR 버전)...")
-        self._check_tesseract()
+        logger.info("🔤 시리얼 넘버 OCR 검출기 초기화 중 (PaddleOCR 버전)...")
+        self._initialize_paddleocr()
 
-    def _check_tesseract(self):
-        """Tesseract 설치 확인"""
+    def _initialize_paddleocr(self):
+        """PaddleOCR 초기화"""
         try:
-            version = pytesseract.get_tesseract_version()
-            logger.info(f"✅ Tesseract OCR 초기화 완료")
-            logger.info(f"   - 버전: {version}")
-            logger.info(f"   - PSM 모드: {self.psm_mode} (7=단일 라인 최적화)")
-            logger.info(f"   - OEM 모드: {self.oem_mode} (3=자동 선택)")
-            if self.whitelist:
-                logger.info(f"   - 화이트리스트: {self.whitelist[:50]}...")
+            # PaddleOCR 초기화
+            # use_angle_cls=True: 텍스트 각도 분류 사용 (회전된 텍스트 인식 향상)
+            # lang='en': 영어 모델 사용
+            # show_log=False: 로그 최소화
+            self.ocr = PaddleOCR(
+                use_angle_cls=True,  # 각도 분류 활성화 (회전 텍스트 인식)
+                lang=self.lang,
+                use_gpu=self.use_gpu,
+                show_log=False,  # PaddleOCR 내부 로그 비활성화
+                det_db_thresh=self.det_db_thresh,  # 검출 임계값
+                det_db_box_thresh=self.det_db_box_thresh,  # 박스 임계값
+                # rec_algorithm='CRNN',  # 인식 알고리즘 (기본값)
+                # det_algorithm='DB',    # 검출 알고리즘 (기본값)
+            )
+            logger.info(f"✅ PaddleOCR 초기화 완료")
+            logger.info(f"   - GPU 사용: {self.use_gpu}")
+            logger.info(f"   - 언어: {self.lang}")
+            logger.info(f"   - 각도 분류: True (회전 텍스트 지원)")
+            logger.info(f"   - 검출 임계값: {self.det_db_thresh}")
+            logger.info(f"   - 박스 임계값: {self.det_db_box_thresh}")
         except Exception as e:
-            logger.error(f"❌ Tesseract OCR 초기화 실패: {e}")
-            logger.error("   - 해결 방법: sudo apt install tesseract-ocr tesseract-ocr-eng")
+            logger.error(f"❌ PaddleOCR 초기화 실패: {e}")
             raise
 
     def preprocess_image(self, image: np.ndarray) -> np.ndarray:
         """
-        OCR 전처리 (90도 회전 + 업스케일링 + CLAHE + 선명화 + 이진화)
+        OCR 전처리 (90도 회전 + 업스케일링 + CLAHE + 선명화)
 
-        Tesseract는 이진화된 이미지에서 가장 잘 작동함
+        PaddleOCR는 그레이스케일보다 컬러 이미지에서 더 잘 작동하므로
+        이진화는 하지 않음
 
         Args:
             image: 입력 이미지
@@ -138,19 +145,13 @@ class SerialNumberDetector:
                           [0, -1, 0]])
         sharpened = cv2.filter2D(enhanced, -1, kernel)
 
-        # **6단계: Otsu 이진화** (Tesseract는 이진화 이미지에서 가장 잘 작동)
-        # - 흰색 배경에 검은색 텍스트로 변환
-        _, binary = cv2.threshold(sharpened, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-        # **7단계: 노이즈 제거** (Morphological Opening)
-        morph_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-        denoised = cv2.morphologyEx(binary, cv2.MORPH_OPEN, morph_kernel, iterations=1)
-
-        return denoised
+        # PaddleOCR는 그레이스케일도 잘 인식하므로 반환
+        # 이진화는 하지 않음 (딥러닝 모델은 그레이스케일/컬러에서 더 잘 작동)
+        return sharpened
 
     def detect_text(self, image: np.ndarray) -> tuple:
         """
-        이미지에서 텍스트 검출 (Tesseract OCR)
+        이미지에서 텍스트 검출 (PaddleOCR)
 
         Args:
             image: 입력 이미지
@@ -158,34 +159,30 @@ class SerialNumberDetector:
         Returns:
             (검출된 텍스트, 신뢰도, 전처리된 이미지)
         """
+        if self.ocr is None:
+            raise RuntimeError("PaddleOCR이 초기화되지 않았습니다")
+
         try:
             # 전처리
             preprocessed = self.preprocess_image(image)
 
-            # Tesseract 설정
-            config = f'--oem {self.oem_mode} --psm {self.psm_mode}'
+            # OCR 수행
+            # result = [([[x1, y1], [x2, y2], [x3, y3], [x4, y4]], (text, confidence)), ...]
+            result = self.ocr.ocr(preprocessed, cls=True)
 
-            # 화이트리스트 추가 (영어 대문자, 숫자, 특수문자만 인식)
-            if self.whitelist:
-                config += f' -c tessedit_char_whitelist={self.whitelist}'
-            else:
-                # 기본 화이트리스트: 영어 대문자, 숫자, 하이픈, 슬래시, 공백
-                config += ' -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-/: '
+            if not result or not result[0]:
+                logger.warning("[PaddleOCR] 텍스트 검출 실패 (빈 결과)")
+                return "", 0.0, preprocessed
 
-            # OCR 수행 (텍스트 + 신뢰도)
-            data = pytesseract.image_to_data(
-                preprocessed,
-                config=config,
-                output_type=pytesseract.Output.DICT
-            )
-
-            # 검출된 텍스트 결합
+            # 검출된 텍스트와 신뢰도 추출
             texts = []
             confidences = []
-            for i, text in enumerate(data['text']):
-                if text.strip():  # 빈 문자열 제외
+
+            for line in result[0]:
+                if line and len(line) >= 2:
+                    bbox, (text, confidence) = line
                     texts.append(text)
-                    confidences.append(data['conf'][i])
+                    confidences.append(confidence)
 
             # 전체 텍스트 결합
             full_text = ' '.join(texts)
@@ -193,12 +190,12 @@ class SerialNumberDetector:
             # 평균 신뢰도 계산
             avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
 
-            logger.debug(f"[Tesseract] 검출 텍스트: '{full_text}' (신뢰도: {avg_confidence:.2f})")
+            logger.debug(f"[PaddleOCR] 검출 텍스트: '{full_text}' (신뢰도: {avg_confidence:.2%})")
 
-            return full_text, avg_confidence / 100.0, preprocessed  # 신뢰도를 0~1 범위로 변환
+            return full_text, avg_confidence, preprocessed
 
         except Exception as e:
-            logger.error(f"❌ Tesseract OCR 실패: {e}")
+            logger.error(f"❌ PaddleOCR 실패: {e}", exc_info=True)
             return "", 0.0, preprocessed
 
     def normalize_serial(self, text: str) -> str:
@@ -258,6 +255,13 @@ class SerialNumberDetector:
         try:
             # OCR 수행
             detected_text, confidence, preprocessed = self.detect_text(image)
+
+            # /tmp/ocr_debug.jpg에 전처리 이미지 저장 ⭐
+            try:
+                cv2.imwrite('/tmp/ocr_debug.jpg', preprocessed)
+                logger.debug(f"[OCR-DEBUG] 전처리 이미지 저장: /tmp/ocr_debug.jpg (shape: {preprocessed.shape})")
+            except Exception as save_err:
+                logger.warning(f"[OCR-DEBUG] 이미지 저장 실패: {save_err}")
 
             if not detected_text:
                 return {
@@ -336,8 +340,8 @@ if __name__ == '__main__':
         format='[%(levelname)s] %(message)s'
     )
 
-    # Tesseract 검출기 초기화
-    detector = SerialNumberDetector(psm_mode=7)  # 단일 라인 모드
+    # PaddleOCR 검출기 초기화
+    detector = SerialNumberDetector(use_gpu=False)  # CPU 모드
 
     # 테스트 이미지 로드
     if len(sys.argv) > 1:
@@ -359,9 +363,7 @@ if __name__ == '__main__':
                 print(f"{key}: {value}")
         print("=" * 60)
 
-        # 전처리 이미지 저장
-        if result.get('preprocessed_image') is not None:
-            cv2.imwrite('/tmp/tesseract_preprocessed.jpg', result['preprocessed_image'])
-            print("✅ 전처리 이미지 저장: /tmp/tesseract_preprocessed.jpg")
+        # 전처리 이미지는 이미 /tmp/ocr_debug.jpg에 저장됨
+        print("✅ 전처리 이미지 저장: /tmp/ocr_debug.jpg")
     else:
         print("사용법: python serial_number_detector.py <이미지 경로>")
