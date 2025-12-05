@@ -20,6 +20,21 @@ PCB 검사 시스템 - 양면 동시 촬영 클라이언트 (제품별 부품 �
     CAMERA_HEIGHT=480
     JPEG_QUALITY=85
     TARGET_FPS=10
+
+    # 좌측 카메라 (앞면) 파라미터
+    LEFT_CAM_BRIGHTNESS=41
+    LEFT_CAM_CONTRAST=52
+    LEFT_CAM_SATURATION=59
+    LEFT_CAM_EXPOSURE=1521
+    LEFT_CAM_FOCUS=402
+
+    # 우측 카메라 (뒷면) 파라미터
+    RIGHT_CAM_BRIGHTNESS=41
+    RIGHT_CAM_CONTRAST=52
+    RIGHT_CAM_SATURATION=59
+    RIGHT_CAM_EXPOSURE=1521
+    RIGHT_CAM_FOCUS=402
+
     ARDUINO_ENABLED=true
     ARDUINO_PORT=/dev/ttyACM0
 """
@@ -52,12 +67,19 @@ ARDUINO_ENABLED = os.getenv('ARDUINO_ENABLED', 'false').lower() == 'true'
 ARDUINO_PORT = os.getenv('ARDUINO_PORT', '/dev/ttyACM0')
 ARDUINO_BAUDRATE = int(os.getenv('ARDUINO_BAUDRATE', 115200))
 
-# 카메라 화질 파라미터
-CAM_BRIGHTNESS = int(os.getenv('CAM_BRIGHTNESS', 41))
-CAM_CONTRAST = int(os.getenv('CAM_CONTRAST', 52))
-CAM_SATURATION = int(os.getenv('CAM_SATURATION', 59))
-CAM_EXPOSURE_ABS = int(os.getenv('CAM_EXPOSURE', 1521))
-CAM_FOCUS_ABS = int(os.getenv('CAM_FOCUS', 402))
+# 좌측 카메라 (앞면) 화질 파라미터
+LEFT_CAM_BRIGHTNESS = int(os.getenv('LEFT_CAM_BRIGHTNESS', 41))
+LEFT_CAM_CONTRAST = int(os.getenv('LEFT_CAM_CONTRAST', 52))
+LEFT_CAM_SATURATION = int(os.getenv('LEFT_CAM_SATURATION', 59))
+LEFT_CAM_EXPOSURE_ABS = int(os.getenv('LEFT_CAM_EXPOSURE', 1521))
+LEFT_CAM_FOCUS_ABS = int(os.getenv('LEFT_CAM_FOCUS', 402))
+
+# 우측 카메라 (뒷면) 화질 파라미터
+RIGHT_CAM_BRIGHTNESS = int(os.getenv('RIGHT_CAM_BRIGHTNESS', 41))
+RIGHT_CAM_CONTRAST = int(os.getenv('RIGHT_CAM_CONTRAST', 52))
+RIGHT_CAM_SATURATION = int(os.getenv('RIGHT_CAM_SATURATION', 59))
+RIGHT_CAM_EXPOSURE_ABS = int(os.getenv('RIGHT_CAM_EXPOSURE', 1521))
+RIGHT_CAM_FOCUS_ABS = int(os.getenv('RIGHT_CAM_FOCUS', 402))
 
 # 로깅 설정
 logging.basicConfig(
@@ -84,8 +106,14 @@ class DualCameraClient:
         self.error_count = 0
         self.arduino_handler = arduino_handler
 
-    def setup_camera_v4l2(self, camera_index):
-        """v4l2-ctl을 사용해 카메라 고급 설정"""
+    def setup_camera_v4l2(self, camera_index, exposure_abs, focus_abs):
+        """v4l2-ctl을 사용해 카메라 고급 설정
+
+        Args:
+            camera_index: 카메라 인덱스
+            exposure_abs: 노출 절대값
+            focus_abs: 초점 절대값
+        """
         try:
             device = f"/dev/video{camera_index}"
 
@@ -98,7 +126,7 @@ class DualCameraClient:
 
             # 노출 값 수동 설정
             subprocess.run(
-                ['v4l2-ctl', '-d', device, '-c', f'exposure_absolute={CAM_EXPOSURE_ABS}'],
+                ['v4l2-ctl', '-d', device, '-c', f'exposure_absolute={exposure_abs}'],
                 capture_output=True,
                 timeout=2
             )
@@ -112,12 +140,12 @@ class DualCameraClient:
 
             # 초점 값 수동 설정
             subprocess.run(
-                ['v4l2-ctl', '-d', device, '-c', f'focus_absolute={CAM_FOCUS_ABS}'],
+                ['v4l2-ctl', '-d', device, '-c', f'focus_absolute={focus_abs}'],
                 capture_output=True,
                 timeout=2
             )
 
-            logger.info(f"✅ 카메라 {camera_index} v4l2 고급 설정 완료")
+            logger.info(f"✅ 카메라 {camera_index} v4l2 고급 설정 완료 (노출={exposure_abs}, 초점={focus_abs})")
 
         except Exception as e:
             logger.warning(f"⚠️  카메라 {camera_index} v4l2 설정 실패: {e}")
@@ -136,13 +164,13 @@ class DualCameraClient:
             self.left_cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
             self.left_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
             self.left_cap.set(cv2.CAP_PROP_FPS, TARGET_FPS)
-            self.left_cap.set(cv2.CAP_PROP_BRIGHTNESS, CAM_BRIGHTNESS)
-            self.left_cap.set(cv2.CAP_PROP_CONTRAST, CAM_CONTRAST)
-            self.left_cap.set(cv2.CAP_PROP_SATURATION, CAM_SATURATION)
+            self.left_cap.set(cv2.CAP_PROP_BRIGHTNESS, LEFT_CAM_BRIGHTNESS)
+            self.left_cap.set(cv2.CAP_PROP_CONTRAST, LEFT_CAM_CONTRAST)
+            self.left_cap.set(cv2.CAP_PROP_SATURATION, LEFT_CAM_SATURATION)
             self.left_cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
 
-            # v4l2 고급 설정
-            self.setup_camera_v4l2(self.left_camera_index)
+            # v4l2 고급 설정 (좌측)
+            self.setup_camera_v4l2(self.left_camera_index, LEFT_CAM_EXPOSURE_ABS, LEFT_CAM_FOCUS_ABS)
 
             logger.info("✅ 좌측 카메라 초기화 성공")
 
@@ -157,13 +185,13 @@ class DualCameraClient:
             self.right_cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
             self.right_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
             self.right_cap.set(cv2.CAP_PROP_FPS, TARGET_FPS)
-            self.right_cap.set(cv2.CAP_PROP_BRIGHTNESS, CAM_BRIGHTNESS)
-            self.right_cap.set(cv2.CAP_PROP_CONTRAST, CAM_CONTRAST)
-            self.right_cap.set(cv2.CAP_PROP_SATURATION, CAM_SATURATION)
+            self.right_cap.set(cv2.CAP_PROP_BRIGHTNESS, RIGHT_CAM_BRIGHTNESS)
+            self.right_cap.set(cv2.CAP_PROP_CONTRAST, RIGHT_CAM_CONTRAST)
+            self.right_cap.set(cv2.CAP_PROP_SATURATION, RIGHT_CAM_SATURATION)
             self.right_cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
 
-            # v4l2 고급 설정
-            self.setup_camera_v4l2(self.right_camera_index)
+            # v4l2 고급 설정 (우측)
+            self.setup_camera_v4l2(self.right_camera_index, RIGHT_CAM_EXPOSURE_ABS, RIGHT_CAM_FOCUS_ABS)
 
             logger.info("✅ 우측 카메라 초기화 성공")
 
