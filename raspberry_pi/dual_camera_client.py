@@ -120,6 +120,52 @@ class DualCameraClient:
         try:
             device = f"/dev/video{camera_index}"
 
+            # ===== 1단계: 모든 자동 모드 끄기 (순서 중요!) =====
+
+            # 자동 화이트밸런스 끄기
+            result = subprocess.run(
+                ['v4l2-ctl', '-d', device, '-c', 'white_balance_automatic=0'],
+                capture_output=True,
+                timeout=2
+            )
+            if result.returncode != 0:
+                logger.debug(f"카메라 {camera_index}: white_balance_automatic 미지원")
+
+            # 자동 노출 끄기 (1 = manual mode, 카메라마다 다를 수 있음)
+            result = subprocess.run(
+                ['v4l2-ctl', '-d', device, '-c', 'auto_exposure=1'],
+                capture_output=True,
+                timeout=2
+            )
+            if result.returncode != 0:
+                logger.warning(f"⚠️  카메라 {camera_index}: auto_exposure=1 설정 실패, exposure_auto=1 시도")
+                # 다른 이름으로 시도
+                subprocess.run(
+                    ['v4l2-ctl', '-d', device, '-c', 'exposure_auto=1'],
+                    capture_output=True,
+                    timeout=2
+                )
+
+            # 자동 초점 끄기
+            result = subprocess.run(
+                ['v4l2-ctl', '-d', device, '-c', 'focus_auto=0'],
+                capture_output=True,
+                timeout=2
+            )
+            if result.returncode != 0:
+                logger.debug(f"카메라 {camera_index}: focus_auto 미지원")
+
+            # 자동 게인 끄기
+            result = subprocess.run(
+                ['v4l2-ctl', '-d', device, '-c', 'gain_automatic=0'],
+                capture_output=True,
+                timeout=2
+            )
+            if result.returncode != 0:
+                logger.debug(f"카메라 {camera_index}: gain_automatic 미지원")
+
+            # ===== 2단계: 수동 값 설정 =====
+
             # 밝기 설정
             subprocess.run(
                 ['v4l2-ctl', '-d', device, '-c', f'brightness={brightness}'],
@@ -141,33 +187,23 @@ class DualCameraClient:
                 timeout=2
             )
 
-            # 자동 노출 끄기 (1 = manual mode)
-            subprocess.run(
-                ['v4l2-ctl', '-d', device, '-c', 'auto_exposure=1'],
-                capture_output=True,
-                timeout=2
-            )
-
             # 노출 값 수동 설정
-            subprocess.run(
+            result = subprocess.run(
                 ['v4l2-ctl', '-d', device, '-c', f'exposure_absolute={exposure_abs}'],
                 capture_output=True,
                 timeout=2
             )
-
-            # 자동 초점 끄기
-            subprocess.run(
-                ['v4l2-ctl', '-d', device, '-c', 'focus_auto=0'],
-                capture_output=True,
-                timeout=2
-            )
+            if result.returncode != 0:
+                logger.warning(f"⚠️  카메라 {camera_index}: exposure_absolute 설정 실패")
 
             # 초점 값 수동 설정
-            subprocess.run(
+            result = subprocess.run(
                 ['v4l2-ctl', '-d', device, '-c', f'focus_absolute={focus_abs}'],
                 capture_output=True,
                 timeout=2
             )
+            if result.returncode != 0:
+                logger.warning(f"⚠️  카메라 {camera_index}: focus_absolute 설정 실패")
 
             logger.info(
                 f"✅ 카메라 {camera_index} v4l2 설정 완료: "
