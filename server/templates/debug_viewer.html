@@ -313,7 +313,7 @@
 
             <!-- OCR 처리 이미지 표시 -->
             <div style="margin-top: 20px;">
-                <div class="ocr-label" style="text-align: center; font-size: 1.1em;">📷 OCR 처리 중인 이미지 (원본)</div>
+                <div class="ocr-label" style="text-align: center; font-size: 1.1em;">📷 OCR 전처리 완료 이미지 (회전 + 업스케일 + CLAHE + 선명화 + 텍스트 굵게)</div>
                 <div style="text-align: center; margin-top: 10px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 10px;">
                     <img id="ocr-image" src="" alt="OCR 이미지 없음" style="max-width: 100%; height: auto; border-radius: 8px; display: none;">
                     <div id="ocr-image-placeholder" style="color: #999; padding: 40px;">이미지 대기 중...</div>
@@ -770,6 +770,18 @@
                     // 검증 결과 업데이트
                     if (data.verification) {
                         updateVerificationPanel(data.verification);
+
+                        // OCR 전처리 이미지 업데이트 ⭐
+                        const ocrImageEl = document.getElementById('ocr-image');
+                        const ocrImagePlaceholderEl = document.getElementById('ocr-image-placeholder');
+                        if (data.verification.ocr_preprocessed_image) {
+                            ocrImageEl.src = 'data:image/jpeg;base64,' + data.verification.ocr_preprocessed_image;
+                            ocrImageEl.style.display = 'block';
+                            ocrImagePlaceholderEl.style.display = 'none';
+                        } else {
+                            ocrImageEl.style.display = 'none';
+                            ocrImagePlaceholderEl.style.display = 'block';
+                        }
                     }
                 })
                 .catch(error => {

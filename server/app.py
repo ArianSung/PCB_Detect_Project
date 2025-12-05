@@ -1785,6 +1785,16 @@ def predict_dual():
 
         # latest_results 업데이트 (디버그 뷰어용)
         with frame_lock:
+            # OCR 전처리 이미지를 Base64로 인코딩 (디버그 뷰어 전송용)
+            ocr_image_base64 = None
+            if ocr_processed_image is not None:
+                try:
+                    _, buffer = cv2.imencode('.jpg', ocr_processed_image, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+                    ocr_image_base64 = base64.b64encode(buffer).decode('utf-8')
+                    logger.info(f"[OCR-DEBUG] 전처리 이미지 Base64 인코딩 완료 (크기: {len(ocr_image_base64)} bytes)")
+                except Exception as encode_err:
+                    logger.warning(f"[OCR-DEBUG] Base64 인코딩 실패: {encode_err}")
+
             latest_results['verification'] = {
                 'serial_number': serial_number,
                 'product_code': product_code,
@@ -1820,6 +1830,7 @@ def predict_dual():
                 },
                 'gpio_pin': gpio_pin,
                 'template_match_success': template_match_success,
+                'ocr_preprocessed_image': ocr_image_base64,  # OCR 전처리 이미지 추가 ⭐
                 'timestamp': datetime.now().isoformat()
             }
 
