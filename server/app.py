@@ -879,8 +879,8 @@ def predict_test():
 # OLD VERSION - DISABLED (ComponentVerifier 통합 전 버전)
 # 신버전은 line 1469에 있음 (제품별 부품 검증 워크플로우)
 # =====================================================================
-# @app.route('/predict_dual', methods=['POST'])  # 비활성화됨
-def predict_dual_old():
+@app.route('/predict_dual', methods=['POST'])
+def predict_dual():
     """
     양면 동시 추론 (좌측 앞면 + 우측 뒷면) - OLD VERSION
 
@@ -1197,26 +1197,70 @@ def predict_dual_old():
                 cv2.putText(annotated_frame, status_text, (10, img_h - 10),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, status_color, 2)
 
-        # 7. 부품 위치 검증 (임시 구현)
+        # 7. 부품 위치 검증 (ComponentVerifier 통합)
         missing_count = 0
         position_error_count = 0
-        correct_count = len(boxes_data)
+        extra_count = 0
+        correct_count = 0
+        verification_result = None
 
-        # TODO: 실제 제품별 부품 배치 기준과 비교하여 검증
+        # 제품 코드가 있으면 DB에서 기준 부품 배치 로드
+        if product_code:
+            try:
+                reference_components = db.get_reference_components(product_code)
+
+                if reference_components:
+                    logger.info(f"✅ 제품 '{product_code}' 기준 부품 {len(reference_components)}개 로드 완료")
+
+                    # ComponentVerifier 동적 생성 (제품별 기준 데이터 사용)
+                    verifier = ComponentVerifier(
+                        reference_components=reference_components,
+                        position_threshold=20.0,  # 20픽셀 허용 오차
+                        confidence_threshold=0.25
+                    )
+
+                    # 부품 검증 실행
+                    verification_result = verifier.verify_components(boxes_data, debug=False)
+
+                    # 검증 결과 추출
+                    missing_count = verification_result['summary']['missing_count']
+                    position_error_count = verification_result['summary']['misplaced_count']
+                    extra_count = verification_result['summary']['extra_count']
+                    correct_count = verification_result['summary']['correct_count']
+
+                    logger.info(
+                        f"✅ 부품 검증 완료: 정상 {correct_count}개, "
+                        f"위치오류 {position_error_count}개, "
+                        f"누락 {missing_count}개, "
+                        f"추가 {extra_count}개"
+                    )
+                else:
+                    logger.warning(f"⚠️ 제품 코드 '{product_code}'의 기준 데이터가 DB에 없습니다")
+                    correct_count = len(boxes_data)
+            except Exception as e:
+                logger.error(f"부품 검증 중 오류: {e}", exc_info=True)
+                correct_count = len(boxes_data)
+        else:
+            logger.warning("⚠️ 제품 코드가 없어 부품 검증을 건너뜁니다")
+            correct_count = len(boxes_data)
 
         # 8. 최종 판정
         if missing_count >= 3 or position_error_count >= 5 or (missing_count + position_error_count) >= 7:
             decision = "discard"
             gpio_pin = 22
+            logger.warning(f"🔴 치명적 불량 (폐기): 누락 {missing_count}개, 위치오류 {position_error_count}개")
         elif missing_count > 0:
             decision = "missing"
             gpio_pin = 17
+            logger.warning(f"🟡 부품 누락: {missing_count}개")
         elif position_error_count > 0:
             decision = "position_error"
             gpio_pin = 27
+            logger.warning(f"🟡 위치 오류: {position_error_count}개")
         else:
             decision = "normal"
             gpio_pin = 23
+            logger.info("🟢 정상 제품")
 
         # 9. 전역 변수 업데이트 (디버그 뷰어용)
         with frame_lock:
@@ -1473,8 +1517,8 @@ def predict_single():
 # NEW VERSION - ACTIVE (ComponentVerifier 통합 버전) ⭐
 # 제품별 부품 검증 워크플로우 (DB 연동 + 상세 로깅)
 # =====================================================================
-@app.route('/predict_dual', methods=['POST'])
-def predict_dual():
+# @app.route('/predict_dual', methods=['POST'])  # 비활성화됨 - OLD VERSION (line 882) 사용
+def predict_dual_new():
     """
     양면 동시 추론 (제품별 부품 검증 워크플로우)
 
@@ -1605,22 +1649,22 @@ def predict_dual():
         # ==================== 5. STEP 3: 앞면 템플릿 매칭 및 정렬 ====================
         alignment_time_start = time.time()
 
-        aligned_frame = left_frame
+        aligned_frame = left_frame  # 현재는 정렬 없이 원본 프레임 사용
         template_match_success = False
 
-        if template_alignment is not None:
+        # 템플릿 매칭은 현재 비활성화 (추후 구현 예정)
+        # TemplateBasedAlignment 클래스는 find_reference_point() 메서드만 제공하며
+        # align_pcb()나 align() 메서드는 존재하지 않음
+        if False and template_alignment is not None:
             try:
-                template_result = template_alignment.align(left_frame)
-                if template_result['success']:
-                    aligned_frame = template_result['aligned_frame']
+                reference_point = template_alignment.find_reference_point(left_frame)
+                if reference_point is not None:
                     template_match_success = True
-                    logger.info(f"✅ 템플릿 매칭 성공 (신뢰도: {template_result.get('confidence', 0):.2%})")
+                    logger.info(f"✅ 템플릿 매칭 성공 (기준점: {reference_point})")
                 else:
-                    logger.warning(f"⚠️  템플릿 매칭 실패: {template_result.get('error', 'Unknown')}")
+                    logger.warning("⚠️  템플릿 매칭 실패: 기준점을 찾을 수 없습니다")
             except Exception as e:
                 logger.error(f"템플릿 매칭 오류: {e}")
-        else:
-            logger.warning("템플릿 매칭 시스템이 초기화되지 않았습니다")
 
         alignment_time = (time.time() - alignment_time_start) * 1000  # ms
 
@@ -1642,6 +1686,7 @@ def predict_dual():
                     confidence = float(box.conf[0])
 
                     detected_components.append({
+                        'class_id': class_id,
                         'class_name': class_name,
                         'bbox': [float(x1), float(y1), float(x2), float(y2)],
                         'center': [float(cx), float(cy)],
@@ -1846,27 +1891,67 @@ def predict_dual():
         # =====================================================================
         # SocketIO: 디버그 뷰어로 양면 프레임 전송 ⭐
         # =====================================================================
-        # detected_components를 boxes_data 형식으로 변환
-        boxes_data = []
-        for comp in detected_components:
-            boxes_data.append({
-                'class_name': comp['class_name'],
-                'bbox': comp['bbox'],
-                'center': comp['center'],
-                'confidence': comp['confidence']
-            })
+        # detected_components를 두 가지 형식으로 변환
+        boxes_for_drawing = []  # draw_bounding_boxes용 (x1, y1, x2, y2 분리)
+        boxes_data = []  # SocketIO용 (bbox 배열)
 
-        # 좌측 프레임에 바운딩 박스 그리기
-        annotated_frame = left_frame.copy()
         for comp in detected_components:
             x1, y1, x2, y2 = comp['bbox']
-            cv2.rectangle(annotated_frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-            label = f"{comp['class_name']} {comp['confidence']:.2f}"
-            cv2.putText(annotated_frame, label, (int(x1), int(y1) - 10),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            cx, cy = comp['center']
 
-        # Base64 인코딩 (SocketIO 전송용)
-        _, left_buffer = cv2.imencode('.jpg', annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+            # draw_bounding_boxes용 형식
+            boxes_for_drawing.append({
+                'x1': x1,
+                'y1': y1,
+                'x2': x2,
+                'y2': y2,
+                'confidence': comp['confidence'],
+                'class_id': comp['class_id'],
+                'class_name': comp['class_name']
+            })
+
+            # SocketIO 전송용 형식 (old 버전과 동일하게)
+            box_data = {
+                'class_name': comp['class_name'],
+                'bbox': [x1, y1, x2, y2],
+                'center': [cx, cy],
+                'confidence': comp['confidence']
+            }
+
+            # 템플릿 상대 좌표는 predict_dual에서는 사용하지 않음 (old 버전 /predict 전용)
+            # reference_point 변수가 predict_dual에는 없으므로 스킵
+
+            boxes_data.append(box_data)
+
+        # YOLO ROI bbox 생성 (draw_bounding_boxes에 전달하기 위해)
+        # 템플릿 매칭 ROI를 시각화 (old 버전과 동일)
+        yolo_roi_bbox = None
+        if template_alignment and template_alignment.template is not None:
+            # YOLO ROI는 lines 1033-1039에서 정의됨
+            img_h, img_w = left_frame.shape[:2]
+            yolo_width = 600
+            yolo_height = 415
+            yolo_roi_x1 = (img_w - yolo_width) // 2
+            yolo_roi_y1 = (img_h - yolo_height) // 2 - 70
+            yolo_roi_bbox = (yolo_roi_x1, yolo_roi_y1, yolo_width, yolo_height)
+
+        # 기존 draw_bounding_boxes() 함수 사용 (pcb_bbox=None, yolo_roi_bbox 전달)
+        annotated_frame = draw_bounding_boxes(left_frame.copy(), boxes_for_drawing, None, yolo_roi_bbox)
+
+        # YOLO ROI 영역만 크롭 (디버그 뷰어 전송용)
+        if yolo_roi_bbox is not None:
+            yolo_roi_x1, yolo_roi_y1, yolo_width, yolo_height = yolo_roi_bbox
+            cropped_frame = annotated_frame[yolo_roi_y1:yolo_roi_y1+yolo_height, yolo_roi_x1:yolo_roi_x1+yolo_width]
+        else:
+            cropped_frame = annotated_frame  # ROI가 없으면 전체 프레임
+
+        # 크롭된 프레임 유효성 검증
+        if cropped_frame is None or cropped_frame.size == 0:
+            logger.warning("⚠️  cropped_frame이 비어있음. left_frame 원본 사용")
+            cropped_frame = left_frame.copy()
+
+        # Base64 인코딩 (크롭된 이미지 전송)
+        _, left_buffer = cv2.imencode('.jpg', cropped_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
         left_frame_base64 = base64.b64encode(left_buffer).decode('utf-8')
 
         # 우측 프레임 Base64 인코딩 (OCR 전처리된 이미지 사용)
@@ -1892,7 +1977,8 @@ def predict_dual():
                 'confidence': 1.0 if decision == 'normal' else 0.0,
                 'boxes_count': len(boxes_data),
                 'boxes_data': boxes_data,
-                'frame_shape': list(annotated_frame.shape),
+                # roi_status는 predict_dual에서는 사용하지 않음 (old 버전 /predict 전용)
+                'frame_shape': list(cropped_frame.shape),
                 'timestamp': datetime.now().isoformat(),
                 'type': 'final_frame',
                 # ComponentVerifier 결과 추가
