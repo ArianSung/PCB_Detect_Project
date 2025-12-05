@@ -27,7 +27,8 @@ class ComponentVerifier:
         self,
         reference_components: List[Dict],
         position_threshold: float = 20.0,
-        confidence_threshold: float = 0.25
+        confidence_threshold: float = 0.25,
+        reference_point: Optional[Tuple[int, int]] = None
     ):
         """
         Args:
@@ -36,25 +37,30 @@ class ComponentVerifier:
                     {
                         'class_name': str,
                         'bbox': [x1, y1, x2, y2],
-                        'center': [cx, cy],
+                        'center': [cx, cy],  # 절대 좌표
                         'confidence': float
                     },
                     ...
                 ]
             position_threshold (float): 위치 오류 판정 임계값 (픽셀 단위, 기본 20px)
             confidence_threshold (float): YOLO 신뢰도 임계값 (기본 0.25)
+            reference_point (tuple, optional): 템플릿 기준점 (x, y).
+                None이면 절대좌표 사용, 값이 있으면 상대좌표로 변환
         """
         self.reference_components = reference_components
         self.position_threshold = position_threshold
         self.confidence_threshold = confidence_threshold
+        self.reference_point = reference_point
 
         # 기준 컴포넌트를 클래스별로 그룹화
         self.reference_by_class = self._group_by_class(reference_components)
 
+        coord_system = "상대좌표" if reference_point else "절대좌표"
         logger.info(
             f"ComponentVerifier 초기화 완료 "
             f"(기준 컴포넌트: {len(reference_components)}개, "
-            f"위치 임계값: {position_threshold}px)"
+            f"위치 임계값: {position_threshold}px, "
+            f"좌표계: {coord_system})"
         )
 
     def _group_by_class(
@@ -146,6 +152,48 @@ class ComponentVerifier:
             if comp['confidence'] >= self.confidence_threshold
         ]
 
+        # 상대좌표 변환 (템플릿 기준점이 있는 경우)
+        if self.reference_point:
+            ref_x, ref_y = self.reference_point
+
+            # 검출 컴포넌트를 상대좌표로 변환
+            detected_components_relative = []
+            for det_comp in detected_components:
+                det_copy = det_comp.copy()
+                # 'center' 키가 있으면 상대좌표로 변환, 없으면 'relative_center' 사용
+                if 'center' in det_comp:
+                    cx, cy = det_comp['center']
+                    det_copy['center'] = [cx - ref_x, cy - ref_y]
+                elif 'relative_center' in det_comp:
+                    det_copy['center'] = det_comp['relative_center']
+                else:
+                    logger.warning(f"검출 컴포넌트에 'center' 또는 'relative_center' 키 없음: {det_comp}")
+                    continue
+                detected_components_relative.append(det_copy)
+
+            detected_components = detected_components_relative
+
+            # 기준 컴포넌트를 상대좌표로 변환
+            reference_components_relative = []
+            for ref_comp in self.reference_components:
+                ref_copy = ref_comp.copy()
+                if 'center' in ref_comp:
+                    cx, cy = ref_comp['center']
+                    ref_copy['center'] = [cx - ref_x, cy - ref_y]
+                elif 'relative_center' in ref_comp:
+                    ref_copy['center'] = ref_comp['relative_center']
+                else:
+                    logger.warning(f"기준 컴포넌트에 'center' 또는 'relative_center' 키 없음: {ref_comp}")
+                    continue
+                reference_components_relative.append(ref_copy)
+
+            reference_components_for_verification = reference_components_relative
+            logger.debug(f"🔄 상대좌표 변환 완료 (템플릿 기준점: {self.reference_point})")
+        else:
+            # 절대좌표 사용
+            reference_components_for_verification = self.reference_components
+            logger.debug(f"📍 절대좌표 사용 (템플릿 기준점 없음)")
+
         # 검출된 컴포넌트를 클래스별로 그룹화
         detected_by_class = self._group_by_class(detected_components)
 
@@ -154,8 +202,8 @@ class ComponentVerifier:
         extra = []
         correct = []
 
-        # 기준 컴포넌트 순회
-        for ref_comp in self.reference_components:
+        # 기준 컴포넌트 순회 (상대좌표 변환된 리스트 사용)
+        for ref_comp in reference_components_for_verification:
             class_name = ref_comp['class_name']
             ref_center = np.array(ref_comp['center'])
 

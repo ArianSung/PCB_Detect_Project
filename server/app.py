@@ -1212,14 +1212,15 @@ def predict_dual():
                 if reference_components:
                     logger.info(f"✅ 제품 '{product_code}' 기준 부품 {len(reference_components)}개 로드 완료")
 
-                    # ComponentVerifier 동적 생성 (제품별 기준 데이터 사용)
+                    # ComponentVerifier 동적 생성 (템플릿 기준 상대좌표 사용)
                     verifier = ComponentVerifier(
                         reference_components=reference_components,
                         position_threshold=20.0,  # 20픽셀 허용 오차
-                        confidence_threshold=0.25
+                        confidence_threshold=0.25,
+                        reference_point=reference_point  # ⭐ 템플릿 기준점 전달
                     )
 
-                    # 부품 검증 실행
+                    # 부품 검증 실행 (상대좌표로 자동 변환됨)
                     verification_result = verifier.verify_components(boxes_data, debug=False)
 
                     # 검증 결과 추출
