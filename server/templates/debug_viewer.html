@@ -274,9 +274,17 @@
                     </tbody>
                 </table>
             </div>
-            <button class="save-btn" id="save-components-btn" onclick="saveReferenceComponents()" disabled>
-                💾 기준 부품 배치 저장 (제품 코드: BC)
-            </button>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 20px;">
+                <button class="save-btn" id="save-bc-btn" onclick="saveReferenceComponents('BC')" disabled style="margin: 0;">
+                    💾 기준 배치 저장 (BC)
+                </button>
+                <button class="save-btn" id="save-ft-btn" onclick="saveReferenceComponents('FT')" disabled style="margin: 0; background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);">
+                    💾 기준 배치 저장 (FT)
+                </button>
+                <button class="save-btn" id="save-rs-btn" onclick="saveReferenceComponents('RS')" disabled style="margin: 0; background: linear-gradient(135deg, #FF5722 0%, #E64A19 100%);">
+                    💾 기준 배치 저장 (RS)
+                </button>
+            </div>
         </div>
 
         <!-- 시리얼 넘버 OCR 결과 패널 -->
@@ -431,7 +439,9 @@
         const confidenceElement = document.getElementById('confidence');
         const templateSizeElement = document.getElementById('template-size');
         const frameSizeElement = document.getElementById('frame-size');
-        const saveBtn = document.getElementById('save-components-btn');
+        const saveBcBtn = document.getElementById('save-bc-btn');
+        const saveFtBtn = document.getElementById('save-ft-btn');
+        const saveRsBtn = document.getElementById('save-rs-btn');
         const notification = document.getElementById('notification');
 
         // 현재 검출된 컴포넌트 데이터를 저장하는 전역 변수
@@ -480,11 +490,15 @@
                 currentComponentsData = componentsData;  // 전역 변수에 저장
                 updateComponentsTable(componentsData);
 
-                // 저장 버튼 활성화/비활성화
+                // 저장 버튼 활성화/비활성화 (모든 제품 코드 버튼)
                 if (componentsData.length > 0) {
-                    saveBtn.disabled = false;
+                    saveBcBtn.disabled = false;
+                    saveFtBtn.disabled = false;
+                    saveRsBtn.disabled = false;
                 } else {
-                    saveBtn.disabled = true;
+                    saveBcBtn.disabled = true;
+                    saveFtBtn.disabled = true;
+                    saveRsBtn.disabled = true;
                 }
             } else if (data.camera_id === 'right') {
                 // 우측 카메라 (OCR) 데이터 처리
@@ -871,15 +885,29 @@
         }
 
         // 기준 부품 배치 저장 함수
-        async function saveReferenceComponents() {
+        async function saveReferenceComponents(productCode) {
             if (currentComponentsData.length === 0) {
                 showNotification('검출된 컴포넌트가 없습니다.', 'error');
                 return;
             }
 
+            // 클릭한 버튼 찾기
+            let clickedBtn;
+            let originalText;
+            if (productCode === 'BC') {
+                clickedBtn = saveBcBtn;
+                originalText = '💾 기준 배치 저장 (BC)';
+            } else if (productCode === 'FT') {
+                clickedBtn = saveFtBtn;
+                originalText = '💾 기준 배치 저장 (FT)';
+            } else if (productCode === 'RS') {
+                clickedBtn = saveRsBtn;
+                originalText = '💾 기준 배치 저장 (RS)';
+            }
+
             // 버튼 비활성화 (중복 클릭 방지)
-            saveBtn.disabled = true;
-            saveBtn.textContent = '💾 저장 중...';
+            clickedBtn.disabled = true;
+            clickedBtn.textContent = '💾 저장 중...';
 
             try {
                 const response = await fetch('/save_reference_components', {
@@ -888,7 +916,7 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        product_code: 'BC',
+                        product_code: productCode,
                         components: currentComponentsData,
                         tolerance_px: 30.0  // 카메라 거리 차이 고려한 허용 오차
                     })
@@ -897,19 +925,19 @@
                 const result = await response.json();
 
                 if (response.ok && result.status === 'ok') {
-                    showNotification(`✅ ${result.message} (${result.components_saved}개)`, 'success');
-                    console.log('✅ 기준 부품 배치 저장 성공:', result);
+                    showNotification(`✅ ${productCode} 제품 기준 배치 저장 완료 (${result.components_saved}개)`, 'success');
+                    console.log(`✅ ${productCode} 기준 부품 배치 저장 성공:`, result);
                 } else {
-                    showNotification(`❌ 저장 실패: ${result.error || '알 수 없는 오류'}`, 'error');
-                    console.error('❌ 저장 실패:', result);
+                    showNotification(`❌ ${productCode} 저장 실패: ${result.error || '알 수 없는 오류'}`, 'error');
+                    console.error(`❌ ${productCode} 저장 실패:`, result);
                 }
             } catch (error) {
                 showNotification(`❌ 서버 오류: ${error.message}`, 'error');
                 console.error('❌ 서버 오류:', error);
             } finally {
                 // 버튼 다시 활성화
-                saveBtn.disabled = false;
-                saveBtn.textContent = '💾 기준 부품 배치 저장 (제품 코드: BC)';
+                clickedBtn.disabled = false;
+                clickedBtn.textContent = originalText;
             }
         }
 

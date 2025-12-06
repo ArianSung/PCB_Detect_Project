@@ -1104,7 +1104,7 @@ def predict_dual():
 
                 logger.info(f"[DUAL-LEFT] YOLO 추론 완료: 원본 {len(raw_boxes_data)}개 → 필터링 {len(filtered_boxes)}개 → 평활화 {len(smoothed_boxes)}개 객체")
 
-                # 디버그 뷰어용 데이터 구조 변환 (relative_center 포함!)
+                # 디버그 뷰어용 데이터 구조 변환 (절대좌표 + 상대좌표)
                 boxes_data = []
                 for box in smoothed_boxes:
                     cx = (box['x1'] + box['x2']) / 2
@@ -1113,11 +1113,11 @@ def predict_dual():
                     box_data = {
                         'class_name': box['class_name'],
                         'bbox': [box['x1'], box['y1'], box['x2'], box['y2']],
-                        'center': [cx, cy],
+                        'center': [cx, cy],  # 절대좌표 (디버그 뷰어용)
                         'confidence': box['confidence']
                     }
 
-                    # 템플릿 기준점을 (0,0)으로 하는 상대 좌표 추가
+                    # 템플릿 기준점을 (0,0)으로 하는 상대 좌표 추가 (ComponentVerifier용)
                     if reference_point:
                         ref_x, ref_y = reference_point
                         rel_x = cx - ref_x
@@ -1217,10 +1217,10 @@ def predict_dual():
                         reference_components=reference_components,
                         position_threshold=20.0,  # 20픽셀 허용 오차
                         confidence_threshold=0.25,
-                        reference_point=reference_point  # ⭐ 템플릿 기준점 전달
+                        reference_point=reference_point  # ⭐ 템플릿 기준점 전달 (검출 좌표 → 상대좌표 변환)
                     )
 
-                    # 부품 검증 실행 (상대좌표로 자동 변환됨)
+                    # 부품 검증 실행 (DB와 검출 모두 상대좌표 사용)
                     verification_result = verifier.verify_components(boxes_data, debug=False)
 
                     # 검증 결과 추출
