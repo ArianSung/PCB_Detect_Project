@@ -236,6 +236,25 @@ tracked_objects = {
 next_object_id = 0
 tracking_lock = threading.Lock()
 
+# ========================================
+# 컨베이어 벨트 스냅샷 시스템 (중복 방지) ⭐⭐⭐
+# ========================================
+# 스냅샷 상태 관리
+pcb_snapshot_state = {
+    'last_snapshot_time': 0,          # 마지막 스냅샷 캡처 시간 (timestamp)
+    'last_reference_point': None,     # 마지막 기준점 위치 (x, y)
+    'snapshot_frames': {              # 저장된 스냅샷 프레임
+        'left': None,
+        'right': None
+    },
+    'processing_in_progress': False,  # 검증 진행 중 플래그
+    'cooldown_time': 3.0,             # 재캡처 방지 쿨다운 (초) - 컨베이어 속도에 따라 조정
+    'position_threshold': 100         # 위치 변화 임계값 (픽셀) - 컨베이어 속도에 따라 조정
+}
+
+# Lock 추가
+snapshot_lock = threading.Lock()
+
 # 완전 정지 모드 (모든 객체가 frozen 상태가 되면 프레임 업데이트 중지) ⭐⭐⭐
 camera_frozen_state = {
     'left': False,   # True가 되면 프레임 업데이트 중지
@@ -253,6 +272,79 @@ stable_frame_count = {
     'left': 0,
     'right': 0
 }
+
+
+# ========================================
+# 컨베이어 벨트 스냅샷 헬퍼 함수 ⭐⭐⭐
+# ========================================
+
+def is_new_pcb(current_ref_point, current_time):
+    """
+    새로운 PCB인지 판단 (중복 방지)
+
+    판단 기준:
+    1. 충분한 시간이 지났는가? (cooldown_time)
+    2. 기준점이 충분히 이동했는가? (position_threshold)
+
+    Args:
+        current_ref_point (tuple): 현재 템플릿 기준점 (x, y)
+        current_time (float): 현재 타임스탬프
+
+    Returns:
+        bool: True면 새로운 PCB, False면 이전 PCB
+    """
+    with snapshot_lock:
+        last_time = pcb_snapshot_state['last_snapshot_time']
+        last_point = pcb_snapshot_state['last_reference_point']
+
+        # 1. 시간 체크
+        time_elapsed = current_time - last_time
+        if time_elapsed < pcb_snapshot_state['cooldown_time']:
+            return False  # 쿨다운 시간 미달
+
+        # 2. 위치 체크 (이전 기준점이 있는 경우)
+        if last_point is not None:
+            distance = np.sqrt(
+                (current_ref_point[0] - last_point[0])**2 +
+                (current_ref_point[1] - last_point[1])**2
+            )
+
+            if distance < pcb_snapshot_state['position_threshold']:
+                return False  # 위치 변화 미달 (같은 PCB)
+
+        return True  # 새로운 PCB
+
+
+def save_snapshot(left_frame, right_frame, reference_point):
+    """
+    양면 프레임 스냅샷 저장
+
+    Args:
+        left_frame (np.ndarray): 좌측(앞면) 프레임
+        right_frame (np.ndarray): 우측(뒷면) 프레임
+        reference_point (tuple): 템플릿 기준점 (x, y)
+    """
+    with snapshot_lock:
+        pcb_snapshot_state['snapshot_frames']['left'] = left_frame.copy()
+        pcb_snapshot_state['snapshot_frames']['right'] = right_frame.copy()
+        pcb_snapshot_state['last_snapshot_time'] = time.time()
+        pcb_snapshot_state['last_reference_point'] = reference_point
+        pcb_snapshot_state['processing_in_progress'] = True
+
+        logger.info(
+            f"✅ 스냅샷 저장 완료 "
+            f"(기준점: {reference_point}, "
+            f"시간: {time.strftime('%H:%M:%S')})"
+        )
+
+
+def mark_snapshot_processed():
+    """
+    스냅샷 처리 완료 마킹
+    """
+    with snapshot_lock:
+        pcb_snapshot_state['processing_in_progress'] = False
+        logger.info("✅ 스냅샷 처리 완료")
 
 
 @app.route('/health', methods=['GET'])
@@ -1056,10 +1148,37 @@ def predict_dual():
                 ref_x, ref_y = reference_point
                 is_in_roi = (roi_x1 <= ref_x <= roi_x2 and roi_y1 <= ref_y <= roi_y2)
 
+                # ⭐ 스냅샷 캡처 로직 추가 ⭐
+                current_time = time.time()
+
                 if is_in_roi:
-                    should_run_yolo = True
-                    roi_status = "in_roi"
-                    logger.info(f"[DUAL-LEFT] ✅ 템플릿이 ROI 안: ({ref_x}, {ref_y}) → YOLO 실행")
+                    # ROI 진입 감지 + 새로운 PCB 확인
+                    if is_new_pcb(reference_point, current_time):
+                        # 새로운 PCB → 스냅샷 저장
+                        save_snapshot(left_frame, right_frame, reference_point)
+                        should_run_yolo = True
+                        roi_status = "snapshot_captured"
+                        logger.info(
+                            f"📸 [DUAL] 새로운 PCB 감지 → 스냅샷 캡처 "
+                            f"(기준점: {reference_point})"
+                        )
+                    elif pcb_snapshot_state['processing_in_progress']:
+                        # 이전 PCB의 스냅샷 처리 진행 중 → 스냅샷 사용
+                        left_frame = pcb_snapshot_state['snapshot_frames']['left']
+                        right_frame = pcb_snapshot_state['snapshot_frames']['right']
+                        should_run_yolo = True
+                        roi_status = "using_snapshot"
+                        logger.info(
+                            f"🔄 [DUAL] 기존 스냅샷 사용 "
+                            f"(같은 PCB, 중복 방지)"
+                        )
+                    else:
+                        # 같은 PCB + 이미 처리 완료 → YOLO 스킵
+                        should_run_yolo = False
+                        roi_status = "duplicate_pcb"
+                        logger.info(
+                            f"⏭️ [DUAL] 중복 PCB 감지 → YOLO 건너뛰기"
+                        )
                 else:
                     should_run_yolo = False
                     roi_status = "out_of_roi"
@@ -1262,6 +1381,10 @@ def predict_dual():
             decision = "normal"
             gpio_pin = 23
             logger.info("🟢 정상 제품")
+
+        # ⭐ 스냅샷 처리 완료 마킹 ⭐
+        if should_run_yolo and roi_status in ["snapshot_captured", "using_snapshot"]:
+            mark_snapshot_processed()
 
         # 9. 전역 변수 업데이트 (디버그 뷰어용)
         with frame_lock:
