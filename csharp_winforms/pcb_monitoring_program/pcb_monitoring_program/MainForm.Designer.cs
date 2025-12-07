@@ -43,8 +43,15 @@
             pictureBox_Main_user = new PictureBox();
             btnLogout = new Button();
             cardLogout = new Panel();
+            btnStop = new Button();
+            btnStart = new Button();
+            pnlStatus = new Panel();
+            lblStatus = new Label();
+            lblLine1 = new Label();
+            cardStatus = new Panel();
             ((System.ComponentModel.ISupportInitialize)pictureBox_Main_user).BeginInit();
             cardLogout.SuspendLayout();
+            cardStatus.SuspendLayout();
             SuspendLayout();
             // 
             // btnDashboard
@@ -115,9 +122,9 @@
             labelTitle.Font = new Font("Arial", 36F, FontStyle.Bold, GraphicsUnit.Point, 0);
             labelTitle.ForeColor = SystemColors.Window;
             labelTitle.ImageAlign = ContentAlignment.TopLeft;
-            labelTitle.Location = new Point(273, 28);
+            labelTitle.Location = new Point(905, 28);
             labelTitle.Name = "labelTitle";
-            labelTitle.Size = new Size(1590, 56);
+            labelTitle.Size = new Size(327, 56);
             labelTitle.TabIndex = 6;
             labelTitle.Text = "Loading...";
             labelTitle.TextAlign = ContentAlignment.MiddleCenter;
@@ -126,7 +133,7 @@
             // 
             labelTime.AutoSize = true;
             labelTime.Font = new Font("Arial", 24F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            labelTime.Location = new Point(1670, 4);
+            labelTime.Location = new Point(1632, 58);
             labelTime.Name = "labelTime";
             labelTime.Size = new Size(231, 36);
             labelTime.TabIndex = 7;
@@ -202,14 +209,83 @@
             cardLogout.Size = new Size(245, 111);
             cardLogout.TabIndex = 13;
             // 
+            // btnStop
+            // 
+            btnStop.BackColor = Color.FromArgb(64, 64, 64);
+            btnStop.Font = new Font("맑은 고딕", 20.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            btnStop.ForeColor = Color.FromArgb(255, 128, 128);
+            btnStop.Location = new Point(490, 46);
+            btnStop.Name = "btnStop";
+            btnStop.Size = new Size(150, 70);
+            btnStop.TabIndex = 15;
+            btnStop.Text = "Stop";
+            btnStop.UseVisualStyleBackColor = false;
+            btnStop.Click += btnStop_Click;
+            // 
+            // btnStart
+            // 
+            btnStart.BackColor = Color.FromArgb(64, 64, 64);
+            btnStart.Font = new Font("맑은 고딕", 20.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            btnStart.ForeColor = Color.FromArgb(128, 255, 128);
+            btnStart.Location = new Point(312, 46);
+            btnStart.Name = "btnStart";
+            btnStart.Size = new Size(150, 70);
+            btnStart.TabIndex = 14;
+            btnStart.Text = "Start";
+            btnStart.UseVisualStyleBackColor = false;
+            btnStart.Click += btnStart_Click;
+            // 
+            // pnlStatus
+            // 
+            pnlStatus.BackColor = Color.Lime;
+            pnlStatus.Location = new Point(16, 31);
+            pnlStatus.Name = "pnlStatus";
+            pnlStatus.Size = new Size(14, 14);
+            pnlStatus.TabIndex = 16;
+            // 
+            // lblStatus
+            // 
+            lblStatus.AutoSize = true;
+            lblStatus.Font = new Font("맑은 고딕", 15.75F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            lblStatus.ForeColor = Color.White;
+            lblStatus.Location = new Point(100, 7);
+            lblStatus.Name = "lblStatus";
+            lblStatus.Size = new Size(76, 30);
+            lblStatus.TabIndex = 18;
+            lblStatus.Text = "가동중";
+            // 
+            // lblLine1
+            // 
+            lblLine1.AutoSize = true;
+            lblLine1.Font = new Font("맑은 고딕", 15.75F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            lblLine1.ForeColor = Color.White;
+            lblLine1.Location = new Point(37, 7);
+            lblLine1.Name = "lblLine1";
+            lblLine1.Size = new Size(63, 30);
+            lblLine1.TabIndex = 17;
+            lblLine1.Text = "Line1";
+            // 
+            // cardStatus
+            // 
+            cardStatus.Controls.Add(lblLine1);
+            cardStatus.Controls.Add(pnlStatus);
+            cardStatus.Controls.Add(lblStatus);
+            cardStatus.Location = new Point(675, 46);
+            cardStatus.Name = "cardStatus";
+            cardStatus.Size = new Size(224, 69);
+            cardStatus.TabIndex = 19;
+            // 
             // MainForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(64, 64, 64);
             ClientSize = new Size(1904, 1051);
-            Controls.Add(cardLogout);
             Controls.Add(labelTime);
+            Controls.Add(cardStatus);
+            Controls.Add(btnStop);
+            Controls.Add(btnStart);
+            Controls.Add(cardLogout);
             Controls.Add(panelContent);
             Controls.Add(btnSetting);
             Controls.Add(btnUserManagement);
@@ -225,6 +301,8 @@
             ((System.ComponentModel.ISupportInitialize)pictureBox_Main_user).EndInit();
             cardLogout.ResumeLayout(false);
             cardLogout.PerformLayout();
+            cardStatus.ResumeLayout(false);
+            cardStatus.PerformLayout();
             ResumeLayout(false);
             PerformLayout();
         }
@@ -245,5 +323,11 @@
         private PictureBox pictureBox_Main_user;
         private Button btnLogout;
         private Panel cardLogout;
+        private Button btnStop;
+        private Button btnStart;
+        private Panel pnlStatus;
+        private Label lblStatus;
+        private Label lblLine1;
+        private Panel cardStatus;
     }
 }

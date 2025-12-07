@@ -89,7 +89,7 @@ namespace pcb_monitoring_program.Views.Statistics
             {
                 if (ctrl is Button btn)
                 {
-                    btn.BackColor = Color.FromArgb(64, 64, 64);
+                    btn.BackColor = Color.FromArgb(54, 54, 54);
                     btn.ForeColor = Color.White;
                     btn.FlatStyle = FlatStyle.Flat;
                     btn.FlatAppearance.BorderSize = 0;

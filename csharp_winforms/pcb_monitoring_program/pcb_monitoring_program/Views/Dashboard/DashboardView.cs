@@ -1,17 +1,20 @@
-﻿using System;
+﻿using pcb_monitoring_program;
+using pcb_monitoring_program.DatabaseManager;
+using pcb_monitoring_program.DatabaseManager.Models;
+using pcb_monitoring_program.Views.Monitoring;
+using SocketIOClient;              
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO;                   
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
-using pcb_monitoring_program;
-using pcb_monitoring_program.DatabaseManager;
-using pcb_monitoring_program.DatabaseManager.Models;
 
 namespace pcb_monitoring_program.Views.Dashboard
 {
@@ -51,14 +54,36 @@ namespace pcb_monitoring_program.Views.Dashboard
         private string _selectedDailyTargetCategory = "달성";      // "달성" or "미달성"
         private string _selectedDefectCategoryName = "부품불량";   // "부품불량" / "S/N불량" / "폐기"
 
+        private SocketIO _socket;
+        private System.Windows.Forms.Timer _frameRequestTimer;
+
+        private int _frontFrameCount = 0;
+        private int _backFrameCount = 0;
+
+        private DateTime _lastFrontUpdate = DateTime.MinValue;
+        private DateTime _lastBackUpdate = DateTime.MinValue;
+        private const int MIN_UPDATE_INTERVAL_MS = 33; // 30 FPS 기준
+
+        // Flask 서버 URL (MonitoringView와 동일하게 맞춤)
+        private const string SERVER_URL = "http://100.80.24.53:5000";
+
         public DashboardView()
         {
             InitializeComponent();
-            this.DoubleBuffered = true; 
-          
+            this.DoubleBuffered = true;
+
+            EnableDoubleBuffering(pb_DashFront);
+            EnableDoubleBuffering(pb_DashBack);
+
+            pb_DashFront.SizeMode = PictureBoxSizeMode.StretchImage;
+            pb_DashBack.SizeMode = PictureBoxSizeMode.StretchImage;
+
+            // 대시보드 컨트롤이 파괴될 때 WebSocket 정리
+            this.HandleDestroyed += OnHandleDestroyed;
+
         }
 
-        private void DashboardView_Load(object sender, EventArgs e)
+        private async void DashboardView_Load(object sender, EventArgs e)
         {
 
 
@@ -111,6 +136,11 @@ namespace pcb_monitoring_program.Views.Dashboard
                 RedrawDashboardCharts();
             };
             _refreshTimer.Start();
+
+            if (!DesignMode)
+            {
+                await InitializeWebSocket();
+            }
         }
 
 
@@ -155,6 +185,249 @@ namespace pcb_monitoring_program.Views.Dashboard
             catch (Exception ex)
             {
                 Console.WriteLine($"[ReloadHourlyDataFromDb 실패] {ex.Message}");
+            }
+        }
+
+        private async Task InitializeWebSocket()
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("[DashboardView] WebSocket 연결 시작...");
+
+                _socket = new SocketIO(SERVER_URL);
+
+                _socket.OnConnected += async (sender, e) =>
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DashboardView] WebSocket 연결 성공: {SERVER_URL}");
+
+                    if (InvokeRequired)
+                        Invoke(new Action(StartFrameRequestTimer));
+                    else
+                        StartFrameRequestTimer();
+                };
+
+                _socket.OnDisconnected += (sender, e) =>
+                {
+                    System.Diagnostics.Debug.WriteLine("[DashboardView] WebSocket 연결 해제");
+
+                    if (InvokeRequired)
+                        Invoke(new Action(StopFrameRequestTimer));
+                    else
+                        StopFrameRequestTimer();
+                };
+
+                // frame_update 이벤트 핸들러
+                _socket.On("frame_update", response =>
+                {
+                    try
+                    {
+                        var data = response.GetValue<FrameData>();
+
+                        string cameraId = data.camera_id;
+                        string frameBase64 = data.image;
+
+                        // 프레임 드롭 (UI 과부하 방지)
+                        if (cameraId == "left")
+                        {
+                            if ((DateTime.Now - _lastFrontUpdate).TotalMilliseconds < MIN_UPDATE_INTERVAL_MS)
+                                return;
+                            _lastFrontUpdate = DateTime.Now;
+                        }
+                        else if (cameraId == "right")
+                        {
+                            if ((DateTime.Now - _lastBackUpdate).TotalMilliseconds < MIN_UPDATE_INTERVAL_MS)
+                                return;
+                            _lastBackUpdate = DateTime.Now;
+                        }
+
+                        byte[] frameBytes = Convert.FromBase64String(frameBase64);
+
+                        using (MemoryStream ms = new MemoryStream(frameBytes))
+                        using (Image tempImage = Image.FromStream(ms))
+                        {
+                            Bitmap bitmap = new Bitmap(tempImage);
+
+                            if (cameraId == "left")
+                            {
+                                _frontFrameCount++;
+                                if (InvokeRequired)
+                                {
+                                    BeginInvoke(new Action(() =>
+                                        UpdatePictureBox(pb_DashFront, bitmap, "앞면")));
+                                }
+                                else
+                                {
+                                    UpdatePictureBox(pb_DashFront, bitmap, "앞면");
+                                }
+                            }
+                            else if (cameraId == "right")
+                            {
+                                _backFrameCount++;
+                                if (InvokeRequired)
+                                {
+                                    BeginInvoke(new Action(() =>
+                                        UpdatePictureBox(pb_DashBack, bitmap, "뒷면")));
+                                }
+                                else
+                                {
+                                    UpdatePictureBox(pb_DashBack, bitmap, "뒷면");
+                                }
+                            }
+
+                            int frameCount = (cameraId == "left") ? _frontFrameCount : _backFrameCount;
+                            if (frameCount % 10 == 0)
+                            {
+                                System.Diagnostics.Debug.WriteLine(
+                                    $"[DashboardView] {cameraId} 프레임 수신: {frameCount}개 (크기: {frameBytes.Length} bytes)");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[DashboardView] frame_update 처리 실패: {ex.Message}");
+                    }
+                });
+
+                _socket.On("connection_response", response =>
+                {
+                    var data = response.GetValue<ConnectionResponse>();
+                    System.Diagnostics.Debug.WriteLine($"[DashboardView] 연결 응답: {data.status} - {data.message}");
+                });
+
+                _socket.On("error", response =>
+                {
+                    var data = response.GetValue<ErrorResponse>();
+                    System.Diagnostics.Debug.WriteLine($"[DashboardView] 서버 에러: {data.message}");
+                });
+
+                System.Diagnostics.Debug.WriteLine("[DashboardView] ConnectAsync() 호출 직전...");
+                await _socket.ConnectAsync();
+                System.Diagnostics.Debug.WriteLine("[DashboardView] ConnectAsync() 완료");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DashboardView] WebSocket 초기화 실패: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[DashboardView] 스택 트레이스: {ex.StackTrace}");
+
+                if (InvokeRequired)
+                {
+                    Invoke(new Action(() =>
+                        MessageBox.Show($"WebSocket 연결 실패:\n{ex.Message}\n\n{ex.StackTrace}",
+                            "오류", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                    ));
+                }
+                else
+                {
+                    MessageBox.Show($"WebSocket 연결 실패:\n{ex.Message}\n\n{ex.StackTrace}",
+                        "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        private void StartFrameRequestTimer()
+        {
+            if (_frameRequestTimer == null)
+            {
+                _frameRequestTimer = new System.Windows.Forms.Timer();
+                _frameRequestTimer.Interval = 33;  // 30 FPS
+                _frameRequestTimer.Tick += OnFrameRequestTimerTick;
+            }
+
+            _frameRequestTimer.Start();
+            System.Diagnostics.Debug.WriteLine("[DashboardView] 프레임 요청 타이머 시작 (33ms 간격)");
+        }
+
+        private void StopFrameRequestTimer()
+        {
+            if (_frameRequestTimer != null)
+            {
+                _frameRequestTimer.Stop();
+                System.Diagnostics.Debug.WriteLine("[DashboardView] 프레임 요청 타이머 중지");
+            }
+        }
+
+        private async void OnFrameRequestTimerTick(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_socket != null && _socket.Connected)
+                {
+                    await _socket.EmitAsync("request_frame", new { camera_id = "left" });
+                    await _socket.EmitAsync("request_frame", new { camera_id = "right" });
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DashboardView] 프레임 요청 실패: {ex.Message}");
+            }
+        }
+
+        private void UpdatePictureBox(PictureBox pictureBox, Image newFrame, string camera)
+        {
+            try
+            {
+                var oldImage = pictureBox.Image;
+                pictureBox.Image = newFrame;
+                oldImage?.Dispose();
+
+                int frameCount = (camera == "앞면") ? _frontFrameCount : _backFrameCount;
+                if (frameCount <= 10 || frameCount % 50 == 0)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[DashboardView] {camera} PictureBox 업데이트 성공: {pictureBox.Name} (프레임 #{frameCount})");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[DashboardView] {camera} PictureBox 업데이트 실패: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        private void OnHandleDestroyed(object sender, EventArgs e)
+        {
+            CleanupWebSocket();
+        }
+
+        private async void CleanupWebSocket()
+        {
+            try
+            {
+                StopFrameRequestTimer();
+                _frameRequestTimer?.Dispose();
+                _frameRequestTimer = null;
+
+                if (_socket != null)
+                {
+                    await _socket.DisconnectAsync();
+                    _socket.Dispose();
+                    _socket = null;
+                }
+
+                System.Diagnostics.Debug.WriteLine("[DashboardView] WebSocket 정리 완료");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DashboardView] WebSocket 정리 실패: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// PictureBox에 더블 버퍼링 활성화 (깜빡임 방지)
+        /// </summary>
+        private void EnableDoubleBuffering(PictureBox pictureBox)
+        {
+            try
+            {
+                typeof(PictureBox).InvokeMember("DoubleBuffered",
+                    System.Reflection.BindingFlags.SetProperty |
+                    System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.NonPublic,
+                    null, pictureBox, new object[] { true });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DashboardView] 더블 버퍼링 설정 실패: {ex.Message}");
             }
         }
 
@@ -1380,6 +1653,28 @@ namespace pcb_monitoring_program.Views.Dashboard
                 _hourlyChartToolTip.Hide(chart);
                 _lastHourlyToolTipKey = null;
             }
+        }
+        public class FrameData
+        {
+            public string camera_id { get; set; }
+            public string image { get; set; }
+            public string defect_type { get; set; }
+            public double confidence { get; set; }
+            public int boxes_count { get; set; }
+            public string roi_status { get; set; }
+            public string timestamp { get; set; }
+            public string type { get; set; }
+        }
+
+        public class ConnectionResponse
+        {
+            public string status { get; set; }
+            public string message { get; set; }
+        }
+
+        public class ErrorResponse
+        {
+            public string message { get; set; }
         }
     }
 }

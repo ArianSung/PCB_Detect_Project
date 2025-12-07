@@ -60,6 +60,7 @@ namespace pcb_monitoring_program.Views.Monitoring
 
             // WebSocket 연결 시작
             await InitializeWebSocket();
+
         }
 
         private async Task InitializeWebSocket()
