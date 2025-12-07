@@ -19,7 +19,6 @@ namespace pcb_monitoring_program.DatabaseManager.Repositories
 
                 string query = @"
                     SELECT 
-                        id,
                         username,
                         full_name,
                         role,
@@ -47,7 +46,6 @@ namespace pcb_monitoring_program.DatabaseManager.Repositories
                 conn.Open();
                 string query = @"
             SELECT 
-                id,
                 username,
                 full_name,
                 role,
@@ -79,7 +77,6 @@ namespace pcb_monitoring_program.DatabaseManager.Repositories
 
                 string query = @"
             SELECT 
-                id,
                 username,
                 full_name,
                 role,
@@ -111,7 +108,6 @@ namespace pcb_monitoring_program.DatabaseManager.Repositories
 
                 string query = @"
             SELECT 
-                id,
                 username,
                 full_name,
                 role,
