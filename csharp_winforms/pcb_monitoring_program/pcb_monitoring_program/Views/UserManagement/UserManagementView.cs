@@ -190,7 +190,6 @@ namespace pcb_monitoring_program.Views.UserManagement
             DGV_UserManagement.ScrollBars = ScrollBars.Vertical; // 가로 스크롤 안 쓰면 Vertical 만
 
             // 열 헤더 텍스트
-            DGV_UserManagement.Columns["id"].HeaderText = "번호";
             DGV_UserManagement.Columns["username"].HeaderText = "아이디";
             DGV_UserManagement.Columns["full_name"].HeaderText = "사용자 이름";
             DGV_UserManagement.Columns["role"].HeaderText = "권한";
@@ -199,7 +198,6 @@ namespace pcb_monitoring_program.Views.UserManagement
             DGV_UserManagement.Columns["created_at"].HeaderText = "생성일";
 
             // 🔢 너비 대신 FillWeight로 비율만 지정 (원하면)
-            DGV_UserManagement.Columns["id"].FillWeight = 50;
             DGV_UserManagement.Columns["username"].FillWeight = 120;
             DGV_UserManagement.Columns["full_name"].FillWeight = 120;
             DGV_UserManagement.Columns["role"].FillWeight = 80;

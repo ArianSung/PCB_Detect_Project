@@ -364,6 +364,7 @@
             // 
             // cardSearchresult
             // 
+            cardSearchresult.Controls.Add(button1);
             cardSearchresult.Controls.Add(DGV_IH_result);
             cardSearchresult.Location = new Point(0, 162);
             cardSearchresult.Name = "cardSearchresult";
@@ -532,7 +533,7 @@
             // 
             // button1
             // 
-            button1.Location = new Point(1506, 142);
+            button1.Location = new Point(1506, -16);
             button1.Name = "button1";
             button1.Size = new Size(75, 23);
             button1.TabIndex = 6;
@@ -549,7 +550,6 @@
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(64, 64, 64);
-            Controls.Add(button1);
             Controls.Add(cardSearchresult);
             Controls.Add(cardfilter);
             Name = "InspectionHistoryView";
