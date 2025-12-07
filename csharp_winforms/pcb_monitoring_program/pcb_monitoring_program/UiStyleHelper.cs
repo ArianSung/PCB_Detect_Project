@@ -23,19 +23,28 @@ namespace pcb_monitoring_program
 
         public static void HighlightButton(Control container, Button clickedButton)
         {
-            // 1. 컨테이너 안 모든 버튼 기본 색으로
+            // 1. 컨테이너 안 모든 버튼 기본 색으로 (단, 예외 태그가 있으면 건너뜀)
             foreach (Control ctrl in container.Controls)
             {
                 if (ctrl is Button btn)
                 {
-                    btn.BackColor = Color.FromArgb(64, 64, 64);
+                    // 예외 처리: Tag에 "nohighlight"가 포함되어 있으면 스타일 변경 안함
+                    var tag = btn.Tag?.ToString() ?? string.Empty;
+                    if (tag.ToLowerInvariant().Contains("nohighlight"))
+                        continue;
+
+                    btn.BackColor = Color.FromArgb(54, 54, 54);
                     btn.ForeColor = Color.White;
                 }
             }
 
-            // 2. 클릭된 버튼만 반전
-            clickedButton.BackColor = Color.White;
-            clickedButton.ForeColor = Color.FromArgb(64, 64, 64);
+            // 2. 클릭된 버튼만 반전 (클릭된 버튼이 예외면 아무 동작 안함)
+            var clickedTag = clickedButton.Tag?.ToString() ?? string.Empty;
+            if (!clickedTag.ToLowerInvariant().Contains("nohighlight"))
+            {
+                clickedButton.BackColor = Color.White;
+                clickedButton.ForeColor = Color.FromArgb(54, 54, 54);
+            }
         }
 
         // ▽ 둥근 사각형 GraphicsPath 만들기 (섀도우용)
