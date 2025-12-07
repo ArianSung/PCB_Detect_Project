@@ -346,7 +346,7 @@ namespace pcb_monitoring_program.DatabaseManager
         /// <param name="startDate">시작 날짜</param>
         /// <param name="endDate">종료 날짜</param>
         /// <returns>통계 객체</returns>
-        public List<DailyStatistics> GetDailyStatisticsForYear(int year)    //민준코드
+        public List<DailyStatistics> GetDailyStatisticsForYear(int year)
         {
             List<DailyStatistics> list = new List<DailyStatistics>();
 
@@ -359,20 +359,33 @@ namespace pcb_monitoring_program.DatabaseManager
                 {
                     conn.Open();
 
+                    // ✅ v3.0 스키마:
+                    //  - inspection_summary_daily 를 date 기준으로 모아서
+                    //  - product_code 는 전부 합산(전체 라인 기준 통계)
                     string query = @"
                 SELECT
-                    stat_date,
-                    total_inspections,
-                    normal_count,
-                    component_defect_count,
-                    solder_defect_count,
-                    discard_count,
-                    defect_rate,
-                    created_at,
-                    updated_at
-                FROM statistics_daily
-                WHERE stat_date BETWEEN @startDate AND @endDate
-                ORDER BY stat_date ASC";
+                    d.date AS stat_date,
+                    SUM(d.total_inspections)              AS total_inspections,
+                    SUM(d.normal_count)                   AS normal_count,
+                    SUM(d.missing_count)                  AS component_defect_count,
+                    SUM(d.position_error_count)           AS solder_defect_count,
+                    SUM(d.discard_count)                  AS discard_count,
+                    -- 전체 검사 대비 (누락+위치오류+폐기) 비율(%)
+                    CAST(
+                        CASE 
+                            WHEN SUM(d.total_inspections) > 0 THEN
+                                (SUM(d.missing_count + d.position_error_count + d.discard_count) * 100.0
+                                 / SUM(d.total_inspections))
+                            ELSE 0
+                        END
+                    AS DECIMAL(5,2))                      AS defect_rate,
+                    MIN(d.created_at)                     AS created_at,
+                    MAX(d.updated_at)                     AS updated_at
+                FROM inspection_summary_daily d
+                WHERE d.date BETWEEN @startDate AND @endDate
+                GROUP BY d.date
+                ORDER BY d.date ASC;
+            ";
 
                     using (MySqlCommand cmd = new MySqlCommand(query, conn))
                     {
@@ -385,6 +398,7 @@ namespace pcb_monitoring_program.DatabaseManager
                             {
                                 var d = new DailyStatistics
                                 {
+                                    // DailyStatistics 모델은 기존 그대로 사용
                                     StatDate = reader.GetDateTime("stat_date").Date,
                                     TotalInspections = reader.GetInt32("total_inspections"),
                                     NormalCount = reader.GetInt32("normal_count"),
@@ -392,8 +406,8 @@ namespace pcb_monitoring_program.DatabaseManager
                                     SolderDefectCount = reader.GetInt32("solder_defect_count"),
                                     DiscardCount = reader.GetInt32("discard_count"),
                                     DefectRate = reader.IsDBNull(reader.GetOrdinal("defect_rate"))
-                                                            ? 0.0
-                                                            : (double)reader.GetDecimal("defect_rate"),
+                                                 ? 0.0
+                                                 : (double)reader.GetDecimal("defect_rate"),
                                     CreatedAt = reader.GetDateTime("created_at"),
                                     UpdatedAt = reader.GetDateTime("updated_at"),
                                 };
@@ -415,7 +429,15 @@ namespace pcb_monitoring_program.DatabaseManager
 
             return list;
         }
-        public List<HourlyStatistics> GetHourlyStatistics(DateTime start, DateTime end)    //민준코드
+
+        /// <summary>
+        /// 시간별 통계 조회 (v3.0 스키마: inspection_summary_hourly)
+        /// </summary>
+        /// <param name="start">시작 시간</param>
+        /// <param name="end">종료 시간</param>
+        /// <param name="productCode">제품 코드 필터 (선택, null이면 전체)</param>
+        /// <returns>시간별 통계 리스트</returns>
+        public List<HourlyStatistics> GetHourlyStatistics(DateTime start, DateTime end, string productCode = null)
         {
             var list = new List<HourlyStatistics>();
 
@@ -425,25 +447,46 @@ namespace pcb_monitoring_program.DatabaseManager
                 {
                     conn.Open();
 
+                    // v3.0 스키마: inspection_summary_hourly 테이블 사용
+                    // missing_count → ComponentDefectCount
+                    // position_error_count → SolderDefectCount
                     string query = @"
-                SELECT
-                    stat_datetime,
-                    total_inspections,
-                    normal_count,
-                    component_defect_count,
-                    solder_defect_count,
-                    discard_count,
-                    created_at,
-                    updated_at
-                FROM statistics_hourly
-                WHERE stat_datetime >= @start AND stat_datetime < @end
-                ORDER BY stat_datetime;
-            ";
+                        SELECT
+                            id,
+                            hour_timestamp,
+                            product_code,
+                            total_inspections,
+                            normal_count,
+                            missing_count,
+                            position_error_count,
+                            discard_count,
+                            avg_inference_time_ms,
+                            avg_total_time_ms,
+                            avg_detection_count,
+                            avg_confidence,
+                            defect_rate,
+                            created_at,
+                            updated_at
+                        FROM inspection_summary_hourly
+                        WHERE hour_timestamp >= @start AND hour_timestamp < @end";
+
+                    // 제품 코드 필터 추가 (선택적)
+                    if (!string.IsNullOrEmpty(productCode))
+                    {
+                        query += " AND product_code = @productCode";
+                    }
+
+                    query += " ORDER BY hour_timestamp, product_code;";
 
                     using (MySqlCommand cmd = new MySqlCommand(query, conn))
                     {
                         cmd.Parameters.AddWithValue("@start", start);
                         cmd.Parameters.AddWithValue("@end", end);
+
+                        if (!string.IsNullOrEmpty(productCode))
+                        {
+                            cmd.Parameters.AddWithValue("@productCode", productCode);
+                        }
 
                         using (MySqlDataReader reader = cmd.ExecuteReader())
                         {
@@ -451,12 +494,27 @@ namespace pcb_monitoring_program.DatabaseManager
                             {
                                 var item = new HourlyStatistics
                                 {
-                                    StatDatetime = reader.GetDateTime("stat_datetime"),
+                                    Id = reader.GetInt64("id"),
+                                    StatDatetime = reader.GetDateTime("hour_timestamp"),
+                                    ProductCode = reader.GetString("product_code"),
                                     TotalInspections = reader.GetInt32("total_inspections"),
                                     NormalCount = reader.GetInt32("normal_count"),
-                                    ComponentDefectCount = reader.GetInt32("component_defect_count"),
-                                    SolderDefectCount = reader.GetInt32("solder_defect_count"),
+                                    ComponentDefectCount = reader.GetInt32("missing_count"),  // missing → 부품누락
+                                    SolderDefectCount = reader.GetInt32("position_error_count"),  // position_error → 위치오류
                                     DiscardCount = reader.GetInt32("discard_count"),
+                                    AvgInferenceTimeMs = reader.IsDBNull(reader.GetOrdinal("avg_inference_time_ms"))
+                                        ? (float?)null
+                                        : reader.GetFloat("avg_inference_time_ms"),
+                                    AvgTotalTimeMs = reader.IsDBNull(reader.GetOrdinal("avg_total_time_ms"))
+                                        ? (float?)null
+                                        : reader.GetFloat("avg_total_time_ms"),
+                                    AvgDetectionCount = reader.IsDBNull(reader.GetOrdinal("avg_detection_count"))
+                                        ? (float?)null
+                                        : reader.GetFloat("avg_detection_count"),
+                                    AvgConfidence = reader.IsDBNull(reader.GetOrdinal("avg_confidence"))
+                                        ? (float?)null
+                                        : reader.GetFloat("avg_confidence"),
+                                    DefectRate = reader.GetFloat("defect_rate"),
                                     CreatedAt = reader.GetDateTime("created_at"),
                                     UpdatedAt = reader.GetDateTime("updated_at")
                                 };

@@ -24,6 +24,20 @@ namespace pcb_monitoring_program.Views.Statistics
         private string _lastToolTipKey = null;
         private string _selectedDefectCategoryName = "정상";    // 불량 유형 도넛
         private string _selectedMonthlyTargetCategoryName = "달성"; // 월 목표 도넛
+                                                                  // 도넛(불량 유형) 초기화 여부 + 레이블 캐시
+        private bool _isDefectPieInitialized = false;
+        private Label _defectPieRateLabel;
+        private readonly Dictionary<string, Label> _defectPieItemLabels = new Dictionary<string, Label>();
+        // 월 목표 도넛: '달성', '미달성' 라인 Label 캐싱용
+        private readonly Dictionary<string, Label> _monthlyTargetItemLabels = new();
+
+        // 도넛(월 목표) 초기화 여부 + 레이블 캐시
+        private bool _isMonthlyTargetInitialized = false;
+        private Label _monthlyTargetRateLabel;
+        private Label _monthlyTargetTargetLabel;
+        private Label _monthlyTargetActualLabel;
+
+
 
 
         public StatisticsView()
@@ -75,7 +89,7 @@ namespace pcb_monitoring_program.Views.Statistics
             {
                 if (ctrl is Button btn)
                 {
-                    btn.BackColor = Color.FromArgb(64, 64, 64);
+                    btn.BackColor = Color.FromArgb(54, 54, 54);
                     btn.ForeColor = Color.White;
                     btn.FlatStyle = FlatStyle.Flat;
                     btn.FlatAppearance.BorderSize = 0;
@@ -168,7 +182,7 @@ namespace pcb_monitoring_program.Views.Statistics
             // 라인 시리즈 4개
             Series sNormal = CreateLineSeries("정상", Color.FromArgb(100, 181, 246));
             Series sPartDefect = CreateLineSeries("부품불량", Color.Orange);
-            Series sSolderDefect = CreateLineSeries("납땜불량", Color.FromArgb(158, 158, 158));
+            Series sSolderDefect = CreateLineSeries("S/N 불량", Color.FromArgb(158, 158, 158));
             Series sScrap = CreateLineSeries("폐기", Color.Red);
 
             chart.Series.Add(sNormal);
@@ -232,7 +246,7 @@ namespace pcb_monitoring_program.Views.Statistics
                         s.Color = Color.FromArgb(100, 181, 246);
                     else if (s.Name == "부품불량")
                         s.Color = Color.Orange;
-                    else if (s.Name == "납땜불량")
+                    else if (s.Name == "S/N 불량")
                         s.Color = Color.FromArgb(158, 158, 158);
                     else if (s.Name == "폐기")
                         s.Color = Color.Red;
@@ -327,7 +341,7 @@ namespace pcb_monitoring_program.Views.Statistics
             };
             sPartDefect["PointWidth"] = "0.7";
 
-            Series sSolderDefect = new Series("납땜불량")
+            Series sSolderDefect = new Series("S/N 불량")
             {
                 ChartArea = "Main",
                 ChartType = SeriesChartType.StackedColumn,
@@ -383,7 +397,7 @@ namespace pcb_monitoring_program.Views.Statistics
             Color solderDefColor = Color.FromArgb(158, 158, 158);
             Color scrapColor = Color.FromArgb(244, 67, 54);
 
-            // 🔥 현재 월 데이터만 집계
+            // 🔥 현재 월 데이터 집계
             var monthData = _yearDailyStats
                 .Where(d => d.StatDate.Year == _currentYear && d.StatDate.Month == _currentMonth)
                 .ToList();
@@ -395,170 +409,217 @@ namespace pcb_monitoring_program.Views.Statistics
 
             var categories = new (string name, int value, Color color)[]
             {
-                ("정상",     sumNormal,       normalColor),
-                ("부품불량", sumPartDefect,   partDefectColor),
-                ("납땜불량", sumSolderDefect, solderDefColor),
-                ("폐기",     sumScrap,        scrapColor),
+        ("정상",     sumNormal,       normalColor),
+        ("부품불량", sumPartDefect,   partDefectColor),
+        ("S/N 불량", sumSolderDefect, solderDefColor),
+        ("폐기",     sumScrap,        scrapColor),
             };
-
-            // 🔹 전체 합 (각 카테고리 비율 계산용)
-            int totalAll = categories.Sum(c => c.value);
-            Func<int, double> calcRate = v =>
-                totalAll > 0 ? (v * 100.0 / totalAll) : 0.0;
 
             var chart = DefectTypePieChart;
-            chart.Series.Clear();
-            chart.Legends.Clear();
-            chart.ChartAreas.Clear();
 
-            var area = new ChartArea("area");
-            area.BackColor = Color.Transparent;
-            area.Position.Auto = false;
-            area.Position.X = 5; area.Position.Y = 5;
-            area.Position.Width = 90; area.Position.Height = 90;
-            area.InnerPlotPosition.Auto = false;
-            area.InnerPlotPosition.X = 10; area.InnerPlotPosition.Y = 10;
-            area.InnerPlotPosition.Width = 80; area.InnerPlotPosition.Height = 80;
-            chart.ChartAreas.Add(area);
-
-            var s = new Series("불량 카테고리")
+            // =============================
+            // 1) 처음 한 번만 차트 & 레전드 구조 생성
+            // =============================
+            if (!_isDefectPieInitialized)
             {
-                ChartType = SeriesChartType.Doughnut
-            };
-            s["DoughnutRadius"] = "50";
-            s["PieLabelStyle"] = "Disabled";
-            s.IsValueShownAsLabel = false;
+                _isDefectPieInitialized = true;
 
-            foreach (var item in categories)
-            {
-                int pt = s.Points.AddXY(item.name, item.value);
-                s.Points[pt].Color = item.color;
-            }
-            chart.Series.Add(s);
+                chart.Series.Clear();
+                chart.Legends.Clear();
+                chart.ChartAreas.Clear();
 
-            foreach (var p in s.Points)
-            {
-                p.BorderWidth = 0;
-            }
+                var area = new ChartArea("area");
+                area.BackColor = Color.Transparent;
+                area.Position.Auto = false;
+                area.Position.X = 5; area.Position.Y = 5;
+                area.Position.Width = 90; area.Position.Height = 90;
+                area.InnerPlotPosition.Auto = false;
+                area.InnerPlotPosition.X = 10; area.InnerPlotPosition.Y = 10;
+                area.InnerPlotPosition.Width = 80; area.InnerPlotPosition.Height = 80;
+                chart.ChartAreas.Add(area);
 
-            var selectedSlice = s.Points.FirstOrDefault(p => p.AxisLabel == _selectedDefectCategoryName);
-            if (selectedSlice != null)
-            {
-                selectedSlice.BorderColor = Color.White;
-                selectedSlice.BorderWidth = 3;
-            }
-
-            // 🔹 커스텀 레전드 영역(flowPie) 구성
-            flowPie.SuspendLayout();
-            flowPie.Controls.Clear();
-            flowPie.FlowDirection = FlowDirection.TopDown;
-            flowPie.WrapContents = false;
-            flowPie.AutoSize = false;
-            flowPie.BackColor = Color.Transparent;
-
-            // 🔥 1) 상단에 큰 % 라벨 추가 (기본은 "정상" 비율 기준)
-            var ratePanel = new Panel
-            {
-                Height = 50,
-                Width = flowPie.Width - 16,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0, 0, 0, 8),
-            };
-
-            var rateLabel = new Label
-            {
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Font = new Font("맑은 고딕", 18, FontStyle.Bold),
-                ForeColor = normalColor // 일단 기본값, 아래에서 실제 선택값으로 덮어씀
-            };
-
-            // 🔹 이전에 선택했던 카테고리 기준으로 초기 표시
-            var hasSelected = categories.Any(c => c.name == _selectedDefectCategoryName);
-            if (!hasSelected)
-            {
-                // 만약 처음이거나, 기존 값이 사라졌다면 "정상"으로 초기화
-                _selectedDefectCategoryName = "정상";
-            }
-
-            var selectedCategory = categories.First(c => c.name == _selectedDefectCategoryName);
-
-            double defaultRate = calcRate(selectedCategory.value);
-            rateLabel.Text = $"{defaultRate:0.0}%";
-            rateLabel.ForeColor = selectedCategory.color;
-
-
-            ratePanel.Controls.Add(rateLabel);
-            flowPie.Controls.Add(ratePanel);
-
-            // 🔥 2) 각 카테고리별 라인 (색 네모 + 텍스트 + 클릭 시 하이라이트 + % 변경)
-            foreach (var item in categories)
-            {
-                // 캡처 안전용 로컬 복사
-                string localName = item.name;
-                int localValue = item.value;
-                Color localColor = item.color;
-
-                var row = new Panel
+                var s = new Series("불량 카테고리")
                 {
-                    Height = 24,
+                    ChartType = SeriesChartType.Doughnut
+                };
+                s["DoughnutRadius"] = "50";
+                s["PieLabelStyle"] = "Disabled";
+                s.IsValueShownAsLabel = false;
+
+                // 포인트 생성 (이름 고정)
+                foreach (var item in categories)
+                {
+                    int pt = s.Points.AddXY(item.name, item.value);
+                    s.Points[pt].Color = item.color;
+                    s.Points[pt].AxisLabel = item.name;
+                }
+                chart.Series.Add(s);
+
+                // 선택값 없으면 기본 "정상"
+                if (_selectedDefectCategoryName != "정상" &&
+                     _selectedDefectCategoryName != "부품불량" &&
+                     _selectedDefectCategoryName != "S/N 불량" &&
+                     _selectedDefectCategoryName != "폐기")
+                {
+                    _selectedDefectCategoryName = "정상";
+                }
+
+
+                // 커스텀 레전드(flowPie) 한 번만 만들어두고 라벨만 캐시
+                flowPie.SuspendLayout();
+                flowPie.Controls.Clear();
+                flowPie.FlowDirection = FlowDirection.TopDown;
+                flowPie.WrapContents = false;
+                flowPie.AutoSize = false;
+                flowPie.BackColor = Color.Transparent;
+
+                // 상단 큰 % 라벨 패널
+                var ratePanel = new Panel
+                {
+                    Height = 50,
                     Width = flowPie.Width - 16,
                     BackColor = Color.Transparent,
-                    Margin = new Padding(0, 2, 0, 2),
+                    Margin = new Padding(0, 0, 0, 8),
                 };
 
-                var swatch = new Panel
+                var rateLabel = new Label
                 {
-                    Width = 12,
-                    Height = 12,
-                    BackColor = localColor,
-                    Left = 0,
-                    Top = (row.Height - 12) / 2
+                    AutoSize = false,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Font = new Font("맑은 고딕", 18, FontStyle.Bold),
+                    ForeColor = normalColor
                 };
 
-                var lbl = new Label
-                {
-                    AutoSize = true,
-                    Left = 20,
-                    Top = (row.Height - 16) / 2,
-                    Text = $"{localName}  {localValue}개",
-                    ForeColor = Color.Gainsboro
-                };
+                _defectPieRateLabel = rateLabel;
 
-                EventHandler clickHandler = (_, __) =>
-                {
-                    _selectedDefectCategoryName = localName;
+                ratePanel.Controls.Add(rateLabel);
+                flowPie.Controls.Add(ratePanel);
 
-                    // 1) 도넛 조각 하이라이트
-                    foreach (var p in s.Points) { p.BorderWidth = 0; }
-                    var target = s.Points.FirstOrDefault(p => p.AxisLabel == localName);
-                    if (target != null)
+                // 각 카테고리 라인(색 네모 + 텍스트 라벨)
+                _defectPieItemLabels.Clear();
+
+                foreach (var item in categories)
+                {
+                    string localName = item.name;
+                    Color localColor = item.color;
+
+                    var row = new Panel
                     {
-                        target.BorderColor = Color.White;
-                        target.BorderWidth = 3;
-                    }
+                        Height = 24,
+                        Width = flowPie.Width - 16,
+                        BackColor = Color.Transparent,
+                        Margin = new Padding(0, 2, 0, 2),
+                    };
 
-                    // 2) 위의 큰 % 라벨에 이 카테고리 비율 표시
-                    double rate = calcRate(localValue);
-                    rateLabel.Text = $"{rate:0.0}%";
-                    rateLabel.ForeColor = localColor;
-                };
+                    var swatch = new Panel
+                    {
+                        Width = 12,
+                        Height = 12,
+                        BackColor = localColor,
+                        Left = 0,
+                        Top = (row.Height - 12) / 2
+                    };
 
-                row.Cursor = Cursors.Hand;
-                swatch.Cursor = Cursors.Hand;
-                lbl.Cursor = Cursors.Hand;
+                    var lbl = new Label
+                    {
+                        AutoSize = true,
+                        Left = 20,
+                        Top = (row.Height - 16) / 2,
+                        ForeColor = Color.Gainsboro
+                    };
 
-                row.Click += clickHandler;
-                swatch.Click += clickHandler;
-                lbl.Click += clickHandler;
+                    _defectPieItemLabels[localName] = lbl;
 
-                row.Controls.Add(swatch);
-                row.Controls.Add(lbl);
-                flowPie.Controls.Add(row);
+                    EventHandler clickHandler = (_, __) =>
+                    {
+                        _selectedDefectCategoryName = localName;
+
+                        // 1) 도넛 조각 하이라이트
+                        foreach (var p in s.Points) p.BorderWidth = 0;
+                        var target = s.Points.FirstOrDefault(p => p.AxisLabel == localName);
+                        if (target != null)
+                        {
+                            target.BorderColor = Color.White;
+                            target.BorderWidth = 3;
+                        }
+
+                        // 2) 현재 값 기준 퍼센트 다시 계산
+                        double total = s.Points.Sum(p => p.YValues[0]);
+                        double val = target?.YValues[0] ?? 0;
+                        double rate = total > 0 ? (val * 100.0 / total) : 0.0;
+
+                        if (_defectPieRateLabel != null)
+                        {
+                            _defectPieRateLabel.Text = $"{rate:0.0}%";
+                            _defectPieRateLabel.ForeColor = target?.Color ?? localColor;
+                        }
+                    };
+
+                    row.Cursor = Cursors.Hand;
+                    swatch.Cursor = Cursors.Hand;
+                    lbl.Cursor = Cursors.Hand;
+
+                    row.Click += clickHandler;
+                    swatch.Click += clickHandler;
+                    lbl.Click += clickHandler;
+
+                    row.Controls.Add(swatch);
+                    row.Controls.Add(lbl);
+                    flowPie.Controls.Add(row);
+                }
+
+                flowPie.ResumeLayout();
             }
 
-            flowPie.ResumeLayout();
+            // =============================
+            // 2) 여기부터는 "데이터만 업데이트"
+            // =============================
+
+            var series = chart.Series["불량 카테고리"];
+
+            // 값 업데이트
+            foreach (var item in categories)
+            {
+                var point = series.Points.FirstOrDefault(p => p.AxisLabel == item.name);
+                if (point != null)
+                {
+                    point.YValues[0] = item.value;
+                    point.Color = item.color;
+                }
+
+                if (_defectPieItemLabels.TryGetValue(item.name, out var lbl))
+                {
+                    lbl.Text = $"{item.name}  {item.value}개";
+                }
+            }
+
+            // 선택된 조각 다시 하이라이트 (없으면 기본 정상)
+            foreach (var p in series.Points) p.BorderWidth = 0;
+
+            var selected = series.Points.FirstOrDefault(p => p.AxisLabel == _selectedDefectCategoryName);
+            if (selected == null)
+            {
+                selected = series.Points.FirstOrDefault(p => p.AxisLabel == "정상");
+                _selectedDefectCategoryName = selected?.AxisLabel ?? "정상";
+            }
+
+            if (selected != null)
+            {
+                selected.BorderColor = Color.White;
+                selected.BorderWidth = 3;
+            }
+
+            // 상단 % 라벨 갱신
+            if (_defectPieRateLabel != null)
+            {
+                double total = series.Points.Sum(p => p.YValues[0]);
+                double val = selected?.YValues[0] ?? 0;
+                double rate = total > 0 ? (val * 100.0 / total) : 0.0;
+
+                _defectPieRateLabel.Text = $"{rate:0.0}%";
+                _defectPieRateLabel.ForeColor = selected?.Color ?? normalColor;
+            }
         }
 
 
@@ -567,258 +628,287 @@ namespace pcb_monitoring_program.Views.Statistics
             // 🔹 1) 월 목표 / 실제 생산량 계산
             int targetMonthly = 30000; // 월 목표 생산량
 
-            // 현재 선택된 연/월 데이터만 필터
             var monthData = _yearDailyStats
                 .Where(d => d.StatDate.Year == _currentYear && d.StatDate.Month == _currentMonth)
                 .ToList();
 
-            // 여기서는 "실제 생산량" 느낌으로 정상 개수만 사용
             int actualProduction = monthData.Sum(d => d.NormalCount);
-
-            // 목표보다 많이 나왔으면 그래프는 목표까지만 잘라줌
             if (actualProduction > targetMonthly)
                 actualProduction = targetMonthly;
 
             int remaining = Math.Max(targetMonthly - actualProduction, 0);
 
-            // 🔹 달성률 / 미달성률 미리 계산
-            double achievementRate = targetMonthly > 0
-                ? (actualProduction * 100.0) / targetMonthly
-                : 0.0;
-            double missRate = 100.0 - achievementRate;
-
-            // 2) 도넛 차트 데이터 (달성 vs 미달성)
-            var categories = new (string name, int value, Color color)[]
-            {
-                ("달성",   actualProduction, Color.FromArgb(100, 181, 246)), // 파랑
-                ("미달성", remaining,        Color.FromArgb(66, 66, 66)),   // 어두운 회색
-            };
-
-            // 3) Chart 초기화
             var chart = MonthlyTargetChart;
-            chart.Series.Clear();
-            chart.ChartAreas.Clear();
-            chart.Legends.Clear();
-            chart.BackColor = Color.Transparent;
-            chart.BorderlineWidth = 0;
 
-            var area = new ChartArea("area");
-            area.BackColor = Color.Transparent;
-
-            // 도넛 위치 / 크기 고정
-            area.Position.Auto = false;
-            area.Position.X = 5;
-            area.Position.Y = 5;
-            area.Position.Width = 90;
-            area.Position.Height = 90;
-
-            area.InnerPlotPosition.Auto = false;
-            area.InnerPlotPosition.X = 10;
-            area.InnerPlotPosition.Y = 10;
-            area.InnerPlotPosition.Width = 80;
-            area.InnerPlotPosition.Height = 80;
-
-            chart.ChartAreas.Add(area);
-
-            var s = new Series("월 목표 생산량")
+            // =============================
+            // 1) 처음 한 번만 차트 & FlowPanel 구조 생성
+            // =============================
+            if (!_isMonthlyTargetInitialized)
             {
-                ChartType = SeriesChartType.Doughnut
-            };
-            s["DoughnutRadius"] = "50";
-            s["PieLabelStyle"] = "Disabled";
-            s.IsValueShownAsLabel = false;
+                _isMonthlyTargetInitialized = true;
 
-            foreach (var item in categories)
-            {
-                int idx = s.Points.AddXY(item.name, item.value);
-                s.Points[idx].Color = item.color;
+                chart.Series.Clear();
+                chart.ChartAreas.Clear();
+                chart.Legends.Clear();
+                chart.BackColor = Color.Transparent;
+                chart.BorderlineWidth = 0;
+
+                var area = new ChartArea("area");
+                area.BackColor = Color.Transparent;
+
+                area.Position.Auto = false;
+                area.Position.X = 5;
+                area.Position.Y = 5;
+                area.Position.Width = 90;
+                area.Position.Height = 90;
+
+                area.InnerPlotPosition.Auto = false;
+                area.InnerPlotPosition.X = 10;
+                area.InnerPlotPosition.Y = 10;
+                area.InnerPlotPosition.Width = 80;
+                area.InnerPlotPosition.Height = 80;
+
+                chart.ChartAreas.Add(area);
+
+                var s = new Series("월 목표 생산량")
+                {
+                    ChartType = SeriesChartType.Doughnut
+                };
+                s["DoughnutRadius"] = "50";
+                s["PieLabelStyle"] = "Disabled";
+                s.IsValueShownAsLabel = false;
+
+                // 초깃값 포인트 추가
+                var categories = new (string name, int value, Color color)[]
+                {
+            ("달성",   actualProduction, Color.FromArgb(100, 181, 246)),
+            ("미달성", remaining,        Color.FromArgb(66, 66, 66)),
+                };
+
+                foreach (var item in categories)
+                {
+                    int idx = s.Points.AddXY(item.name, item.value);
+                    s.Points[idx].Color = item.color;
+                    s.Points[idx].AxisLabel = item.name;
+                }
+
+                chart.Series.Add(s);
+
+                // 기본 선택값
+                if (_selectedMonthlyTargetCategoryName != "달성" &&
+                    _selectedMonthlyTargetCategoryName != "미달성")
+                {
+                    _selectedMonthlyTargetCategoryName = "달성";
+                }
+
+                // FlowLayoutPanel 초기 구성
+                flowLegendMonthlyTarget.SuspendLayout();
+                flowLegendMonthlyTarget.Controls.Clear();
+                flowLegendMonthlyTarget.FlowDirection = FlowDirection.TopDown;
+                flowLegendMonthlyTarget.WrapContents = false;
+                flowLegendMonthlyTarget.AutoSize = false;
+                flowLegendMonthlyTarget.BackColor = Color.Transparent;
+
+                // 1) 퍼센트 라벨
+                var ratePanel = new Panel
+                {
+                    Height = 50,
+                    Width = flowLegendMonthlyTarget.Width - 16,
+                    BackColor = Color.Transparent,
+                    Margin = new Padding(0, 0, 0, 8),
+                };
+
+                var rateLabel = new Label
+                {
+                    AutoSize = false,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Font = new Font("맑은 고딕", 18, FontStyle.Bold),
+                };
+
+                _monthlyTargetRateLabel = rateLabel;
+
+                ratePanel.Controls.Add(rateLabel);
+                flowLegendMonthlyTarget.Controls.Add(ratePanel);
+
+                // 2) 월 목표 라벨
+                var targetPanel = new Panel
+                {
+                    Height = 24,
+                    Width = flowLegendMonthlyTarget.Width - 16,
+                    BackColor = Color.Transparent,
+                    Margin = new Padding(0, 0, 0, 2),
+                };
+
+                var targetLabel = new Label
+                {
+                    AutoSize = false,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Font = new Font("맑은 고딕", 9),
+                    ForeColor = Color.Gainsboro
+                };
+
+                _monthlyTargetTargetLabel = targetLabel;
+
+                targetPanel.Controls.Add(targetLabel);
+                flowLegendMonthlyTarget.Controls.Add(targetPanel);
+
+                // 3) 실제 생산량 라벨
+                var actualPanel = new Panel
+                {
+                    Height = 24,
+                    Width = flowLegendMonthlyTarget.Width - 16,
+                    BackColor = Color.Transparent,
+                    Margin = new Padding(0, 0, 0, 8),
+                };
+
+                var actualLabel = new Label
+                {
+                    AutoSize = false,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Font = new Font("맑은 고딕", 9),
+                    ForeColor = Color.Gainsboro
+                };
+
+                _monthlyTargetActualLabel = actualLabel;
+
+                actualPanel.Controls.Add(actualLabel);
+                flowLegendMonthlyTarget.Controls.Add(actualPanel);
+
+                // 4) 달성/미달성 라인들 (클릭 이벤트)
+                foreach (var item in categories)
+                {
+                    string localName = item.name;
+                    int localValue = item.value;
+                    Color localColor = item.color;
+
+                    var row = new Panel
+                    {
+                        Height = 24,
+                        Width = flowLegendMonthlyTarget.Width - 16,
+                        BackColor = Color.Transparent,
+                        Margin = new Padding(0, 2, 0, 2),
+                    };
+
+                    var swatch = new Panel
+                    {
+                        Width = 12,
+                        Height = 12,
+                        BackColor = localColor,
+                        Left = 0,
+                        Top = (row.Height - 12) / 2
+                    };
+
+                    var lbl = new Label
+                    {
+                        AutoSize = true,
+                        Left = 20,
+                        Top = (row.Height - 16) / 2,
+                        ForeColor = Color.Gainsboro,
+                        Text = $"{localName}  {localValue:N0}개"   // ✅ 초기 텍스트 세팅
+                    };
+
+                    // ✅ 나중에 값 업데이트할 수 있도록 캐싱
+                    _monthlyTargetItemLabels[localName] = lbl;
+
+                    EventHandler clickHandler = (_, __) =>
+                    {
+                        _selectedMonthlyTargetCategoryName = localName;
+
+                        foreach (var p in s.Points) p.BorderWidth = 0;
+                        var targetPoint = s.Points.FirstOrDefault(p => p.AxisLabel == localName);
+                        if (targetPoint != null)
+                        {
+                            targetPoint.BorderColor = Color.White;
+                            targetPoint.BorderWidth = 3;
+                        }
+
+                        double total = s.Points.Sum(p => p.YValues[0]);
+                        double val = targetPoint?.YValues[0] ?? 0;
+                        double rate = total > 0 ? (val * 100.0 / total) : 0.0;
+
+                        if (_monthlyTargetRateLabel != null)
+                        {
+                            _monthlyTargetRateLabel.Text = $"{rate:0.#}%";
+                            _monthlyTargetRateLabel.ForeColor =
+                                (localName == "달성")
+                                ? Color.FromArgb(100, 181, 246)
+                                : Color.FromArgb(244, 67, 54);
+                        }
+                    };
+
+                    row.Cursor = Cursors.Hand;
+                    swatch.Cursor = Cursors.Hand;
+                    lbl.Cursor = Cursors.Hand;
+
+                    row.Click += clickHandler;
+                    swatch.Click += clickHandler;
+                    lbl.Click += clickHandler;
+
+                    row.Controls.Add(swatch);
+                    row.Controls.Add(lbl);
+                    flowLegendMonthlyTarget.Controls.Add(row);
+                }
+
+                flowLegendMonthlyTarget.ResumeLayout();
             }
 
-            chart.Series.Add(s);
+            // =============================
+            // 2) 데이터만 업데이트
+            // =============================
 
-            // 🔹 이전 선택 조각 하이라이트 복원
-            foreach (var p in s.Points)
+            var series = chart.Series["월 목표 생산량"];
+
+            var pAch = series.Points.First(p => p.AxisLabel == "달성");
+            var pMiss = series.Points.First(p => p.AxisLabel == "미달성");
+
+            pAch.YValues[0] = actualProduction;
+            pMiss.YValues[0] = remaining;
+
+            // 선택 하이라이트 복원
+            foreach (var p in series.Points) p.BorderWidth = 0;
+
+            var selectedPoint = series.Points.FirstOrDefault(p => p.AxisLabel == _selectedMonthlyTargetCategoryName);
+            if (selectedPoint == null)
             {
-                p.BorderWidth = 0;
+                selectedPoint = series.Points.FirstOrDefault(p => p.AxisLabel == "달성");
+                _selectedMonthlyTargetCategoryName = selectedPoint?.AxisLabel ?? "달성";
             }
 
-            var selectedPoint = s.Points.FirstOrDefault(p => p.AxisLabel == _selectedMonthlyTargetCategoryName);
             if (selectedPoint != null)
             {
                 selectedPoint.BorderColor = Color.White;
                 selectedPoint.BorderWidth = 3;
             }
 
+            // 텍스트 라벨 갱신
+            if (_monthlyTargetTargetLabel != null)
+                _monthlyTargetTargetLabel.Text = $"월 목표: {targetMonthly:N0}개";
 
-            // 4) 오른쪽(또는 아래) 레전드용 FlowLayoutPanel 구성
-            flowLegendMonthlyTarget.SuspendLayout();
-            flowLegendMonthlyTarget.Controls.Clear();
-            flowLegendMonthlyTarget.FlowDirection = FlowDirection.TopDown;
-            flowLegendMonthlyTarget.WrapContents = false;
-            flowLegendMonthlyTarget.AutoSize = false;
-            flowLegendMonthlyTarget.BackColor = Color.Transparent;
+            if (_monthlyTargetActualLabel != null)
+                _monthlyTargetActualLabel.Text = $"실제: {actualProduction:N0}개";
 
-            // 5) 달성률 크게 표시 (기본은 "달성" 기준)
-            var ratePanel = new Panel
+            if (_monthlyTargetItemLabels.TryGetValue("달성", out var achLbl))
+                achLbl.Text = $"달성  {actualProduction:N0}개";
+
+            if (_monthlyTargetItemLabels.TryGetValue("미달성", out var missLbl))
+                missLbl.Text = $"미달성  {remaining:N0}개"; 
+
+            // 퍼센트 라벨 갱신
+            if (_monthlyTargetRateLabel != null)
             {
-                Height = 50,
-                Width = flowLegendMonthlyTarget.Width - 16,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0, 0, 0, 8),
-            };
+                double total = series.Points.Sum(p => p.YValues[0]);
+                double val = selectedPoint?.YValues[0] ?? 0;
+                double rate = total > 0 ? (val * 100.0 / total) : 0.0;
 
-            var rateLabel = new Label
-            {
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Font = new Font("맑은 고딕", 18, FontStyle.Bold),
-            };
-
-            // 🔹 이전 선택 상태에 따라 초기 표시(달성 / 미달성)
-            string selectedCat = _selectedMonthlyTargetCategoryName;
-            double initialRate;
-            Color initialColor;
-
-            if (selectedCat == "미달성")
-            {
-                initialRate = missRate;
-                initialColor = Color.FromArgb(244, 67, 54); // 경고 느낌 빨강
+                _monthlyTargetRateLabel.Text = $"{rate:0.#}%";
+                _monthlyTargetRateLabel.ForeColor =
+                    (_selectedMonthlyTargetCategoryName == "달성")
+                    ? Color.FromArgb(100, 181, 246)
+                    : Color.FromArgb(244, 67, 54);
             }
-            else
-            {
-                // 기본은 "달성"
-                selectedCat = "달성";
-                _selectedMonthlyTargetCategoryName = "달성";
-                initialRate = achievementRate;
-                initialColor = Color.FromArgb(100, 181, 246); // 파랑
-            }
-
-            rateLabel.Text = $"{initialRate:0.#}%";
-            rateLabel.ForeColor = initialColor;
-
-
-            ratePanel.Controls.Add(rateLabel);
-            flowLegendMonthlyTarget.Controls.Add(ratePanel);
-
-            // 6) 목표 / 실제 생산량 텍스트
-            var targetPanel = new Panel
-            {
-                Height = 24,
-                Width = flowLegendMonthlyTarget.Width - 16,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0, 0, 0, 2),
-            };
-
-            var targetLabel = new Label
-            {
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Text = $"월 목표: {targetMonthly:N0}개",
-                Font = new Font("맑은 고딕", 9),
-                ForeColor = Color.Gainsboro
-            };
-
-            targetPanel.Controls.Add(targetLabel);
-            flowLegendMonthlyTarget.Controls.Add(targetPanel);
-
-            var actualPanel = new Panel
-            {
-                Height = 24,
-                Width = flowLegendMonthlyTarget.Width - 16,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0, 0, 0, 8),
-            };
-
-            var actualLabel = new Label
-            {
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Text = $"실제: {actualProduction:N0}개",
-                Font = new Font("맑은 고딕", 9),
-                ForeColor = Color.Gainsboro
-            };
-
-            actualPanel.Controls.Add(actualLabel);
-            flowLegendMonthlyTarget.Controls.Add(actualPanel);
-
-            // 7) 달성/미달성 색상 네모 + 라벨
-            foreach (var item in categories)
-            {
-                // 🔹 foreach 캡처 안전용으로 로컬 변수에 복사
-                string localName = item.name;
-                int localValue = item.value;
-                Color localColor = item.color;
-
-                var row = new Panel
-                {
-                    Height = 24,
-                    Width = flowLegendMonthlyTarget.Width - 16,
-                    BackColor = Color.Transparent,
-                    Margin = new Padding(0, 2, 0, 2),
-                };
-
-                var swatch = new Panel
-                {
-                    Width = 12,
-                    Height = 12,
-                    BackColor = localColor,
-                    Left = 0,
-                    Top = (row.Height - 12) / 2
-                };
-
-                var lbl = new Label
-                {
-                    AutoSize = true,
-                    Left = 20,
-                    Top = (row.Height - 16) / 2,
-                    Text = $"{localName}  {localValue:N0}개",
-                    ForeColor = Color.Gainsboro
-                };
-
-                // 🔥 클릭 시 해당 도넛 조각 강조 + 퍼센트 레이블 모드 변경
-                EventHandler clickHandler = (_, __) =>
-                {
-                    _selectedMonthlyTargetCategoryName = localName;
-
-                    // 1) 도넛 강조
-                    foreach (var p in s.Points) { p.BorderWidth = 0; }
-                    var targetPoint = s.Points.FirstOrDefault(p => p.AxisLabel == localName);
-                    if (targetPoint != null)
-                    {
-                        targetPoint.BorderColor = Color.White;
-                        targetPoint.BorderWidth = 3;
-                    }
-
-                    // 2) 퍼센트 레이블 내용 변경
-                    if (localName == "달성")
-                    {
-                        rateLabel.Text = $"{achievementRate:0.#}%";
-                        rateLabel.ForeColor = Color.FromArgb(100, 181, 246); // 파랑
-                    }
-                    else if (localName == "미달성")
-                    {
-                        rateLabel.Text = $"{missRate:0.#}%";
-                        rateLabel.ForeColor = Color.FromArgb(244, 67, 54); // 살짝 경고 느낌 빨강
-                    }
-                };
-
-                row.Cursor = Cursors.Hand;
-                swatch.Cursor = Cursors.Hand;
-                lbl.Cursor = Cursors.Hand;
-
-                row.Click += clickHandler;
-                swatch.Click += clickHandler;
-                lbl.Click += clickHandler;
-
-                row.Controls.Add(swatch);
-                row.Controls.Add(lbl);
-                flowLegendMonthlyTarget.Controls.Add(row);
-            }
-
-            flowLegendMonthlyTarget.ResumeLayout();
         }
 
 
@@ -954,7 +1044,7 @@ namespace pcb_monitoring_program.Views.Statistics
                     sb.AppendLine($"{rec.StatDate:yyyy-MM-dd}");
                     sb.AppendLine($"[{series.Name}] {value:N0}개");
                     sb.AppendLine($"총 검사: {total:N0}개");
-                    sb.AppendLine($"정상: {normal:N0} / 부품: {comp:N0} / 납땜: {solder:N0} / 폐기: {scrap:N0}");
+                    sb.AppendLine($"정상: {normal:N0} / 부품: {comp:N0} / S/N: {solder:N0} / 폐기: {scrap:N0}");
                     sb.AppendLine($"불량률: {defectRate:0.00}% ({defectSum:N0}개)");
 
                     // 마우스 위치 기준으로 약간 옆/위에 표시
@@ -1026,7 +1116,7 @@ namespace pcb_monitoring_program.Views.Statistics
                 var sb = new StringBuilder();
                 sb.AppendLine($"{_currentYear}년 {month:00}월");
                 sb.AppendLine($"[{series.Name}] {value:N0}개");
-                sb.AppendLine($"정상: {sumNormal:N0} / 부품: {sumPartDefect:N0} / 납땜: {sumSolderDefect:N0} / 폐기: {sumScrap:N0}");
+                sb.AppendLine($"정상: {sumNormal:N0} / 부품: {sumPartDefect:N0} / S/N: {sumSolderDefect:N0} / 폐기: {sumScrap:N0}");
                 sb.AppendLine($"총 검사: {total:N0}개");
                 sb.AppendLine($"불량률: {defectRate:0.00}% ({defectSum:N0}개)");
 
@@ -1083,7 +1173,7 @@ namespace pcb_monitoring_program.Views.Statistics
                         ws.Cell(1, 2).Value = "총 검사 수";
                         ws.Cell(1, 3).Value = "정상";
                         ws.Cell(1, 4).Value = "부품불량";
-                        ws.Cell(1, 5).Value = "납땜불량";
+                        ws.Cell(1, 5).Value = "S/N 불량";
                         ws.Cell(1, 6).Value = "폐기";
                         ws.Cell(1, 7).Value = "불량률";
 

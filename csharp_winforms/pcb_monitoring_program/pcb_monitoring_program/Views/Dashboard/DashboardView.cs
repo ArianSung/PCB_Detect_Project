@@ -1,17 +1,20 @@
-﻿using System;
+﻿using pcb_monitoring_program;
+using pcb_monitoring_program.DatabaseManager;
+using pcb_monitoring_program.DatabaseManager.Models;
+using pcb_monitoring_program.Views.Monitoring;
+using SocketIOClient;              
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO;                   
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
-using pcb_monitoring_program;
-using pcb_monitoring_program.DatabaseManager;
-using pcb_monitoring_program.DatabaseManager.Models;
 
 namespace pcb_monitoring_program.Views.Dashboard
 {
@@ -28,12 +31,59 @@ namespace pcb_monitoring_program.Views.Dashboard
         private int[] _hourlyPartDefect;
         private int[] _hourlySolderDefect;
         private int[] _hourlyScrap;
+
+        private bool _defectRateInitialized = false;
+        private bool _defectCategoryInitialized = false;
+        private bool _dailyTargetInitialized = false;
+        private Dictionary<string, Label> _defectCategoryLegendLabels = new Dictionary<string, Label>();
+        private Dictionary<string, Label> _dailyTargetLegendLabels = new Dictionary<string, Label>();
+
+        private Label _lblDailyRate;
+        private Label _lblDailyTarget;
+        private Label _lblDailyActual;
+        private Label _lblDefectRate;
+        private Label _lblTotal;
+        private Label _lblNormal;
+        private Label _lblDefect;
+
+        // "정상" / "불량" 레전드 라벨 캐시 (텍스트만 업데이트용)
+        private Dictionary<string, Label> _defectRateLegendLabels = new Dictionary<string, Label>();
+
+        // 도넛 선택 상태 유지용
+        private string _selectedDefectRateCategory = "불량";       // "정상" or "불량"
+        private string _selectedDailyTargetCategory = "달성";      // "달성" or "미달성"
+        private string _selectedDefectCategoryName = "부품불량";   // "부품불량" / "S/N불량" / "폐기"
+
+        private SocketIO _socket;
+        private System.Windows.Forms.Timer _frameRequestTimer;
+
+        private int _frontFrameCount = 0;
+        private int _backFrameCount = 0;
+
+        private DateTime _lastFrontUpdate = DateTime.MinValue;
+        private DateTime _lastBackUpdate = DateTime.MinValue;
+        private const int MIN_UPDATE_INTERVAL_MS = 33; // 30 FPS 기준
+
+        // Flask 서버 URL (MonitoringView와 동일하게 맞춤)
+        private const string SERVER_URL = "http://100.80.24.53:5000";
+
         public DashboardView()
         {
             InitializeComponent();
+            this.DoubleBuffered = true;
+
+            EnableDoubleBuffering(pb_DashFront);
+            EnableDoubleBuffering(pb_DashBack);
+
+            pb_DashFront.SizeMode = PictureBoxSizeMode.StretchImage;
+            pb_DashBack.SizeMode = PictureBoxSizeMode.StretchImage;
+
+            // 대시보드 컨트롤이 파괴될 때 WebSocket 정리
+            this.HandleDestroyed += OnHandleDestroyed;
+
         }
 
-        private void DashboardView_Load(object sender, EventArgs e)
+        private async void DashboardView_Load(object sender, EventArgs e)
         {
 
 
@@ -86,10 +136,15 @@ namespace pcb_monitoring_program.Views.Dashboard
                 RedrawDashboardCharts();
             };
             _refreshTimer.Start();
+
+            if (!DesignMode)
+            {
+                await InitializeWebSocket();
+            }
         }
 
 
-        // 0) 오늘 기준 시간별 데이터 다시 로드
+        // 0) 오늘 기준 시간별 데이터 다시 로드 (v3.0 스키마: 제품별 데이터 합산)
         private void ReloadHourlyDataFromDb()
         {
             // 0~23시 (길이 24) 초기화
@@ -108,8 +163,10 @@ namespace pcb_monitoring_program.Views.Dashboard
                     DateTime today = DateTime.Today;
                     DateTime tomorrow = today.AddDays(1);
 
-                    List<HourlyStatistics> stats = db.GetHourlyStatistics(today, tomorrow);
+                    // v3.0: 제품별로 데이터가 분리되어 있으므로 전체 조회 (productCode = null)
+                    List<HourlyStatistics> stats = db.GetHourlyStatistics(today, tomorrow, productCode: null);
 
+                    // v3.0: 같은 시간대에 여러 제품 데이터가 있을 수 있으므로 합산
                     foreach (var item in stats)
                     {
                         int h = item.StatDatetime.Hour;   // 0~23
@@ -117,16 +174,260 @@ namespace pcb_monitoring_program.Views.Dashboard
                         if (h < 0 || h > 23)
                             continue;
 
-                        _hourlyNormal[h] = item.NormalCount;
-                        _hourlyPartDefect[h] = item.ComponentDefectCount;
-                        _hourlySolderDefect[h] = item.SolderDefectCount;
-                        _hourlyScrap[h] = item.DiscardCount;
+                        // 시간대별로 모든 제품 데이터를 합산
+                        _hourlyNormal[h] += item.NormalCount;
+                        _hourlyPartDefect[h] += item.ComponentDefectCount;  // missing_count
+                        _hourlySolderDefect[h] += item.SolderDefectCount;  // position_error_count
+                        _hourlyScrap[h] += item.DiscardCount;
                     }
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[ReloadHourlyDataFromDb 실패] {ex.Message}");
+            }
+        }
+
+        private async Task InitializeWebSocket()
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("[DashboardView] WebSocket 연결 시작...");
+
+                _socket = new SocketIO(SERVER_URL);
+
+                _socket.OnConnected += async (sender, e) =>
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DashboardView] WebSocket 연결 성공: {SERVER_URL}");
+
+                    if (InvokeRequired)
+                        Invoke(new Action(StartFrameRequestTimer));
+                    else
+                        StartFrameRequestTimer();
+                };
+
+                _socket.OnDisconnected += (sender, e) =>
+                {
+                    System.Diagnostics.Debug.WriteLine("[DashboardView] WebSocket 연결 해제");
+
+                    if (InvokeRequired)
+                        Invoke(new Action(StopFrameRequestTimer));
+                    else
+                        StopFrameRequestTimer();
+                };
+
+                // frame_update 이벤트 핸들러
+                _socket.On("frame_update", response =>
+                {
+                    try
+                    {
+                        var data = response.GetValue<FrameData>();
+
+                        string cameraId = data.camera_id;
+                        string frameBase64 = data.image;
+
+                        // 프레임 드롭 (UI 과부하 방지)
+                        if (cameraId == "left")
+                        {
+                            if ((DateTime.Now - _lastFrontUpdate).TotalMilliseconds < MIN_UPDATE_INTERVAL_MS)
+                                return;
+                            _lastFrontUpdate = DateTime.Now;
+                        }
+                        else if (cameraId == "right")
+                        {
+                            if ((DateTime.Now - _lastBackUpdate).TotalMilliseconds < MIN_UPDATE_INTERVAL_MS)
+                                return;
+                            _lastBackUpdate = DateTime.Now;
+                        }
+
+                        byte[] frameBytes = Convert.FromBase64String(frameBase64);
+
+                        using (MemoryStream ms = new MemoryStream(frameBytes))
+                        using (Image tempImage = Image.FromStream(ms))
+                        {
+                            Bitmap bitmap = new Bitmap(tempImage);
+
+                            if (cameraId == "left")
+                            {
+                                _frontFrameCount++;
+                                if (InvokeRequired)
+                                {
+                                    BeginInvoke(new Action(() =>
+                                        UpdatePictureBox(pb_DashFront, bitmap, "앞면")));
+                                }
+                                else
+                                {
+                                    UpdatePictureBox(pb_DashFront, bitmap, "앞면");
+                                }
+                            }
+                            else if (cameraId == "right")
+                            {
+                                _backFrameCount++;
+                                if (InvokeRequired)
+                                {
+                                    BeginInvoke(new Action(() =>
+                                        UpdatePictureBox(pb_DashBack, bitmap, "뒷면")));
+                                }
+                                else
+                                {
+                                    UpdatePictureBox(pb_DashBack, bitmap, "뒷면");
+                                }
+                            }
+
+                            int frameCount = (cameraId == "left") ? _frontFrameCount : _backFrameCount;
+                            if (frameCount % 10 == 0)
+                            {
+                                System.Diagnostics.Debug.WriteLine(
+                                    $"[DashboardView] {cameraId} 프레임 수신: {frameCount}개 (크기: {frameBytes.Length} bytes)");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[DashboardView] frame_update 처리 실패: {ex.Message}");
+                    }
+                });
+
+                _socket.On("connection_response", response =>
+                {
+                    var data = response.GetValue<ConnectionResponse>();
+                    System.Diagnostics.Debug.WriteLine($"[DashboardView] 연결 응답: {data.status} - {data.message}");
+                });
+
+                _socket.On("error", response =>
+                {
+                    var data = response.GetValue<ErrorResponse>();
+                    System.Diagnostics.Debug.WriteLine($"[DashboardView] 서버 에러: {data.message}");
+                });
+
+                System.Diagnostics.Debug.WriteLine("[DashboardView] ConnectAsync() 호출 직전...");
+                await _socket.ConnectAsync();
+                System.Diagnostics.Debug.WriteLine("[DashboardView] ConnectAsync() 완료");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DashboardView] WebSocket 초기화 실패: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[DashboardView] 스택 트레이스: {ex.StackTrace}");
+
+                if (InvokeRequired)
+                {
+                    Invoke(new Action(() =>
+                        MessageBox.Show($"WebSocket 연결 실패:\n{ex.Message}\n\n{ex.StackTrace}",
+                            "오류", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                    ));
+                }
+                else
+                {
+                    MessageBox.Show($"WebSocket 연결 실패:\n{ex.Message}\n\n{ex.StackTrace}",
+                        "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        private void StartFrameRequestTimer()
+        {
+            if (_frameRequestTimer == null)
+            {
+                _frameRequestTimer = new System.Windows.Forms.Timer();
+                _frameRequestTimer.Interval = 33;  // 30 FPS
+                _frameRequestTimer.Tick += OnFrameRequestTimerTick;
+            }
+
+            _frameRequestTimer.Start();
+            System.Diagnostics.Debug.WriteLine("[DashboardView] 프레임 요청 타이머 시작 (33ms 간격)");
+        }
+
+        private void StopFrameRequestTimer()
+        {
+            if (_frameRequestTimer != null)
+            {
+                _frameRequestTimer.Stop();
+                System.Diagnostics.Debug.WriteLine("[DashboardView] 프레임 요청 타이머 중지");
+            }
+        }
+
+        private async void OnFrameRequestTimerTick(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_socket != null && _socket.Connected)
+                {
+                    await _socket.EmitAsync("request_frame", new { camera_id = "left" });
+                    await _socket.EmitAsync("request_frame", new { camera_id = "right" });
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DashboardView] 프레임 요청 실패: {ex.Message}");
+            }
+        }
+
+        private void UpdatePictureBox(PictureBox pictureBox, Image newFrame, string camera)
+        {
+            try
+            {
+                var oldImage = pictureBox.Image;
+                pictureBox.Image = newFrame;
+                oldImage?.Dispose();
+
+                int frameCount = (camera == "앞면") ? _frontFrameCount : _backFrameCount;
+                if (frameCount <= 10 || frameCount % 50 == 0)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[DashboardView] {camera} PictureBox 업데이트 성공: {pictureBox.Name} (프레임 #{frameCount})");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[DashboardView] {camera} PictureBox 업데이트 실패: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        private void OnHandleDestroyed(object sender, EventArgs e)
+        {
+            CleanupWebSocket();
+        }
+
+        private async void CleanupWebSocket()
+        {
+            try
+            {
+                StopFrameRequestTimer();
+                _frameRequestTimer?.Dispose();
+                _frameRequestTimer = null;
+
+                if (_socket != null)
+                {
+                    await _socket.DisconnectAsync();
+                    _socket.Dispose();
+                    _socket = null;
+                }
+
+                System.Diagnostics.Debug.WriteLine("[DashboardView] WebSocket 정리 완료");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DashboardView] WebSocket 정리 실패: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// PictureBox에 더블 버퍼링 활성화 (깜빡임 방지)
+        /// </summary>
+        private void EnableDoubleBuffering(PictureBox pictureBox)
+        {
+            try
+            {
+                typeof(PictureBox).InvokeMember("DoubleBuffered",
+                    System.Reflection.BindingFlags.SetProperty |
+                    System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.NonPublic,
+                    null, pictureBox, new object[] { true });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DashboardView] 더블 버퍼링 설정 실패: {ex.Message}");
             }
         }
 
@@ -162,17 +463,20 @@ namespace pcb_monitoring_program.Views.Dashboard
         // 1) 현재 _hourlyXXX 기준으로 모든 대시보드 차트 다시 그리기
         private void RedrawDashboardCharts()
         {
+
             SetupDefectRateChart();
             SetupDefectCategoryCharts();
             SetupDailyTargetCharts();
             SetupBoxRateChart();
             SetupDefectTrendChart();
             SetupHourlyInspectionChart();
+
         }
 
 
         private void SetupDefectRateChart()
         {
+            // 1) 집계 데이터 계산
             int totalNormal = _hourlyNormal.Sum();
             int totalPartDefect = _hourlyPartDefect.Sum();
             int totalSolderDefect = _hourlySolderDefect.Sum();
@@ -182,492 +486,736 @@ namespace pcb_monitoring_program.Views.Dashboard
             int defectCount = totalPartDefect + totalSolderDefect + totalScrap;
             int totalCount = normalCount + defectCount;
 
-            var rateData = new (string name, int value, Color color)[]
-            {
-        ("정상", normalCount, Color.FromArgb(100, 181, 246)),
-        ("불량", defectCount, Color.FromArgb(244, 67, 54))
-            };
-
-            // 2) 차트 초기화
-            var chart = DefectRateChart;
-            chart.Series.Clear();
-            chart.Legends.Clear();
-            chart.ChartAreas.Clear();
-
-            var area = new ChartArea("area");
-            area.BackColor = Color.Transparent;
-            area.Position.Auto = false;
-            area.Position.X = 5; area.Position.Y = 5; area.Position.Width = 90; area.Position.Height = 90;
-            area.InnerPlotPosition.Auto = false;
-            area.InnerPlotPosition.X = 10; area.InnerPlotPosition.Y = 10; area.InnerPlotPosition.Width = 80; area.InnerPlotPosition.Height = 80;
-            chart.ChartAreas.Add(area);
-
-            var s = new Series("전체 불량률")
-            {
-                ChartType = SeriesChartType.Doughnut
-            };
-            s["DoughnutRadius"] = "50";
-            s["PieLabelStyle"] = "Disabled";
-            s.IsValueShownAsLabel = false;
-
-            foreach (var item in rateData)
-            {
-                int idx = s.Points.AddXY(item.name, item.value);
-                s.Points[idx].Color = item.color;
-            }
-            chart.Series.Add(s);
-
-            // 3) 디자이너에 올려둔 flowLegendRate 재사용 (❌ new 안 만들기!)
-            flowLegendRate.SuspendLayout();
-            flowLegendRate.Controls.Clear();
-            flowLegendRate.FlowDirection = FlowDirection.TopDown;
-            flowLegendRate.WrapContents = false;
-            flowLegendRate.AutoSize = false;
-            flowLegendRate.BackColor = Color.Transparent;
-            // Location / Size 는 디자이너에서 설정한 값 그대로 사용
-
-            // 4) 불량률 표시 (크게, 눈에 띄게)
             double defectRate = 0.0;
             if (totalCount > 0)
                 defectRate = (defectCount * 100.0) / totalCount;
 
-            var ratePanel = new Panel
+            var chart = DefectRateChart;
+
+            // ─────────────────────────────────────────────
+            // 2) 처음 한 번만 차트 / 레전드 레이아웃 구성
+            // ─────────────────────────────────────────────
+            if (!_defectRateInitialized)
             {
-                Height = 50,
-                Width = flowLegendRate.Width - 16,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0, 0, 0, 8),
-            };
+                // ▷ 차트 기본 레이아웃 세팅 (1회)
+                chart.Series.Clear();
+                chart.Legends.Clear();
+                chart.ChartAreas.Clear();
 
-            var rateLabel = new Label
-            {
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Text = $"{defectRate:0.#}%",
-                Font = new Font("맑은 고딕", 18, FontStyle.Bold),
-                ForeColor = Color.FromArgb(244, 67, 54)
-            };
+                var area = new ChartArea("area");
+                area.BackColor = Color.Transparent;
+                area.Position.Auto = false;
+                area.Position.X = 5; area.Position.Y = 5; area.Position.Width = 90; area.Position.Height = 90;
+                area.InnerPlotPosition.Auto = false;
+                area.InnerPlotPosition.X = 10; area.InnerPlotPosition.Y = 10; area.InnerPlotPosition.Width = 80; area.InnerPlotPosition.Height = 80;
+                chart.ChartAreas.Add(area);
 
-            ratePanel.Controls.Add(rateLabel);
-            flowLegendRate.Controls.Add(ratePanel);
+                var s = new Series("전체 불량률")
+                {
+                    ChartType = SeriesChartType.Doughnut
+                };
+                s["DoughnutRadius"] = "50";
+                s["PieLabelStyle"] = "Disabled";
+                s.IsValueShownAsLabel = false;
+                chart.Series.Add(s);
 
-            // 5) 전체/정상/불량 개수 표시
-            var totalPanel = new Panel
-            {
-                Height = 24,
-                Width = flowLegendRate.Width - 16,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0, 0, 0, 2),
-            };
+                // ▷ FlowLayoutPanel 안의 기본 구조도 1회만 생성
+                flowLegendRate.SuspendLayout();
+                flowLegendRate.Controls.Clear();
+                flowLegendRate.FlowDirection = FlowDirection.TopDown;
+                flowLegendRate.WrapContents = false;
+                flowLegendRate.AutoSize = false;
+                flowLegendRate.BackColor = Color.Transparent;
 
-            var totalLabel = new Label
-            {
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Text = $"전체: {totalCount}개",
-                Font = new Font("맑은 고딕", 9, FontStyle.Regular),
-                ForeColor = Color.Gainsboro
-            };
+                // ─ 큰 퍼센트 라벨
+                var ratePanel = new Panel
+                {
+                    Height = 50,
+                    Width = flowLegendRate.Width - 16,
+                    BackColor = Color.Transparent,
+                    Margin = new Padding(0, 0, 0, 8),
+                };
 
-            totalPanel.Controls.Add(totalLabel);
-            flowLegendRate.Controls.Add(totalPanel);
+                _lblDefectRate = new Label
+                {
+                    AutoSize = false,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Font = new Font("맑은 고딕", 18, FontStyle.Bold),
+                    ForeColor = Color.FromArgb(244, 67, 54)  // 빨간색
+                };
 
-            var normalPanel = new Panel
-            {
-                Height = 24,
-                Width = flowLegendRate.Width - 16,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0, 0, 0, 2),
-            };
+                ratePanel.Controls.Add(_lblDefectRate);
+                flowLegendRate.Controls.Add(ratePanel);
 
-            var normalLabel = new Label
-            {
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Text = $"정상: {normalCount}개",
-                Font = new Font("맑은 고딕", 9, FontStyle.Regular),
-                ForeColor = Color.Gainsboro
-            };
-
-            normalPanel.Controls.Add(normalLabel);
-            flowLegendRate.Controls.Add(normalPanel);
-
-            var defectPanel = new Panel
-            {
-                Height = 24,
-                Width = flowLegendRate.Width - 16,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0, 0, 0, 8),
-            };
-
-            var defectLabel = new Label
-            {
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Text = $"불량: {defectCount}개",
-                Font = new Font("맑은 고딕", 9, FontStyle.Regular),
-                ForeColor = Color.Gainsboro
-            };
-
-            defectPanel.Controls.Add(defectLabel);
-            flowLegendRate.Controls.Add(defectPanel);
-
-            // 6) 커스텀 아이템(색상 네모 + 텍스트) 추가
-            foreach (var item in rateData)
-            {
-                var row = new Panel
+                // ─ 전체 개수 라벨
+                var totalPanel = new Panel
                 {
                     Height = 24,
                     Width = flowLegendRate.Width - 16,
                     BackColor = Color.Transparent,
-                    Margin = new Padding(0, 2, 0, 2),
+                    Margin = new Padding(0, 0, 0, 2),
                 };
 
-                var swatch = new Panel
+                _lblTotal = new Label
                 {
-                    Width = 12,
-                    Height = 12,
-                    BackColor = item.color,
-                    Left = 0,
-                    Top = (row.Height - 12) / 2
-                };
-
-                var lbl = new Label
-                {
-                    AutoSize = true,
-                    Left = 20,
-                    Top = (row.Height - 16) / 2,
-                    Text = $"{item.name}  {item.value}개",
+                    AutoSize = false,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Font = new Font("맑은 고딕", 9, FontStyle.Regular),
                     ForeColor = Color.Gainsboro
                 };
 
-                EventHandler clickHandler = (_, __) =>
+                totalPanel.Controls.Add(_lblTotal);
+                flowLegendRate.Controls.Add(totalPanel);
+
+                // ─ 정상 개수 라벨
+                var normalPanel = new Panel
                 {
-                    foreach (var p in s.Points) { p.BorderWidth = 0; }
-                    var target = s.Points.FirstOrDefault(p => p.AxisLabel == item.name);
-                    if (target != null)
-                    {
-                        target.BorderColor = Color.White;
-                        target.BorderWidth = 3;
-                    }
+                    Height = 24,
+                    Width = flowLegendRate.Width - 16,
+                    BackColor = Color.Transparent,
+                    Margin = new Padding(0, 0, 0, 2),
                 };
 
-                row.Cursor = Cursors.Hand;
-                swatch.Cursor = Cursors.Hand;
-                lbl.Cursor = Cursors.Hand;
+                _lblNormal = new Label
+                {
+                    AutoSize = false,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Font = new Font("맑은 고딕", 9, FontStyle.Regular),
+                    ForeColor = Color.Gainsboro
+                };
 
-                row.Click += clickHandler;
-                swatch.Click += clickHandler;
-                lbl.Click += clickHandler;
+                normalPanel.Controls.Add(_lblNormal);
+                flowLegendRate.Controls.Add(normalPanel);
 
-                row.Controls.Add(swatch);
-                row.Controls.Add(lbl);
-                flowLegendRate.Controls.Add(row);
+                // ─ 불량 개수 라벨
+                var defectPanel = new Panel
+                {
+                    Height = 24,
+                    Width = flowLegendRate.Width - 16,
+                    BackColor = Color.Transparent,
+                    Margin = new Padding(0, 0, 0, 8),
+                };
+
+                _lblDefect = new Label
+                {
+                    AutoSize = false,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Font = new Font("맑은 고딕", 9, FontStyle.Regular),
+                    ForeColor = Color.Gainsboro
+                };
+
+                defectPanel.Controls.Add(_lblDefect);
+                flowLegendRate.Controls.Add(defectPanel);
+
+                // ─ "정상 / 불량" 색상 네모 + 텍스트 + 클릭 기능 있는 레전드 행 생성
+                var sRef = chart.Series["전체 불량률"];  // 클릭 핸들러에서 사용할 참조
+
+                var rateMeta = new (string name, Color color)[]
+    {
+    ("정상", Color.FromArgb(100, 181, 246)),
+    ("불량", Color.FromArgb(244, 67, 54))
+    };
+
+                foreach (var item in rateMeta)
+                {
+                    var row = new Panel
+                    {
+                        Height = 24,
+                        Width = flowLegendRate.Width - 16,
+                        BackColor = Color.Transparent,
+                        Margin = new Padding(0, 2, 0, 2),
+                    };
+
+                    var swatch = new Panel
+                    {
+                        Width = 12,
+                        Height = 12,
+                        BackColor = item.color,
+                        Left = 0,
+                        Top = (row.Height - 12) / 2
+                    };
+
+                    var lbl = new Label
+                    {
+                        AutoSize = true,
+                        Left = 20,
+                        Top = (row.Height - 16) / 2,
+                        Text = $"{item.name}  0개",  // 실제 값은 아래에서 갱신
+                        ForeColor = Color.Gainsboro
+                    };
+
+                    _defectRateLegendLabels[item.name] = lbl;
+
+                    string categoryName = item.name;
+                    EventHandler clickHandler = (_, __) =>
+                    {
+                        _selectedDefectRateCategory = categoryName;
+
+                        // 도넛 하이라이트 갱신
+                        foreach (var p in sRef.Points) { p.BorderWidth = 0; }
+
+                        var target = sRef.Points.FirstOrDefault(p => p.AxisLabel == categoryName);
+                        if (target != null)
+                        {
+                            target.BorderColor = Color.White;
+                            target.BorderWidth = 3;
+                        }
+
+                        // 선택된 조각 비율 계산
+                        double total = sRef.Points.Sum(p => p.YValues[0]);
+                        double val = target?.YValues[0] ?? 0;
+                        double rate = total > 0 ? (val * 100.0 / total) : 0.0;
+
+                        if (_lblDefectRate != null)
+                        {
+                            _lblDefectRate.Text = $"{rate:0.#}%";
+                            _lblDefectRate.ForeColor =
+                                (categoryName == "정상")
+                                    ? Color.FromArgb(100, 181, 246)
+                                    : Color.FromArgb(244, 67, 54);
+                        }
+                    };
+
+                    row.Cursor = Cursors.Hand;
+                    swatch.Cursor = Cursors.Hand;
+                    lbl.Cursor = Cursors.Hand;
+
+                    row.Click += clickHandler;
+                    swatch.Click += clickHandler;
+                    lbl.Click += clickHandler;
+
+                    row.Controls.Add(swatch);
+                    row.Controls.Add(lbl);
+                    flowLegendRate.Controls.Add(row);
+                }
+
+
+                flowLegendRate.ResumeLayout();
+
+                _defectRateInitialized = true;
             }
 
-            flowLegendRate.ResumeLayout();
+            var series = chart.Series["전체 불량률"];
+            series.Points.Clear();
+
+            int idx = series.Points.AddXY("정상", normalCount);
+            series.Points[idx].Color = Color.FromArgb(100, 181, 246);
+
+            idx = series.Points.AddXY("불량", defectCount);
+            series.Points[idx].Color = Color.FromArgb(244, 67, 54);
+
+            // 선택값 유효성 체크
+            if (_selectedDefectRateCategory != "정상" && _selectedDefectRateCategory != "불량")
+                _selectedDefectRateCategory = "불량";
+
+            // 도넛 하이라이트 복원
+            foreach (var p in series.Points) p.BorderWidth = 0;
+
+            var selectedPoint = series.Points.FirstOrDefault(p => p.AxisLabel == _selectedDefectRateCategory)
+                                ?? series.Points.FirstOrDefault(p => p.AxisLabel == "불량");
+
+            if (selectedPoint != null)
+            {
+                selectedPoint.BorderColor = Color.White;
+                selectedPoint.BorderWidth = 3;
+            }
+
+            // 비율 계산
+            double normalRate = totalCount > 0 ? normalCount * 100.0 / totalCount : 0.0;
+            double defectRatePct = totalCount > 0 ? defectCount * 100.0 / totalCount : 0.0;
+
+            double displayRate;
+            Color displayColor;
+
+            if (_selectedDefectRateCategory == "정상")
+            {
+                displayRate = normalRate;
+                displayColor = Color.FromArgb(100, 181, 246);
+            }
+            else
+            {
+                _selectedDefectRateCategory = "불량";
+                displayRate = defectRatePct;
+                displayColor = Color.FromArgb(244, 67, 54);
+            }
+
+            // 상단 요약 라벨 텍스트 업데이트
+            _lblDefectRate.Text = $"{displayRate:0.#}%";
+            _lblDefectRate.ForeColor = displayColor;
+            _lblTotal.Text = $"전체: {totalCount}개";
+            _lblNormal.Text = $"정상: {normalCount}개";
+            _lblDefect.Text = $"불량: {defectCount}개";
+
+            // 레전드 행 텍스트 갱신
+            if (_defectRateLegendLabels.TryGetValue("정상", out var lblNormalLegend))
+                lblNormalLegend.Text = $"정상  {normalCount}개";
+
+            if (_defectRateLegendLabels.TryGetValue("불량", out var lblDefectLegend))
+                lblDefectLegend.Text = $"불량  {defectCount}개";
+
         }
+
 
         private void SetupDefectCategoryCharts()
         {
             var chart = DefectCategoryChart;
 
+            // 1) 합계 계산
             int totalPartDefect = _hourlyPartDefect.Sum();
             int totalSolderDefect = _hourlySolderDefect.Sum();
             int totalScrap = _hourlyScrap.Sum();
 
             var categories = new (string name, int value, Color color)[]
             {
-                ("부품불량", totalPartDefect,   Color.FromArgb(255, 167, 38)),
-                ("납땜불량", totalSolderDefect, Color.FromArgb(158, 158, 158)),
-                ("폐기",     totalScrap,        Color.FromArgb(244, 67, 54))
+        ("부품불량", totalPartDefect,   Color.FromArgb(255, 167, 38)),
+        ("S/N불량", totalSolderDefect, Color.FromArgb(158, 158, 158)),
+        ("폐기",     totalScrap,        Color.FromArgb(244, 67, 54))
             };
 
-            // 2) 차트 초기화
-            chart.Series.Clear();
-            chart.Legends.Clear();              // ✅ 기본 레전드 제거
-            chart.ChartAreas.Clear();
-
-            var area = new ChartArea("area");
-            area.BackColor = Color.Transparent;
-            // 도넛 크기 동일하게 맞추고 싶으면 Position/InnerPlotPosition도 고정
-            area.Position.Auto = false;
-            area.Position.X = 5; area.Position.Y = 5; area.Position.Width = 90; area.Position.Height = 90;
-            area.InnerPlotPosition.Auto = false;
-            area.InnerPlotPosition.X = 10; area.InnerPlotPosition.Y = 10; area.InnerPlotPosition.Width = 80; area.InnerPlotPosition.Height = 80;
-            chart.ChartAreas.Add(area);
-
-            var s = new Series("불량 카테고리")
+            // ─────────────────────────────────────────────
+            // 2) 처음 1번만 차트 / 레전드 레이아웃 구성
+            // ─────────────────────────────────────────────
+            if (!_defectCategoryInitialized)
             {
-                ChartType = SeriesChartType.Doughnut
-            };
-            s["DoughnutRadius"] = "50";         // 도넛 구멍 크기(작을수록 구멍 큼)
-            s["PieLabelStyle"] = "Disabled";   // ✅ 조각 라벨도 끔 (겹침 방지)
-            s.IsValueShownAsLabel = false;
+                chart.Series.Clear();
+                chart.Legends.Clear();
+                chart.ChartAreas.Clear();
+
+                var area = new ChartArea("area");
+                area.BackColor = Color.Transparent;
+                area.Position.Auto = false;
+                area.Position.X = 5; area.Position.Y = 5; area.Position.Width = 90; area.Position.Height = 90;
+                area.InnerPlotPosition.Auto = false;
+                area.InnerPlotPosition.X = 10; area.InnerPlotPosition.Y = 10; area.InnerPlotPosition.Width = 80; area.InnerPlotPosition.Height = 80;
+                chart.ChartAreas.Add(area);
+
+                var s = new Series("불량 카테고리")
+                {
+                    ChartType = SeriesChartType.Doughnut
+                };
+                s["DoughnutRadius"] = "50";
+                s["PieLabelStyle"] = "Disabled";
+                s.IsValueShownAsLabel = false;
+                chart.Series.Add(s);
+
+                // ─ 커스텀 레전드(FlowLayoutPanel) 초기 세팅
+                flowLegend.SuspendLayout();
+                flowLegend.Controls.Clear();
+                flowLegend.FlowDirection = FlowDirection.TopDown;
+                flowLegend.WrapContents = false;
+                flowLegend.AutoSize = false;
+                flowLegend.BackColor = Color.Transparent;
+
+                // series 참조 (클릭 핸들러에서 사용)
+                var sRef = chart.Series["불량 카테고리"];
+
+                // "부품불량 / S/N불량 / 폐기" 행 생성 (한 번만)
+                foreach (var item in categories)
+                {
+                    var row = new Panel
+                    {
+                        Height = 24,
+                        Width = flowLegend.Width - 16,
+                        BackColor = Color.Transparent,
+                        Margin = new Padding(0, 2, 0, 2),
+                    };
+
+                    var swatch = new Panel
+                    {
+                        Width = 12,
+                        Height = 12,
+                        BackColor = item.color,
+                        Left = 0,
+                        Top = (row.Height - 12) / 2
+                    };
+
+                    var lbl = new Label
+                    {
+                        AutoSize = true,
+                        Left = 20,
+                        Top = (row.Height - 16) / 2,
+                        Text = $"{item.name}  0개",   // 실제 값은 아래에서 갱신
+                        ForeColor = Color.Gainsboro
+                    };
+
+                    // 나중에 Text만 바꿔주려고 캐싱
+                    _defectCategoryLegendLabels[item.name] = lbl;
+
+                    // 클릭 시 해당 조각만 강조
+                    string categoryName = item.name;
+                    EventHandler clickHandler = (_, __) =>
+                    {
+                        foreach (var p in sRef.Points) { p.BorderWidth = 0; }
+
+                        var target = sRef.Points.FirstOrDefault(p => p.AxisLabel == categoryName);
+                        if (target != null)
+                        {
+                            target.BorderColor = Color.White;
+                            target.BorderWidth = 3;
+                        }
+                    };
+
+                    row.Cursor = Cursors.Hand;
+                    swatch.Cursor = Cursors.Hand;
+                    lbl.Cursor = Cursors.Hand;
+
+                    row.Click += clickHandler;
+                    swatch.Click += clickHandler;
+                    lbl.Click += clickHandler;
+
+                    row.Controls.Add(swatch);
+                    row.Controls.Add(lbl);
+                    flowLegend.Controls.Add(row);
+                }
+
+                flowLegend.ResumeLayout();
+
+                _defectCategoryInitialized = true;
+            }
+
+            // ─────────────────────────────────────────────
+            // 3) 여기부터는 5초마다 "데이터만" 갱신
+            // ─────────────────────────────────────────────
+
+            // 도넛 데이터 갱신
+            var series = chart.Series["불량 카테고리"];
+            series.Points.Clear();
 
             foreach (var item in categories)
             {
-                var pt = s.Points.AddXY(item.name, item.value);
-                s.Points[pt].Color = item.color;  // ✅ 차트 조각 색상
+                int idx = series.Points.AddXY(item.name, item.value);
+                series.Points[idx].Color = item.color;
             }
-            chart.Series.Add(s);
 
-            // 3) 커스텀 레전드(FlowLayoutPanel) 초기화
-            flowLegend.SuspendLayout();
-            flowLegend.Controls.Clear();
-            flowLegend.FlowDirection = FlowDirection.TopDown;
-            flowLegend.WrapContents = false;
-            flowLegend.AutoSize = false;    // Dock=Right라면 false가 깔끔
-            flowLegend.BackColor = Color.Transparent;
-
-            // 4) 커스텀 아이템(색상 네모 + 텍스트) 추가
+            // 레전드 텍스트 갱신
             foreach (var item in categories)
             {
-                var row = new Panel
+                if (_defectCategoryLegendLabels.TryGetValue(item.name, out var lbl))
                 {
-                    Height = 24,
-                    Width = flowLegend.Width - 16,
-                    BackColor = Color.Transparent,
-                    Margin = new Padding(0, 2, 0, 2),
-                };
-
-                var swatch = new Panel
-                {
-                    Width = 12,
-                    Height = 12,
-                    BackColor = item.color,
-                    Left = 0,
-                    Top = (row.Height - 12) / 2
-                };
-
-                var lbl = new Label
-                {
-                    AutoSize = true,
-                    Left = 20,
-                    Top = (row.Height - 16) / 2,
-                    Text = $"{item.name}  {item.value}개",
-                    ForeColor = Color.Gainsboro // 밝은 테마면 Black
-                };
-
-                // (선택) 클릭 시 해당 조각 강조 효과
-                EventHandler clickHandler = (_, __) =>
-                {
-                    foreach (var p in s.Points) { p.BorderWidth = 0; }
-                    // 같은 이름의 포인트 찾아 강조
-                    var target = s.Points.FirstOrDefault(p => p.AxisLabel == item.name);
-                    if (target != null) { target.BorderColor = Color.White; target.BorderWidth = 3; }
-                };
-
-                row.Cursor = Cursors.Hand;
-                swatch.Cursor = Cursors.Hand;
-                lbl.Cursor = Cursors.Hand;
-
-                row.Click += clickHandler;
-                swatch.Click += clickHandler;
-                lbl.Click += clickHandler;
-
-                row.Controls.Add(swatch);
-                row.Controls.Add(lbl);
-                flowLegend.Controls.Add(row);
+                    lbl.Text = $"{item.name}  {item.value}개";
+                }
             }
-            flowLegend.ResumeLayout();
-
         }
+
 
         private void SetupDailyTargetCharts()
         {
             // 1) 목표 및 실제 생산량 데이터
-            int targetProduction = 1000;  // 목표 생산량
-            int actualProduction = _hourlyNormal.Sum();  // 실제 생산량
-            int remaining = targetProduction - actualProduction;  // 미달성 = 250
+            int targetProduction = 1000;                  // 목표 생산량
+            int actualProduction = _hourlyNormal.Sum();   // 실제 생산량
+
+            // 남은 물량 계산 (음수 방지)
+            int remaining = targetProduction - actualProduction;
+            if (remaining < 0) remaining = 0;
 
             if (actualProduction > targetProduction)
                 actualProduction = targetProduction;
 
-
             // 2) 차트용 데이터 (달성 vs 미달성)
             var categories = new (string name, int value, Color color)[]
             {
-                ("달성", actualProduction, Color.FromArgb(100, 181, 246)),    // 밝은 파란색
-                ("미달성", remaining, Color.FromArgb(66, 66, 66))             // 어두운 회색
+        ("달성",   actualProduction, Color.FromArgb(100, 181, 246)),
+        ("미달성", remaining,        Color.FromArgb(66, 66, 66))
             };
 
-            // 3) 차트 초기화
             var chart = DailyTargetChart;
-            chart.Series.Clear();
-            chart.Legends.Clear();
-            chart.ChartAreas.Clear();
 
-            var area = new ChartArea("area");
-            area.BackColor = Color.Transparent;
-            area.Position.Auto = false;
-            area.Position.X = 5; area.Position.Y = 5; area.Position.Width = 90; area.Position.Height = 90;
-            area.InnerPlotPosition.Auto = false;
-            area.InnerPlotPosition.X = 10; area.InnerPlotPosition.Y = 10; area.InnerPlotPosition.Width = 80; area.InnerPlotPosition.Height = 80;
-            chart.ChartAreas.Add(area);
-
-            var s = new Series("목표 생산량")
+            // ─────────────────────────────────────────────
+            // 3) 처음 1번만 차트 / 레전드 레이아웃 구성
+            // ─────────────────────────────────────────────
+            if (!_dailyTargetInitialized)
             {
-                ChartType = SeriesChartType.Doughnut
-            };
-            s["DoughnutRadius"] = "50";
-            s["PieLabelStyle"] = "Disabled";
-            s.IsValueShownAsLabel = false;
+                chart.Series.Clear();
+                chart.Legends.Clear();
+                chart.ChartAreas.Clear();
 
-            foreach (var item in categories)
-            {
-                var pt = s.Points.AddXY(item.name, item.value);
-                s.Points[pt].Color = item.color;
-            }
-            chart.Series.Add(s);
+                var area = new ChartArea("area");
+                area.BackColor = Color.Transparent;
+                area.Position.Auto = false;
+                area.Position.X = 5; area.Position.Y = 5; area.Position.Width = 90; area.Position.Height = 90;
+                area.InnerPlotPosition.Auto = false;
+                area.InnerPlotPosition.X = 10; area.InnerPlotPosition.Y = 10; area.InnerPlotPosition.Width = 80; area.InnerPlotPosition.Height = 80;
+                chart.ChartAreas.Add(area);
 
-            // 4) 커스텀 레전드(FlowLayoutPanel) 초기화
-            flowLegendTarget.SuspendLayout();
-            flowLegendTarget.Controls.Clear();
-            flowLegendTarget.FlowDirection = FlowDirection.TopDown;
-            flowLegendTarget.WrapContents = false;
-            flowLegendTarget.AutoSize = false;
-            flowLegendTarget.BackColor = Color.Transparent;
+                var s = new Series("목표 생산량")
+                {
+                    ChartType = SeriesChartType.Doughnut
+                };
+                s["DoughnutRadius"] = "50";
+                s["PieLabelStyle"] = "Disabled";
+                s.IsValueShownAsLabel = false;
+                chart.Series.Add(s);
 
-            // 5) 달성률 표시 (크게, 눈에 띄게)
-            double achievementRate = (actualProduction * 100.0) / targetProduction;
+                // ─ FlowLayoutPanel(legendTarget) 초기 세팅
+                flowLegendTarget.SuspendLayout();
+                flowLegendTarget.Controls.Clear();
+                flowLegendTarget.FlowDirection = FlowDirection.TopDown;
+                flowLegendTarget.WrapContents = false;
+                flowLegendTarget.AutoSize = false;
+                flowLegendTarget.BackColor = Color.Transparent;
 
-            var ratePanel = new Panel
-            {
-                Height = 50,
-                Width = flowLegendTarget.Width - 16,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0, 0, 0, 8),
-            };
+                // ▶ 달성률 큰 글씨
+                var ratePanel = new Panel
+                {
+                    Height = 50,
+                    Width = flowLegendTarget.Width - 16,
+                    BackColor = Color.Transparent,
+                    Margin = new Padding(0, 0, 0, 8),
+                };
 
-            var rateLabel = new Label
-            {
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Text = $"{achievementRate:0.#}%",
-                Font = new Font("맑은 고딕", 18, FontStyle.Bold),
-                ForeColor = Color.FromArgb(100, 181, 246)  // 파란색
-            };
+                _lblDailyRate = new Label
+                {
+                    AutoSize = false,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Font = new Font("맑은 고딕", 18, FontStyle.Bold),
+                    ForeColor = Color.FromArgb(100, 181, 246)
+                };
 
-            ratePanel.Controls.Add(rateLabel);
-            flowLegendTarget.Controls.Add(ratePanel);
+                ratePanel.Controls.Add(_lblDailyRate);
+                flowLegendTarget.Controls.Add(ratePanel);
 
-            // 6) 목표/실제 생산량 표시
-            var targetPanel = new Panel
-            {
-                Height = 24,
-                Width = flowLegendTarget.Width - 16,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0, 0, 0, 2),
-            };
-
-            var targetLabel = new Label
-            {
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Text = $"목표: {targetProduction}개",
-                Font = new Font("맑은 고딕", 9, FontStyle.Regular),
-                ForeColor = Color.Gainsboro
-            };
-
-            targetPanel.Controls.Add(targetLabel);
-            flowLegendTarget.Controls.Add(targetPanel);
-
-            var actualPanel = new Panel
-            {
-                Height = 24,
-                Width = flowLegendTarget.Width - 16,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0, 0, 0, 8),
-            };
-
-            var actualLabel = new Label
-            {
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Text = $"실제: {actualProduction}개",
-                Font = new Font("맑은 고딕", 9, FontStyle.Regular),
-                ForeColor = Color.Gainsboro
-            };
-
-            actualPanel.Controls.Add(actualLabel);
-            flowLegendTarget.Controls.Add(actualPanel);
-
-            // 7) 커스텀 아이템(색상 네모 + 텍스트) 추가
-            foreach (var item in categories)
-            {
-                var row = new Panel
+                // ▶ 목표 개수 라벨
+                var targetPanel = new Panel
                 {
                     Height = 24,
                     Width = flowLegendTarget.Width - 16,
                     BackColor = Color.Transparent,
-                    Margin = new Padding(0, 2, 0, 2),
+                    Margin = new Padding(0, 0, 0, 2),
                 };
 
-                var swatch = new Panel
+                _lblDailyTarget = new Label
                 {
-                    Width = 12,
-                    Height = 12,
-                    BackColor = item.color,
-                    Left = 0,
-                    Top = (row.Height - 12) / 2
-                };
-
-                var lbl = new Label
-                {
-                    AutoSize = true,
-                    Left = 20,
-                    Top = (row.Height - 16) / 2,
-                    Text = $"{item.name}  {item.value}개",
+                    AutoSize = false,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Font = new Font("맑은 고딕", 9, FontStyle.Regular),
                     ForeColor = Color.Gainsboro
                 };
 
-                // 클릭 시 해당 조각 강조 효과
-                EventHandler clickHandler = (_, __) =>
+                targetPanel.Controls.Add(_lblDailyTarget);
+                flowLegendTarget.Controls.Add(targetPanel);
+
+                // ▶ 실제 개수 라벨
+                var actualPanel = new Panel
                 {
-                    foreach (var p in s.Points) { p.BorderWidth = 0; }
-                    var targetPoint = s.Points.FirstOrDefault(p => p.AxisLabel == item.name);
-                    if (targetPoint != null)
-                    {
-                        targetPoint.BorderColor = Color.White;
-                        targetPoint.BorderWidth = 3;
-                    }
+                    Height = 24,
+                    Width = flowLegendTarget.Width - 16,
+                    BackColor = Color.Transparent,
+                    Margin = new Padding(0, 0, 0, 8),
                 };
 
-                row.Cursor = Cursors.Hand;
-                swatch.Cursor = Cursors.Hand;
-                lbl.Cursor = Cursors.Hand;
+                _lblDailyActual = new Label
+                {
+                    AutoSize = false,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Font = new Font("맑은 고딕", 9, FontStyle.Regular),
+                    ForeColor = Color.Gainsboro
+                };
 
-                row.Click += clickHandler;
-                swatch.Click += clickHandler;
-                lbl.Click += clickHandler;
+                actualPanel.Controls.Add(_lblDailyActual);
+                flowLegendTarget.Controls.Add(actualPanel);
 
-                row.Controls.Add(swatch);
-                row.Controls.Add(lbl);
-                flowLegendTarget.Controls.Add(row);
+                // ▶ "달성 / 미달성" 색상 네모 + 텍스트 + 클릭 강조 레전드
+                var sRef = chart.Series["목표 생산량"];
+
+                foreach (var item in categories)
+                {
+                    var row = new Panel
+                    {
+                        Height = 24,
+                        Width = flowLegendTarget.Width - 16,
+                        BackColor = Color.Transparent,
+                        Margin = new Padding(0, 2, 0, 2),
+                    };
+
+                    var swatch = new Panel
+                    {
+                        Width = 12,
+                        Height = 12,
+                        BackColor = item.color,
+                        Left = 0,
+                        Top = (row.Height - 12) / 2
+                    };
+
+                    var lbl = new Label
+                    {
+                        AutoSize = true,
+                        Left = 20,
+                        Top = (row.Height - 16) / 2,
+                        Text = $"{item.name}  0개",   // 실제 값은 아래에서 갱신
+                        ForeColor = Color.Gainsboro
+                    };
+
+                    _dailyTargetLegendLabels[item.name] = lbl;
+
+                    string categoryName = item.name;
+                    EventHandler clickHandler = (_, __) =>
+                    {
+                        _selectedDailyTargetCategory = categoryName;
+
+                        foreach (var p in sRef.Points) { p.BorderWidth = 0; }
+
+                        var targetPoint = sRef.Points.FirstOrDefault(p => p.AxisLabel == categoryName);
+                        if (targetPoint != null)
+                        {
+                            targetPoint.BorderColor = Color.White;
+                            targetPoint.BorderWidth = 3;
+                        }
+
+                        double total = sRef.Points.Sum(p => p.YValues[0]); // 목표값
+                        double val = targetPoint?.YValues[0] ?? 0;
+                        double rate = total > 0 ? (val * 100.0 / total) : 0.0;
+
+                        if (_lblDailyRate != null)
+                        {
+                            _lblDailyRate.Text = $"{rate:0.#}%";
+                            _lblDailyRate.ForeColor =
+                                (categoryName == "달성")
+                                    ? Color.FromArgb(100, 181, 246)
+                                    : Color.FromArgb(244, 67, 54);
+                        }
+                    };
+
+                    row.Cursor = Cursors.Hand;
+                    swatch.Cursor = Cursors.Hand;
+                    lbl.Cursor = Cursors.Hand;
+
+                    row.Click += clickHandler;
+                    swatch.Click += clickHandler;
+                    lbl.Click += clickHandler;
+
+                    row.Controls.Add(swatch);
+                    row.Controls.Add(lbl);
+                    flowLegendTarget.Controls.Add(row);
+                }
+                flowLegendTarget.ResumeLayout();
+
+                _dailyTargetInitialized = true;
             }
-            flowLegendTarget.ResumeLayout();
+
+            // ─────────────────────────────────────────────
+            // 4) 여기부터는 5초마다 "데이터만" 갱신
+            // ─────────────────────────────────────────────
+
+            // 도넛 데이터 갱신
+            var series = chart.Series["목표 생산량"];
+            series.Points.Clear();
+
+            foreach (var item in categories)
+            {
+                int idx = series.Points.AddXY(item.name, item.value);
+                series.Points[idx].Color = item.color;
+            }
+
+            // 선택값 유효성 체크
+            if (_selectedDailyTargetCategory != "달성" && _selectedDailyTargetCategory != "미달성")
+                _selectedDailyTargetCategory = "달성";
+
+            // 도넛 하이라이트 복원
+            foreach (var p in series.Points) p.BorderWidth = 0;
+
+            var selectedPoint = series.Points.FirstOrDefault(p => p.AxisLabel == _selectedDailyTargetCategory)
+                                ?? series.Points.FirstOrDefault(p => p.AxisLabel == "달성");
+
+            if (selectedPoint != null)
+            {
+                selectedPoint.BorderColor = Color.White;
+                selectedPoint.BorderWidth = 3;
+            }
+
+            // 달성률 계산
+            double achievementRate = targetProduction > 0
+                ? (actualProduction * 100.0) / targetProduction
+                : 0.0;
+
+            // 상단 텍스트 갱신 (선택된 라벨 기준으로)
+            double displayRate;
+            Color displayColor;
+
+            if (_selectedDailyTargetCategory == "미달성")
+            {
+                displayRate = 100.0 - achievementRate;
+                displayColor = Color.FromArgb(244, 67, 54);
+            }
+            else
+            {
+                _selectedDailyTargetCategory = "달성";
+                displayRate = achievementRate;
+                displayColor = Color.FromArgb(100, 181, 246);
+            }
+
+            _lblDailyRate.Text = $"{displayRate:0.#}%";
+            _lblDailyRate.ForeColor = displayColor;
+            _lblDailyTarget.Text = $"목표: {targetProduction}개";
+            _lblDailyActual.Text = $"실제: {actualProduction}개";
+
+            // 레전드 행 텍스트 갱신
+            foreach (var item in categories)
+            {
+                if (_dailyTargetLegendLabels.TryGetValue(item.name, out var lbl))
+                    lbl.Text = $"{item.name}  {item.value}개";
+            }
+
         }
+
+
         private void SetupBoxRateChart()
         {
-            // 1) 데이터: 위에서 아래로 "정상 → 부품불량 → 납땜불량"
-            var boxData = new (string name, int current, int max, Color color)[]
+            // 1) DB에서 box_status 읽어오기
+            (string name, int current, int max, Color color)[] boxData;
+
+            try
             {
-                ("정상",     2, 3, Color.FromArgb(100, 181, 246)),
-                ("부품불량",  3, 3, Color.FromArgb(255, 167, 38)),
-                ("납땜불량",  1, 3, Color.FromArgb(158, 158, 158)),
-            };
+                string connectionString =
+                    "Server=100.80.24.53;Port=3306;Database=pcb_inspection;Uid=pcb_admin;Pwd=1234;CharSet=utf8mb4;";
+
+                using (var db = new DatabaseManager.DatabaseManager(connectionString))
+                {
+                    var list = db.GetAllBoxStatus();
+
+                    // 🔹 DB box_id: NORMAL / MISSING / POSITION_ERROR
+                    var normal = list.FirstOrDefault(b => b.BoxId == "NORMAL")
+                                 ?? new BoxStatus { BoxId = "NORMAL", Category = "normal", CurrentSlot = 0, MaxSlots = 3 };
+
+                    var missing = list.FirstOrDefault(b => b.BoxId == "MISSING")
+                                 ?? new BoxStatus { BoxId = "MISSING", Category = "missing", CurrentSlot = 0, MaxSlots = 3 };
+
+                    var position = list.FirstOrDefault(b => b.BoxId == "POSITION_ERROR")
+                                 ?? new BoxStatus { BoxId = "POSITION_ERROR", Category = "position_error", CurrentSlot = 0, MaxSlots = 3 };
+
+                    // 🔹 current_slot 그대로 = 찬 슬롯 개수 (0 ~ max_slots)
+                    int normalUsed = Math.Min(normal.CurrentSlot, normal.MaxSlots);
+                    int missingUsed = Math.Min(missing.CurrentSlot, missing.MaxSlots);
+                    int positionUsed = Math.Min(position.CurrentSlot, position.MaxSlots);
+
+                    boxData = new (string name, int current, int max, Color color)[]
+                    {
+                ("정상",     normalUsed,   normal.MaxSlots,   Color.FromArgb(100, 181, 246)),
+                ("부품불량", missingUsed,  missing.MaxSlots,  Color.FromArgb(255, 167, 38)),
+                ("S/N 불량", positionUsed, position.MaxSlots, Color.FromArgb(158, 158, 158)),
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                boxData = new (string name, int current, int max, Color color)[]
+                {
+            ("정상",     0, 3, Color.FromArgb(100, 181, 246)),
+            ("부품불량", 0, 3, Color.FromArgb(238,  99,  99)),
+            ("S/N 불량", 0, 3, Color.FromArgb(255, 170,   0)),
+                };
+
+                MessageBox.Show($"박스 상태를 불러오는 중 오류가 발생했습니다.\n{ex.Message}", "박스 상태 모니터링");
+            }
 
             var chart = BoxRateChart;
 
-            // 2) 완전 초기화 + 데이터바인딩 끊기
             chart.DataSource = null;
             chart.Series.Clear();
             chart.ChartAreas.Clear();
@@ -676,30 +1224,27 @@ namespace pcb_monitoring_program.Views.Dashboard
             chart.BackColor = Color.FromArgb(40, 40, 40);
             chart.BorderlineWidth = 0;
 
-            // 3) ChartArea + 축 설정
             var area = new ChartArea("Main");
             area.BackColor = Color.Transparent;
 
-            // ─ 가로축(X) : 값 (0 ~ 3)
-            area.AxisX.Minimum = 0;
-            area.AxisX.Maximum = 4;
-            area.AxisX.Interval = 1;                      // 0,1,2,3
-            area.AxisX.MajorGrid.Enabled = true;
-            area.AxisX.MajorGrid.LineColor = Color.FromArgb(70, 70, 70);
+            // 🔹 AxisX = 카테고리 축 (세로) – 숫자 필요 없음
+            area.AxisX.MajorGrid.Enabled = false;
             area.AxisX.LabelStyle.ForeColor = Color.Gainsboro;
             area.AxisX.LabelStyle.Font = new Font("맑은 고딕", 9);
+            area.AxisX.Interval = 1;
+            area.AxisX.IsReversed = false;
 
-            // ─ 세로축(Y) : 카테고리 (정상 / 부품불량 / 납땜불량)
-            area.AxisY.MajorGrid.Enabled = false;
+            // 🔹 AxisY = 값 축 (가로) – 0~3 고정
+            area.AxisY.Minimum = 0;
+            area.AxisY.Maximum = 3;
+            area.AxisY.Interval = 1;
+            area.AxisY.MajorGrid.Enabled = true;
+            area.AxisY.MajorGrid.LineColor = Color.FromArgb(70, 70, 70);
             area.AxisY.LabelStyle.ForeColor = Color.Gainsboro;
             area.AxisY.LabelStyle.Font = new Font("맑은 고딕", 9);
-            area.AxisY.Interval = 1;          // 한 칸씩
-            area.AxisY.IsReversed = false;    // 0번째가 맨 위
-
 
             chart.ChartAreas.Add(area);
 
-            // 4) Series 설정 (가로 막대)
             var series = new Series("BoxRate");
             series.ChartArea = "Main";
             series.ChartType = SeriesChartType.Bar;   // 가로 막대
@@ -708,22 +1253,19 @@ namespace pcb_monitoring_program.Views.Dashboard
             series.LabelForeColor = Color.Gainsboro;
             series.Font = new Font("맑은 고딕", 8, FontStyle.Bold);
 
-            // ⚠ 자동 인덱싱 / 자동 X값 사용 안 함
-            series.IsXValueIndexed = true;         // 기본값대로 두는 게 안전
+            series.IsXValueIndexed = true;
             series.XValueType = ChartValueType.String;
             series.YValueType = ChartValueType.Int32;
 
-            // 5) 포인트 추가 – DataPoint로 직접
             foreach (var item in boxData)
             {
                 var p = new DataPoint();
-                // X값은 안 쓰고, Y값만 사용 (막대 길이)
-                p.SetValueY(item.current);          // 0~3
-                p.AxisLabel = item.name;            // 세로축에 보일 텍스트
+                p.SetValueY(item.current);              // 0~3 (찬 슬롯 개수)
+                p.AxisLabel = item.name;                // 세로축: 정상/부품불량/납땜불량
                 p.Color = item.color;
-                p.Label = $"{item.current}/{item.max}";  // 막대 위/옆 텍스트
+                p.Label = $"{item.current}/{item.max}"; // 예: 1/3, 3/3
 
-                if (item.current >= item.max)
+                if (item.current >= item.max && item.max > 0)
                 {
                     p.BorderColor = Color.Yellow;
                     p.BorderWidth = 3;
@@ -934,7 +1476,7 @@ namespace pcb_monitoring_program.Views.Dashboard
                 Color = Color.FromArgb(255, 167, 38)
             };
 
-            Series sSolderDefect = new Series("납땜불량")
+            Series sSolderDefect = new Series("S/N불량")
             {
                 ChartArea = "Main",
                 ChartType = SeriesChartType.StackedColumn,
@@ -1037,7 +1579,7 @@ namespace pcb_monitoring_program.Views.Dashboard
             sb.AppendLine($"{hour:00}시");
             sb.AppendLine($"실제 불량률: {rate * 100:0.0}%");
             sb.AppendLine($"총 검사: {total}개");
-            sb.AppendLine($"정상: {normal} / 부품: {part} / 납땜: {solder} / 폐기: {scrap}");
+            sb.AppendLine($"정상: {normal} / 부품: {part} / S/N: {solder} / 폐기: {scrap}");
             sb.AppendLine($"불량 합계: {defects}개");
 
             _defectTrendToolTip.Show(
@@ -1081,8 +1623,8 @@ namespace pcb_monitoring_program.Views.Dashboard
                     normal = (int)chart.Series["정상"].Points[pointIndex].YValues[0];
                 if (chart.Series.IndexOf("부품불량") >= 0)
                     comp = (int)chart.Series["부품불량"].Points[pointIndex].YValues[0];
-                if (chart.Series.IndexOf("납땜불량") >= 0)
-                    solder = (int)chart.Series["납땜불량"].Points[pointIndex].YValues[0];
+                if (chart.Series.IndexOf("S/N불량") >= 0)
+                    solder = (int)chart.Series["S/N불량"].Points[pointIndex].YValues[0];
                 if (chart.Series.IndexOf("폐기") >= 0)
                     scrap = (int)chart.Series["폐기"].Points[pointIndex].YValues[0];
 
@@ -1095,7 +1637,7 @@ namespace pcb_monitoring_program.Views.Dashboard
                 sb.AppendLine($"{hour:00}시");
                 sb.AppendLine($"[{series.Name}] {value}개");
                 sb.AppendLine($"총 검사: {total}개");
-                sb.AppendLine($"정상: {normal} / 부품: {comp} / 납땜: {solder} / 폐기: {scrap}");
+                sb.AppendLine($"정상: {normal} / 부품: {comp} / S/N: {solder} / 폐기: {scrap}");
                 sb.AppendLine($"불량률: {defectRate:0.0}% ({defectSum}개)");
 
                 _hourlyChartToolTip.Show(
@@ -1111,6 +1653,28 @@ namespace pcb_monitoring_program.Views.Dashboard
                 _hourlyChartToolTip.Hide(chart);
                 _lastHourlyToolTipKey = null;
             }
+        }
+        public class FrameData
+        {
+            public string camera_id { get; set; }
+            public string image { get; set; }
+            public string defect_type { get; set; }
+            public double confidence { get; set; }
+            public int boxes_count { get; set; }
+            public string roi_status { get; set; }
+            public string timestamp { get; set; }
+            public string type { get; set; }
+        }
+
+        public class ConnectionResponse
+        {
+            public string status { get; set; }
+            public string message { get; set; }
+        }
+
+        public class ErrorResponse
+        {
+            public string message { get; set; }
         }
     }
 }
