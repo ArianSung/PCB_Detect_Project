@@ -248,6 +248,20 @@ previous_frames = {
     'right': None
 }
 
+# 컨베이어 벨트용 스냅샷 캡처 시스템 (중복 처리 방지) ⭐⭐⭐ CONVEYOR MODE
+pcb_snapshot_state = {
+    'last_snapshot_time': 0,          # 마지막 스냅샷 캡처 시간
+    'last_reference_point': None,     # 마지막 기준점 (x, y) 좌표
+    'snapshot_frames': {              # 캡처된 스냅샷 프레임
+        'left': None,
+        'right': None
+    },
+    'processing_in_progress': False,  # 현재 처리 중 여부
+    'cooldown_time': 3.0,             # 쿨다운 시간 (초) - 같은 PCB 재감지 방지
+    'position_threshold': 100         # 위치 임계값 (픽셀) - 새 PCB 판별
+}
+snapshot_lock = threading.Lock()  # 스냅샷 상태 동기화
+
 # 안정 프레임 카운터 (움직임 없는 프레임 수) ⭐⭐⭐
 stable_frame_count = {
     'left': 0,
@@ -876,6 +890,86 @@ def predict_test():
 
 
 # =====================================================================
+# 컨베이어 벨트용 스냅샷 헬퍼 함수 (중복 처리 방지) ⭐⭐⭐ CONVEYOR MODE
+# =====================================================================
+def is_new_pcb(current_ref_point, current_time):
+    """
+    새로운 PCB 진입 여부 판단
+
+    판별 기준:
+    1. 쿨다운 시간 경과 여부 (3.0초)
+    2. 기준점 위치 변화 (100픽셀 이상 이동)
+
+    Args:
+        current_ref_point: (x, y) 현재 템플릿 기준점
+        current_time: 현재 시각 (time.time())
+
+    Returns:
+        bool: True이면 새 PCB, False이면 기존 PCB
+    """
+    with snapshot_lock:
+        state = pcb_snapshot_state
+
+        # 첫 번째 PCB인 경우 (초기 상태)
+        if state['last_reference_point'] is None:
+            logger.info("[CONVEYOR] 🆕 첫 번째 PCB 감지")
+            return True
+
+        # 쿨다운 시간 체크 (마지막 스냅샷 후 3초 경과 여부)
+        time_since_last = current_time - state['last_snapshot_time']
+        if time_since_last < state['cooldown_time']:
+            logger.debug(f"[CONVEYOR] ⏱️  쿨다운 중... ({time_since_last:.1f}s < {state['cooldown_time']}s)")
+            return False
+
+        # 위치 변화 체크 (기준점이 100픽셀 이상 이동했는지)
+        last_x, last_y = state['last_reference_point']
+        curr_x, curr_y = current_ref_point
+        distance = np.sqrt((curr_x - last_x)**2 + (curr_y - last_y)**2)
+
+        if distance >= state['position_threshold']:
+            logger.info(f"[CONVEYOR] 🆕 새 PCB 감지 (거리: {distance:.1f}px, 시간 경과: {time_since_last:.1f}s)")
+            return True
+        else:
+            logger.debug(f"[CONVEYOR] ♻️  기존 PCB (거리: {distance:.1f}px, 시간 경과: {time_since_last:.1f}s)")
+            return False
+
+
+def save_snapshot(left_frame, right_frame, reference_point):
+    """
+    스냅샷 저장 (새 PCB 진입 시 첫 프레임만 캡처)
+
+    Args:
+        left_frame: 좌측 프레임 (앞면)
+        right_frame: 우측 프레임 (뒷면)
+        reference_point: (x, y) 템플릿 기준점
+    """
+    with snapshot_lock:
+        state = pcb_snapshot_state
+
+        # 스냅샷 저장
+        state['snapshot_frames']['left'] = left_frame.copy()
+        state['snapshot_frames']['right'] = right_frame.copy()
+        state['last_reference_point'] = reference_point
+        state['last_snapshot_time'] = time.time()
+        state['processing_in_progress'] = True
+
+        logger.info(f"[CONVEYOR] 📸 스냅샷 캡처 완료 (기준점: {reference_point})")
+
+
+def mark_snapshot_processed():
+    """
+    스냅샷 처리 완료 표시 (다음 PCB 수신 가능)
+    """
+    with snapshot_lock:
+        state = pcb_snapshot_state
+        state['processing_in_progress'] = False
+        state['snapshot_frames']['left'] = None
+        state['snapshot_frames']['right'] = None
+
+        logger.info("[CONVEYOR] ✅ 스냅샷 처리 완료 (다음 PCB 수신 가능)")
+
+
+# =====================================================================
 # OLD VERSION - DISABLED (ComponentVerifier 통합 전 버전)
 # 신버전은 line 1469에 있음 (제품별 부품 검증 워크플로우)
 # =====================================================================
@@ -1072,6 +1166,27 @@ def predict_dual():
             should_run_yolo = True
             roi_status = "no_template_checker"
             logger.warning(f"[DUAL-LEFT] ⚠️ 템플릿 체커 없음 → YOLO 강제 실행")
+
+        # 6-1-CONVEYOR. 컨베이어 벨트 모드: 스냅샷 캡처 로직 ⭐⭐⭐
+        # 템플릿이 ROI 안에 있을 때만 스냅샷 시스템 동작
+        if roi_status == "in_roi" and reference_point:
+            current_time = time.time()
+
+            # 새 PCB 진입 여부 판단
+            if is_new_pcb(reference_point, current_time):
+                logger.info("[CONVEYOR] 🆕 새 PCB 감지 → 스냅샷 캡처")
+                save_snapshot(left_frame, right_frame, reference_point)
+
+            # 스냅샷이 있으면 스냅샷으로 처리, 없으면 실시간 프레임 사용
+            with snapshot_lock:
+                if pcb_snapshot_state['snapshot_frames']['left'] is not None:
+                    # 스냅샷 사용 (중복 처리 방지)
+                    left_frame = pcb_snapshot_state['snapshot_frames']['left'].copy()
+                    right_frame = pcb_snapshot_state['snapshot_frames']['right'].copy()
+                    logger.debug("[CONVEYOR] 📸 스냅샷 프레임 사용 (중복 방지)")
+                else:
+                    # 실시간 프레임 사용 (스냅샷 대기 중)
+                    logger.debug("[CONVEYOR] 🎥 실시간 프레임 사용 (스냅샷 대기 중)")
 
         # 6-2. YOLO 부품 검출 (원래 /predict_test 방식)
         boxes_data = []
@@ -1423,6 +1538,10 @@ def predict_dual():
         except Exception as db_error:
             logger.error(f"❌ DB 저장 실패: {db_error}", exc_info=True)
             # DB 저장 실패해도 응답은 반환
+
+        # 컨베이어 벨트 모드: 스냅샷 처리 완료 표시 ⭐⭐⭐
+        if roi_status == "in_roi" and reference_point:
+            mark_snapshot_processed()
 
         return jsonify(response)
 
