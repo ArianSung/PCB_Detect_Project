@@ -1375,6 +1375,55 @@ def predict_dual():
         }
 
         logger.info(f"✅ 양면 검증 완료: 시리얼={serial_number}, 제품={product_code}, 판정={decision}, GPIO={gpio_pin}, 누락={missing_count}, 위치오류={position_error_count}")
+
+        # DB 저장 (v3.0 스키마)
+        try:
+            # 평균 신뢰도 계산
+            avg_confidence = (
+                sum(box['confidence'] for box in boxes_data) / len(boxes_data)
+                if boxes_data else 0.0
+            )
+
+            # verification_result가 있을 때만 상세 정보 저장
+            if verification_result:
+                missing_components_list = verification_result.get('missing', [])
+                position_errors_list = verification_result.get('misplaced', [])
+                extra_components_list = verification_result.get('extra', [])
+            else:
+                missing_components_list = []
+                position_errors_list = []
+                extra_components_list = []
+
+            inspection_id = db.insert_inspection_v3(
+                serial_number=serial_number,
+                product_code=product_code,
+                decision=decision,
+                missing_count=missing_count,
+                position_error_count=position_error_count,
+                extra_count=extra_count,
+                correct_count=correct_count,
+                missing_components=missing_components_list,
+                position_errors=position_errors_list,
+                extra_components=extra_components_list,
+                yolo_detections=boxes_data,
+                detection_count=len(boxes_data),
+                avg_confidence=avg_confidence,
+                inference_time_ms=inference_time_ms,
+                verification_time_ms=0.0,  # predict_dual에서는 별도 측정 안 함
+                total_time_ms=inference_time_ms,
+                image_width=left_frame.shape[1] if left_frame is not None else 0,
+                image_height=left_frame.shape[0] if left_frame is not None else 0,
+                camera_id='dual',
+                serial_detected=(serial_number is not None),
+                server_version='1.0.0-v3'
+            )
+
+            logger.info(f"✅ 검사 이력 DB 저장 완료 (ID: {inspection_id})")
+
+        except Exception as db_error:
+            logger.error(f"❌ DB 저장 실패: {db_error}", exc_info=True)
+            # DB 저장 실패해도 응답은 반환
+
         return jsonify(response)
 
     except Exception as e:
