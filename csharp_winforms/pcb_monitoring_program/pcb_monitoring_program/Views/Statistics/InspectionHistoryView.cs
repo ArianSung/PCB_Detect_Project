@@ -70,77 +70,137 @@ namespace pcb_monitoring_program.Views.Statistics
         // 🔹 기간 필터를 적용해서 검사 이력 로드
         private void LoadInspectionHistoryGridByDateRange()
         {
-            // 1) 전체 데이터 먼저 가져오기
             DataTable dt = _repo.GetAllInspectionHistory();
 
-            // 2) DateTimePicker에서 기간 가져오기
-            DateTime from = DTP_IH_StartDate.Value.Date;                       // 시작일 00:00:00
-            DateTime to = DTP_IH_EndDate.Value.Date.AddDays(1).AddTicks(-1); // 종료일 23:59:59
+            DateTime from = DTP_IH_StartDate.Value.Date;
+            DateTime to = DTP_IH_EndDate.Value.Date.AddDays(1).AddTicks(-1);
 
-            // 2-1) 🔹 불량 유형 체크박스 상태로 필터 리스트 만들기
-            // DB 값 기준: '정상', '부품불량', '납땜불량', '폐기'
+            // ---- 컬럼 자동 감지 ----
+            string timeColumn = dt.Columns.Contains("검사 시각") ? "검사 시각"
+                              : dt.Columns.Contains("inspection_time") ? "inspection_time"
+                              : dt.Columns.Contains("inspectionTime") ? "inspectionTime"
+                              : dt.Columns.Contains("time") ? "time"
+                              : null;
+
+            string defectColumn = dt.Columns.Contains("불량 유형") ? "불량 유형"
+                                : dt.Columns.Contains("defect_type") ? "defect_type"
+                                : dt.Columns.Contains("defect") ? "defect"
+                                : null;
+
+            string productColumn = dt.Columns.Contains("제품 코드") ? "제품 코드"
+                                 : dt.Columns.Contains("product_code") ? "product_code"
+                                 : dt.Columns.Contains("product") ? "product"
+                                 : dt.Columns.Contains("serial_number") ? "serial_number"
+                                 : null;
+
+            // ---- 불량 유형 필터 준비 ----
             var defectTypes = new List<string>();
+            if (CB_IH_DefectType_Normal.Checked) defectTypes.Add("정상");
+            if (CB_IH_DefectType_ComponentDefect.Checked) defectTypes.Add("부품불량");
+            if (CB_IH_DefectType_SolderingDefect.Checked) defectTypes.Add("S/N 불량");
+            if (CB_IH_DefectType_Scrap.Checked) defectTypes.Add("폐기");
 
-            if (CB_IH_DefectType_Normal.Checked)
-                defectTypes.Add("정상");
+            bool useDefectFilter = defectTypes.Count > 0 && !CB_IH_DefectType_All.Checked && defectColumn != null;
 
-            if (CB_IH_DefectType_ComponentDefect.Checked)
-                defectTypes.Add("부품불량");
+            // ---- product_code 필터 준비 (기존 카메라 체크박스 재활용) ----
+            List<string> selectedProductCodes = new List<string>();
 
-            if (CB_IH_DefectType_SolderingDefect.Checked)
-                defectTypes.Add("납땜불량");
+            string GetCheckboxValue(CheckBox cb)
+            {
+                if (cb == null) return null;
+                if (cb.Tag != null) return cb.Tag.ToString();
+                return cb.Text;
+            }
 
-            if (CB_IH_DefectType_Scrap.Checked)
-                defectTypes.Add("폐기");
+            try
+            {
+                if (CB_IH_CameraID_CAM01.Checked) selectedProductCodes.Add(GetCheckboxValue(CB_IH_CameraID_CAM01));
+                if (CB_IH_CameraID_CAM02.Checked) selectedProductCodes.Add(GetCheckboxValue(CB_IH_CameraID_CAM02));
+                if (CB_IH_CameraID_CAM03.Checked) selectedProductCodes.Add(GetCheckboxValue(CB_IH_CameraID_CAM03));
+            }
+            catch
+            {
+                // 체크박스 컨트롤이 다르면 안전하게 무시
+            }
 
-            // "전체" 체크되었거나, 아무 것도 안 고르면 → 불량 유형 필터는 적용 안 함
-            bool useDefectFilter = defectTypes.Count > 0 && !CB_IH_DefectType_All.Checked;
+            // 정규화: 대문자, 공백 제거(비교를 쉽게)
+            selectedProductCodes = selectedProductCodes
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => s.Trim().ToUpperInvariant())
+                .Distinct()
+                .ToList();
 
-            // 3) LINQ로 "검사 시각" + (선택 시) "불량 유형" 컬럼 기준 필터링
-            var filteredRows = dt.AsEnumerable()
-                .Where(row =>
+            bool useProductFilter = selectedProductCodes.Count > 0 && !CB_IH_CameraID_All.Checked && productColumn != null;
+
+            // 디버그 출력(개발 중 확인용)
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine($"[Debug] timeColumn={timeColumn}, defectColumn={defectColumn}, productColumn={productColumn}");
+            System.Diagnostics.Debug.WriteLine($"[Debug] useDefectFilter={useDefectFilter}, useProductFilter={useProductFilter}");
+            System.Diagnostics.Debug.WriteLine($"[Debug] selectedProductCodes=[{string.Join(",", selectedProductCodes)}]");
+#endif
+
+            // ---- 필터링 수행 ----
+            var filteredRows = dt.AsEnumerable().Where(row =>
+            {
+                // 시간 필터 (만약 timeColumn이 없으면 시간 필터 생략)
+                if (!string.IsNullOrEmpty(timeColumn))
                 {
-                    DateTime t = row.Field<DateTime>("검사 시각"); // alias 맞게 변경
+                    var timeObj = row[timeColumn];
+                    if (timeObj == DBNull.Value) return false;
 
-                    // 날짜 범위 필터
-                    if (t < from || t > to)
+                    DateTime t;
+                    try { t = Convert.ToDateTime(timeObj); }
+                    catch { return false; }
+
+                    if (t < from || t > to) return false;
+                }
+
+                // 불량 유형 필터
+                if (useDefectFilter)
+                {
+                    var val = row[defectColumn];
+                    string defect = val == DBNull.Value ? string.Empty : Convert.ToString(val);
+
+                    // 정규화해서 비교 (공백 제거, 대문자)
+                    defect = defect?.Trim().ToUpperInvariant() ?? string.Empty;
+                    var normalizedDefs = defectTypes.Select(d => d.Trim().ToUpperInvariant()).ToList();
+
+                    if (!normalizedDefs.Contains(defect))
                         return false;
+                }
 
-                    // 불량 유형 필터 (필요할 때만)
-                    if (useDefectFilter)
-                    {
-                        // 👉 여기 컬럼 이름을 실제 SELECT에 맞게 수정
-                        // ex) SELECT defect_type AS '불량 유형' 이면 "불량 유형"
-                        //     alias 없이 그냥 가져오면 "defect_type"
-                        string defect = row.Field<string>("불량 유형"); // 또는 "defect_type"
+                // 제품 코드 필터
+                if (useProductFilter)
+                {
+                    var val = row[productColumn];
+                    string prod = val == DBNull.Value ? string.Empty : Convert.ToString(val);
+                    prod = prod?.Trim().ToUpperInvariant() ?? string.Empty;
 
-                        if (!defectTypes.Contains(defect))
-                            return false;
-                    }
+                    // 비어있거나 리스트에 없으면 제외
+                    if (string.IsNullOrEmpty(prod) || !selectedProductCodes.Contains(prod))
+                        return false;
+                }
 
-                    return true;
-                });
+                return true;
+            });
 
             DataTable view;
+            if (filteredRows.Any()) view = filteredRows.CopyToDataTable();
+            else view = dt.Clone();
 
-            // 4) 결과가 있으면 테이블로 만들고, 없으면 빈 테이블(컬럼 구조만) 생성
-            if (filteredRows.Any())
-                view = filteredRows.CopyToDataTable();
-            else
-                view = dt.Clone();   // 컬럼 구조만 복사, 행 0개
-
-            // 5) 그리드에 바인딩 (새로고침 느낌 확실히)
+            // 바인딩
             DGV_IH_result.DataSource = null;
             DGV_IH_result.AutoGenerateColumns = true;
             DGV_IH_result.DataSource = view;
             DGV_IH_result.Refresh();
 
-            // 6) 보기용 설정
             DGV_IH_result.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
             DGV_IH_result.RowHeadersVisible = false;
 
             if (DGV_IH_result.Columns.Contains("검사 시각"))
                 DGV_IH_result.Columns["검사 시각"].FillWeight = 180;
+            else if (!string.IsNullOrEmpty(timeColumn) && DGV_IH_result.Columns.Contains(timeColumn))
+                DGV_IH_result.Columns[timeColumn].FillWeight = 180;
         }
 
         // ⚠ 현재는 사용하지 않음 (전체 로드용)
@@ -327,7 +387,7 @@ namespace pcb_monitoring_program.Views.Statistics
 
         private void CB_CameraID_All_CheckedChanged(object sender, EventArgs e)
         {
-            if (_isInternalUpdate) return; // 내부 업데이트면 무시 (옵션이지만 깔끔)
+            if (_isInternalUpdate) return; // 내부 업데이트면 무시
 
             bool isChecked = CB_IH_CameraID_All.Checked;
 
@@ -339,22 +399,39 @@ namespace pcb_monitoring_program.Views.Statistics
             CB_IH_CameraID_CAM03.Checked = isChecked;
 
             _isInternalUpdate = false;
+
+            // 사용자 조작일 때만 필터 적용
+            if (!isChecked) // All를 해제한 경우에도 개별 체크 상태가 바뀌므로 그냥 호출해도 괜찮음
+            {
+                LoadInspectionHistoryGridByDateRange();
+            }
+            else
+            {
+                LoadInspectionHistoryGridByDateRange();
+            }
         }
 
         private void CB_CameraID_CAM01_CheckedChanged(object sender, EventArgs e)
         {
             UpdateCameraIDAllState();
+            if (!_isInternalUpdate)
+                LoadInspectionHistoryGridByDateRange();
         }
 
         private void CB_CameraID_CAM02_CheckedChanged(object sender, EventArgs e)
         {
             UpdateCameraIDAllState();
+            if (!_isInternalUpdate)
+                LoadInspectionHistoryGridByDateRange();
         }
 
         private void CB_CameraID_CAM03_CheckedChanged(object sender, EventArgs e)
         {
             UpdateCameraIDAllState();
+            if (!_isInternalUpdate)
+                LoadInspectionHistoryGridByDateRange();
         }
+
 
         private void btn_filterSearch_Click(object sender, EventArgs e)
         {

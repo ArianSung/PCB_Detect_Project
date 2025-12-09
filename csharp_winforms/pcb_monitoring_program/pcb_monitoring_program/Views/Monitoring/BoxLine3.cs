@@ -35,7 +35,7 @@ namespace pcb_monitoring_program.Views.Monitoring
             {
                 ("정상",     2, 3, Color.FromArgb(100, 181, 246)),
                 ("부품불량",  1, 3, Color.FromArgb(238,  99,  99)),
-                ("납땜불량",  3, 3, Color.FromArgb(255, 170,   0)),
+                ("S/N 불량",  3, 3, Color.FromArgb(255, 170,   0)),
             };
 
             var chart = BoxRateChartLine3;

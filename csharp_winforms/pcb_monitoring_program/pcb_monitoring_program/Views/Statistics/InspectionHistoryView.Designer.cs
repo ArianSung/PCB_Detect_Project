@@ -56,8 +56,8 @@
             label_IH_DatelRange = new Label();
             DTP_IH_StartDate = new ComponentFactory.Krypton.Toolkit.KryptonDateTimePicker();
             cardSearchresult = new Panel();
-            DGV_IH_result = new ComponentFactory.Krypton.Toolkit.KryptonDataGridView();
             button1 = new Button();
+            DGV_IH_result = new ComponentFactory.Krypton.Toolkit.KryptonDataGridView();
             iGrid1DefaultCellStyle1 = new TenTec.Windows.iGridLib.iGCellStyle(true);
             iGrid1DefaultColHdrStyle1 = new TenTec.Windows.iGridLib.iGColHdrStyle(true);
             kryptonManager1 = new ComponentFactory.Krypton.Toolkit.KryptonManager(components);
@@ -146,11 +146,11 @@
             CB_IH_CameraID_CAM03.AutoSize = true;
             CB_IH_CameraID_CAM03.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
             CB_IH_CameraID_CAM03.ForeColor = Color.White;
-            CB_IH_CameraID_CAM03.Location = new Point(295, 36);
+            CB_IH_CameraID_CAM03.Location = new Point(209, 36);
             CB_IH_CameraID_CAM03.Name = "CB_IH_CameraID_CAM03";
-            CB_IH_CameraID_CAM03.Size = new Size(96, 29);
+            CB_IH_CameraID_CAM03.Size = new Size(55, 29);
             CB_IH_CameraID_CAM03.TabIndex = 10;
-            CB_IH_CameraID_CAM03.Text = "CAM03";
+            CB_IH_CameraID_CAM03.Text = "BC";
             CB_IH_CameraID_CAM03.UseVisualStyleBackColor = true;
             CB_IH_CameraID_CAM03.CheckedChanged += CB_CameraID_CAM03_CheckedChanged;
             // 
@@ -172,11 +172,11 @@
             CB_IH_CameraID_CAM02.AutoSize = true;
             CB_IH_CameraID_CAM02.Font = new Font("맑은 고딕", 14.25F, FontStyle.Bold);
             CB_IH_CameraID_CAM02.ForeColor = Color.White;
-            CB_IH_CameraID_CAM02.Location = new Point(193, 36);
+            CB_IH_CameraID_CAM02.Location = new Point(149, 36);
             CB_IH_CameraID_CAM02.Name = "CB_IH_CameraID_CAM02";
-            CB_IH_CameraID_CAM02.Size = new Size(96, 29);
+            CB_IH_CameraID_CAM02.Size = new Size(54, 29);
             CB_IH_CameraID_CAM02.TabIndex = 8;
-            CB_IH_CameraID_CAM02.Text = "CAM02";
+            CB_IH_CameraID_CAM02.Text = "RS";
             CB_IH_CameraID_CAM02.UseVisualStyleBackColor = true;
             CB_IH_CameraID_CAM02.CheckedChanged += CB_CameraID_CAM02_CheckedChanged;
             // 
@@ -187,9 +187,9 @@
             CB_IH_CameraID_CAM01.ForeColor = Color.White;
             CB_IH_CameraID_CAM01.Location = new Point(91, 36);
             CB_IH_CameraID_CAM01.Name = "CB_IH_CameraID_CAM01";
-            CB_IH_CameraID_CAM01.Size = new Size(96, 29);
+            CB_IH_CameraID_CAM01.Size = new Size(52, 29);
             CB_IH_CameraID_CAM01.TabIndex = 7;
-            CB_IH_CameraID_CAM01.Text = "CAM01";
+            CB_IH_CameraID_CAM01.Text = "FT";
             CB_IH_CameraID_CAM01.UseVisualStyleBackColor = true;
             CB_IH_CameraID_CAM01.CheckedChanged += CB_CameraID_CAM01_CheckedChanged;
             // 
@@ -200,9 +200,9 @@
             label_IH_CameraID.ForeColor = Color.White;
             label_IH_CameraID.Location = new Point(3, -1);
             label_IH_CameraID.Name = "label_IH_CameraID";
-            label_IH_CameraID.Size = new Size(106, 30);
+            label_IH_CameraID.Size = new Size(104, 30);
             label_IH_CameraID.TabIndex = 0;
-            label_IH_CameraID.Text = "카메라 ID";
+            label_IH_CameraID.Text = "제품 코드";
             // 
             // cardDefectType
             // 
@@ -250,9 +250,9 @@
             CB_IH_DefectType_SolderingDefect.ForeColor = Color.White;
             CB_IH_DefectType_SolderingDefect.Location = new Point(300, 35);
             CB_IH_DefectType_SolderingDefect.Name = "CB_IH_DefectType_SolderingDefect";
-            CB_IH_DefectType_SolderingDefect.Size = new Size(96, 29);
+            CB_IH_DefectType_SolderingDefect.Size = new Size(110, 29);
             CB_IH_DefectType_SolderingDefect.TabIndex = 7;
-            CB_IH_DefectType_SolderingDefect.Text = "QR불량";
+            CB_IH_DefectType_SolderingDefect.Text = "S/N 불량";
             CB_IH_DefectType_SolderingDefect.UseVisualStyleBackColor = true;
             CB_IH_DefectType_SolderingDefect.CheckedChanged += CB_DefectType_SolderingDefect_CheckedChanged;
             // 
@@ -370,6 +370,16 @@
             cardSearchresult.Name = "cardSearchresult";
             cardSearchresult.Size = new Size(1600, 600);
             cardSearchresult.TabIndex = 5;
+            // 
+            // button1
+            // 
+            button1.Location = new Point(1506, -16);
+            button1.Name = "button1";
+            button1.Size = new Size(75, 23);
+            button1.TabIndex = 6;
+            button1.Text = "button1";
+            button1.UseVisualStyleBackColor = true;
+            button1.Click += button1_Click;
             // 
             // DGV_IH_result
             // 
@@ -530,16 +540,6 @@
             DGV_IH_result.StateTracking.HeaderRow.Content.Color1 = Color.White;
             DGV_IH_result.StateTracking.HeaderRow.Content.Color2 = Color.White;
             DGV_IH_result.TabIndex = 0;
-            // 
-            // button1
-            // 
-            button1.Location = new Point(1506, -16);
-            button1.Name = "button1";
-            button1.Size = new Size(75, 23);
-            button1.TabIndex = 6;
-            button1.Text = "button1";
-            button1.UseVisualStyleBackColor = true;
-            button1.Click += button1_Click;
             // 
             // kryptonManager1
             // 

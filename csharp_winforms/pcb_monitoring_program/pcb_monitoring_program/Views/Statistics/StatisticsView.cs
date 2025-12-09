@@ -171,7 +171,7 @@ namespace pcb_monitoring_program.Views.Statistics
 
             // Y축: 일일 생산량
             area.AxisY.Minimum = 0;
-            area.AxisY.Maximum = 1000;      // 10월에 하루 1000개 이하로 맞춰놨으니 1000으로
+            area.AxisY.Maximum = 1200;      // 10월에 하루 1000개 이하로 맞춰놨으니 1000으로
             area.AxisY.Interval = 100;
             area.AxisY.MajorGrid.LineColor = Color.FromArgb(70, 70, 70);
             area.AxisY.LabelStyle.ForeColor = Color.Gainsboro;
