@@ -270,6 +270,16 @@ snapshot_sessions = {
 }
 snapshot_lock = threading.Lock()  # 스냅샷 상태 동기화
 
+# 레거시 스냅샷 상태 (호환성 유지, 더 이상 사용 안 함) ⭐⭐⭐
+pcb_snapshot_state = {
+    'last_snapshot_time': 0,
+    'last_reference_point': None,
+    'snapshot_frames': {'left': None, 'right': None},
+    'processing_in_progress': False,
+    'cooldown_time': 3.0,
+    'position_threshold': 100
+}
+
 # 안정 프레임 카운터 (움직임 없는 프레임 수) ⭐⭐⭐
 stable_frame_count = {
     'left': 0,
