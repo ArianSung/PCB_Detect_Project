@@ -283,8 +283,6 @@ namespace pcb_monitoring_program.Views.UserManagement
                 return;
             }
 
-            // ⚠ 컬럼 이름 "Id" → "id" 로 통일 (ApplyGridStyle에서 소문자 id 사용 중)
-            int id = Convert.ToInt32(grid.CurrentRow.Cells["id"].Value);
             string username = grid.CurrentRow.Cells["username"].Value?.ToString();
             string fullName = grid.CurrentRow.Cells["full_name"].Value?.ToString();
             string role = grid.CurrentRow.Cells["role"].Value?.ToString();
@@ -293,7 +291,7 @@ namespace pcb_monitoring_program.Views.UserManagement
             string stateStr = grid.CurrentRow.Cells["status_text"].Value?.ToString();
             bool isActive = stateStr == "활성" || stateStr == "True" || stateStr == "1";
 
-            using (var form = new UserManagementForm_EditUser(id, username, fullName, role, isActive))
+            using (var form = new UserManagementForm_EditUser(username, fullName, role, isActive))
             {
                 form.StartPosition = FormStartPosition.CenterParent;
 
@@ -316,8 +314,6 @@ namespace pcb_monitoring_program.Views.UserManagement
                 return;
             }
 
-            // ⚠ 컬럼 이름은 DataTable에 바인딩된 실제 컬럼명과 같아야 함 (ApplyGridStyle에서 이미 "id" 사용 중)
-            int id = Convert.ToInt32(grid.CurrentRow.Cells["id"].Value);
             string username = grid.CurrentRow.Cells["username"].Value?.ToString();
 
             // (선택) 관리자 계정 삭제 막고 싶으면
@@ -341,7 +337,7 @@ namespace pcb_monitoring_program.Views.UserManagement
                 return;
 
             // ✅ DB 삭제 실행
-            bool success = _userRepo.DeleteUser(id);
+            bool success = _userRepo.DeleteUser(username);
 
             if (success)
             {
@@ -371,8 +367,6 @@ namespace pcb_monitoring_program.Views.UserManagement
             }
 
             // 2. 선택된 사용자의 ID와 사용자 이름 가져오기
-            // "id" 및 "username" 컬럼명은 ApplyGridStyle에서 사용 중인 이름을 따릅니다.
-            int id = Convert.ToInt32(grid.CurrentRow.Cells["id"].Value);
             string username = grid.CurrentRow.Cells["username"].Value?.ToString();
 
             // 3. 초기화할 비밀번호 및 확인 메시지 설정
@@ -389,7 +383,7 @@ namespace pcb_monitoring_program.Views.UserManagement
                 return;
 
             // 4. ✅ DB 업데이트 실행 (UserRepository의 메서드를 호출)
-            bool success = _userRepo.ResetPassword(id, newPassword);
+            bool success = _userRepo.ResetPassword(username, newPassword);
 
             if (success)
             {

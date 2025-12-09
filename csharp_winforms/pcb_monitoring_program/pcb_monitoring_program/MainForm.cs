@@ -39,12 +39,12 @@ namespace pcb_monitoring_program
         }
 
         // ⭐ 새로 추가된 생성자: 로그인 폼에서 호출될 예정
-        public MainForm(string username, string role) : this() // 기존 기본 생성자(InitializeComponent)를 호출
+        public MainForm(string full_name, string role) : this() // 기존 기본 생성자(InitializeComponent)를 호출
         {
-            _currentUsername = username;
+            _currentUsername = full_name;
             _currentUserRole = role;
 
-            labelusername.Text = username;
+            labelusername.Text = full_name;
             labeluserauthority.Text = $"[ {role} ]";
         }
 

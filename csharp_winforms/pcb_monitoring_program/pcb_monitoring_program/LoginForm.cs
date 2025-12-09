@@ -120,7 +120,7 @@ namespace pcb_monitoring_program
                         MessageBox.Show($"{user.Role} 권한으로 로그인 성공!", "로그인 성공");
 
                         // 여기서 user 정보를 MainForm에 넘기고 싶으면 생성자 수정해서 전달해도 됨
-                        MainForm nextForm = new MainForm(enteredUserId, user.Role.ToString());
+                        MainForm nextForm = new MainForm(user.FullName, user.Role.ToString());
                         nextForm.Show();
                         this.Hide();
                     }
