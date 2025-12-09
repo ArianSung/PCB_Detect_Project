@@ -1,0 +1,13 @@
+train: /home/sys1041/work_project/PCB_defect_detect-5/train/images
+val: /home/sys1041/work_project/PCB_defect_detect-5/valid/images
+test: /home/sys1041/work_project/PCB_defect_detect-5/test/images
+
+nc: 8
+names: ['Electrolytic capacitor', 'IC', 'cds', 'diode', 'led', 'resistor', 'switch', 'transistor']
+
+roboflow:
+  workspace: arian-qfo7y
+  project: pcb_defect_detect-nitz0
+  version: 5
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/arian-qfo7y/pcb_defect_detect-nitz0/dataset/5

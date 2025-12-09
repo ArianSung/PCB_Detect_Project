@@ -55,8 +55,8 @@ socketio = SocketIO(
     app,
     cors_allowed_origins="*",  # 모든 Origin 허용 (프로덕션에서는 제한 필요)
     async_mode='threading',     # threading 모드 (YOLO/OpenCV 안정성 우선) ⭐⭐⭐
-    logger=True,                # 디버깅용 로그
-    engineio_logger=True,       # Engine.IO 디버깅 로그
+    logger=False,               # 디버깅용 로그 비활성화 (프로덕션 모드)
+    engineio_logger=False,      # Engine.IO 디버깅 로그 비활성화 (불필요한 바이너리 로그 방지)
     # 소켓 타임아웃 설정 (좀비 연결 방지) ⭐
     ping_timeout=60,            # 60초 동안 응답 없으면 연결 종료
     ping_interval=25,           # 25초마다 ping 전송
@@ -89,12 +89,12 @@ db = DatabaseManager(**DB_CONFIG)
 # YOLO 모델 로드
 try:
     from ultralytics import YOLO
-    model_path = '../models/component_detector_v4_9class_best.pt'  # 9 클래스 모델 (mAP50=93.1%) ⭐
+    model_path = '../models/component_detector_v5_best.pt'  # v5 모델 (mAP50=92.3%) ⭐
     yolo_model = YOLO(model_path)
     logger.info(f"✅ YOLO 모델 로드 완료: {model_path}")
     logger.info(f"   - 모델 타입: YOLOv11l")
-    logger.info(f"   - 클래스 수: 9개 (PCB 부품 검출)")
-    logger.info(f"   - 성능: mAP@0.5=93.1%, Precision=93.3%")
+    logger.info(f"   - 클래스 수: 8개 (PCB 부품 검출)")
+    logger.info(f"   - 성능: mAP@0.5=92.3%, mAP@0.5:0.95=64.1%, Precision=90.2%")
 except Exception as e:
     logger.error(f"⚠️  YOLO 모델 로드 실패: {e}")
     logger.warning("   - 추론 시 더미 결과 반환됨")
