@@ -30,7 +30,11 @@
       "Bash(chmod:*)",
       "Bash(nvidia-smi:*)",
       "Bash(tailscale status:*)",
-      "Bash(lsof:*)"
+      "Bash(lsof:*)",
+      "Bash(conda activate:*)",
+      "Bash(pip install:*)",
+      "Bash(source:*)",
+      "Bash(kill:*)"
     ],
     "deny": [],
     "ask": []
