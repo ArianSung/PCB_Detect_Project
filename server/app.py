@@ -1315,7 +1315,8 @@ def predict_dual():
             if previous_roi_status == 'in_roi' and roi_status == 'out_of_roi':
                 if session['active'] and len(session['frames']) > 0:
                     logger.info(f"[SNAPSHOT-LEFT] 🎯 ROI 벗어남 → 최고 품질 프레임 선택 및 처리")
-                    # 세션 종료는 아래 검증 로직 이후에 수행
+                    # DB 저장 플래그 설정 (이 프레임에서 DB 저장해야 함)
+                    session['should_save_db'] = True
                 else:
                     # 프레임이 없으면 그냥 세션 종료
                     end_snapshot_session('left')
@@ -1641,7 +1642,7 @@ def predict_dual():
 
         # 9. DB 저장 (조건부) ⭐⭐⭐ SNAPSHOT SYSTEM v2.0
         # 조건 1: 검증 가능해야 함 (부품 배치 기준 데이터 존재 + 시리얼 넘버 존재)
-        # 조건 2: ROI 벗어날 때만 저장 (스냅샷 세션 종료 시)
+        # 조건 2: ROI 벗어날 때만 저장 (should_save_db 플래그 확인)
         with snapshot_lock:
             session = snapshot_sessions['left']
             should_save_to_db = False
@@ -1651,13 +1652,16 @@ def predict_dual():
                 logger.warning("⚠️  DB 저장 건너뜀: 부품 배치 기준 데이터 없음 (검증 불가)")
             elif not serial_number:
                 logger.warning("⚠️  DB 저장 건너뜀: 시리얼 넘버 없음")
-            # 조건 2: ROI 벗어날 때만 저장 (스냅샷 세션 종료 시)
-            elif session['last_roi_status'] == 'in_roi' and roi_status == 'out_of_roi':
+            # 조건 2: ROI 벗어남 플래그 확인 (스냅샷 세션에서 설정)
+            elif session.get('should_save_db', False):
                 should_save_to_db = True
                 logger.info("✅ DB 저장 조건 충족: 검증 가능 + ROI 벗어남 (스냅샷 세션 종료)")
+                # 플래그 초기화
+                session['should_save_db'] = False
             else:
                 # ROI 안에 있거나, 아직 진입하지 않음 → DB 저장 안 함
-                logger.debug(f"DB 저장 대기 중 (ROI 상태: {roi_status}, 이전: {session['last_roi_status']})")
+                if roi_status == 'in_roi':
+                    logger.debug(f"DB 저장 대기 중: ROI 안에 있음 (프레임 수집 중)")
 
         if should_save_to_db:
             try:
@@ -1703,7 +1707,7 @@ def predict_dual():
 
                 logger.info(f"✅ 검사 이력 DB 저장 완료 (ID: {inspection_id})")
 
-                # 스냅샷 세션 종료
+                # 스냅샷 세션 종료 (메모리 해제)
                 end_snapshot_session('left')
 
             except Exception as db_error:
