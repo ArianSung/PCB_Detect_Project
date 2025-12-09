@@ -1288,129 +1288,44 @@ def predict_dual():
             roi_status = "no_template_checker"
             logger.warning(f"[DUAL-LEFT] ⚠️ 템플릿 체커 없음 → YOLO 강제 실행")
 
-        # 6-1-1. ROI 상태 전환 감지 및 스냅샷 세션 관리 ⭐⭐⭐ SNAPSHOT SYSTEM v2.0
+        # 6-1-1. 🔥 간단한 스냅샷 시스템: ROI 진입 → 프레임 저장 → YOLO 검출
         with snapshot_lock:
             session = snapshot_sessions['left']
             previous_roi_status = session['last_roi_status']
 
-            # ROI 상태 전환 감지: out_of_roi → in_roi (세션 시작)
+            # ROI 진입 감지: out_of_roi → in_roi
             if previous_roi_status != 'in_roi' and roi_status == 'in_roi':
-                start_snapshot_session('left')
-                # 뒷면 정보 저장 (앞면 검증 시 사용)
+                logger.info(f"[SNAPSHOT] 🎯 ROI 진입! → 현재 프레임 저장")
+
+                # 이 프레임을 저장!
+                session['saved_frame'] = left_frame.copy()
+                session['saved_ref_point'] = reference_point
                 session['serial_number'] = serial_number
                 session['product_code'] = product_code
+                session['frame_saved'] = True
 
-            # ROI 안에서 프레임 수집 + 실시간 배치 처리
-            if roi_status == 'in_roi' and session['active'] and reference_point:
-                # 템플릿 매칭 신뢰도 획득 (find_reference_point는 내부에서 계산)
-                template_confidence = 0.85  # 기본값 (실제로는 find_reference_point에서 반환해야 함)
+                logger.info(f"[SNAPSHOT] ✅ 프레임 저장 완료 (제품: {product_code})")
 
-                # 프레임 품질 평가
-                quality = calculate_frame_quality(left_frame, template_confidence)
+            # ROI 안에 있으면: 저장된 프레임 사용
+            if roi_status == 'in_roi' and session.get('frame_saved'):
+                logger.info(f"[SNAPSHOT] 📦 저장된 프레임 사용 (실시간 스트림 무시)")
 
-                # 스냅샷 프레임 추가
-                add_snapshot_frame('left', left_frame, quality, template_confidence, reference_point)
+                # 저장된 프레임으로 교체
+                left_frame = session['saved_frame'].copy()
+                reference_point = session['saved_ref_point']
+                should_run_yolo = True
 
-                # 🔥 ROI 안에서 프레임이 충분히 모이면 즉시 배치 처리
-                MIN_FRAMES_FOR_BATCH = 3  # 최소 3개 프레임 수집
-                if len(session['frames']) >= MIN_FRAMES_FOR_BATCH:
-                    logger.info(f"[SNAPSHOT-LEFT] 🔥 ROI 안에서 배치 처리 시작 (총 {len(session['frames'])}개 프레임)")
+                # 한번만 사용하도록 플래그 해제
+                session['frame_saved'] = False
 
-                    # 모든 프레임에 대해 YOLO + 검증 수행
-                    batch_results = []
-                    for idx, frame in enumerate(session['frames']):
-                        ref_point = session['reference_points'][idx]
-                        frame_quality = session['qualities'][idx]
-
-                        # YOLO 검출
-                        if yolo_model is not None:
-                            results = yolo_model.predict(frame, conf=0.3, iou=0.7, verbose=False)
-                            _, _, raw_boxes = parse_yolo_results(results)
-
-                            # ROI 필터링
-                            filtered_boxes = filter_boxes_by_roi(raw_boxes, ref_point, roi_distance_threshold=300)
-
-                            # 부품 검증
-                            missing = 0
-                            position_error = 0
-                            verification = None
-
-                            if session['product_code']:
-                                try:
-                                    ref_components = db.get_reference_components(session['product_code'])
-                                    if ref_components and len(ref_components) > 0:
-                                        verifier = ComponentVerifier(
-                                            reference_components=ref_components,
-                                            position_threshold=20.0,
-                                            confidence_threshold=0.25,
-                                            reference_point=ref_point
-                                        )
-                                        verification = verifier.verify_components(filtered_boxes, debug=False)
-                                        missing = verification['summary']['missing_count']
-                                        position_error = verification['summary']['misplaced_count']
-                                except Exception as e:
-                                    logger.error(f"ROI 안 배치 처리 오류 (프레임 #{idx+1}): {e}")
-
-                            batch_results.append({
-                                'idx': idx,
-                                'quality': frame_quality,
-                                'missing': missing,
-                                'position_error': position_error,
-                                'total_error': missing + position_error,
-                                'boxes': filtered_boxes,
-                                'verification': verification,
-                                'frame': frame,
-                                'ref_point': ref_point
-                            })
-
-                    if batch_results:
-                        # 누락 + 위치오류 최소값 선택 (같으면 품질 높은 것)
-                        batch_results.sort(key=lambda x: (x['total_error'], -x['quality']))
-                        best = batch_results[0]
-
-                        logger.info(f"[SNAPSHOT-LEFT] ✨ ROI 안 최적 프레임 선택: #{best['idx']+1} "
-                                   f"(누락: {best['missing']}, 위치오류: {best['position_error']}, 품질: {best['quality']:.3f})")
-
-                        # 최적 결과 저장 (YOLO 섹션에서 사용)
-                        session['best_verification'] = best['verification']
-                        session['best_boxes'] = best['boxes']
-                        session['best_missing'] = best['missing']
-                        session['best_position_error'] = best['position_error']
-                        session['best_frame'] = best['frame']
-                        session['best_ref_point'] = best['ref_point']
-
-                        # 현재 프레임을 최적 프레임으로 교체
-                        left_frame = best['frame'].copy()
-                        reference_point = best['ref_point']
-
-                        # YOLO 실행 플래그 설정 (배치 처리 결과 사용)
-                        should_run_yolo = True
-
-                        logger.info(f"[SNAPSHOT-LEFT] 🔄 ROI 안에서 최적 프레임으로 교체 완료")
-
-            # ROI 상태 전환 감지: in_roi → out_of_roi (DB 저장 준비)
+            # ROI 벗어남: 세션 초기화
             if previous_roi_status == 'in_roi' and roi_status == 'out_of_roi':
-                if session['active'] and session.get('best_verification'):
-                    # ROI 안에서 이미 배치 처리 완료 → DB 저장 플래그만 설정
-                    logger.info(f"[SNAPSHOT-LEFT] 🎯 ROI 벗어남 → DB 저장 준비")
+                logger.info(f"[SNAPSHOT] 🔄 ROI 벗어남 → 세션 초기화")
+                session['saved_frame'] = None
+                session['saved_ref_point'] = None
+                session['frame_saved'] = False
 
-                    # 최적 결과를 현재 결과로 설정
-                    if session.get('best_frame') is not None:
-                        left_frame = session['best_frame'].copy()
-                        reference_point = session['best_ref_point']
-                        roi_status = 'in_roi'  # 판정 로직 통과하도록
-                        should_run_yolo = True
-
-                    # DB 저장 플래그 설정
-                    session['should_save_db'] = True
-
-                    logger.info(f"[SNAPSHOT-LEFT] 🔄 DB 저장 준비 완료")
-                else:
-                    # 배치 처리 결과 없으면 세션 종료
-                    logger.warning("[SNAPSHOT-LEFT] ⚠️ 배치 처리 결과 없음 → 세션 종료")
-                    end_snapshot_session('left')
-
-            # 현재 ROI 상태 저장 (다음 프레임에서 비교용)
+            # 현재 ROI 상태 저장
             session['last_roi_status'] = roi_status
 
         # 6-1-CONVEYOR. 레거시 스냅샷 로직 (SNAPSHOT SYSTEM v2.0으로 대체됨) ⭐⭐⭐
@@ -1422,43 +1337,10 @@ def predict_dual():
         #         logger.info("[CONVEYOR] 🆕 새 PCB 감지 → 스냅샷 캡처")
         #         save_snapshot(left_frame, right_frame, reference_point)
 
-        # 6-2. YOLO 부품 검출 (원래 /predict_test 방식)
+        # 6-2. YOLO 부품 검출 - 간단하게!
         boxes_data = []
-        session = snapshot_sessions.get('left', {})
 
-        # 배치 처리 결과가 있으면 사용, 없으면 실시간 YOLO 실행
-        if session.get('should_save_db') and session.get('best_boxes'):
-            # 배치 처리에서 이미 선택된 최적 결과 사용
-            logger.info(f"[DUAL-LEFT] 📦 배치 처리 결과 사용 (누락: {session['best_missing']}, 위치오류: {session['best_position_error']})")
-
-            smoothed_boxes = session['best_boxes']
-
-            # 평활화된 결과로 바운딩 박스 그리기
-            annotated_frame = draw_bounding_boxes(left_frame.copy(), smoothed_boxes, None, None)
-
-            # 디버그 뷰어용 데이터 구조 변환 (절대좌표 + 상대좌표)
-            boxes_data = []
-            for box in smoothed_boxes:
-                cx = (box['x1'] + box['x2']) / 2
-                cy = (box['y1'] + box['y2']) / 2
-
-                box_data = {
-                    'class_name': box['class_name'],
-                    'bbox': [box['x1'], box['y1'], box['x2'], box['y2']],
-                    'center': [cx, cy],  # 절대좌표 (디버그 뷰어용)
-                    'confidence': box['confidence']
-                }
-
-                # 템플릿 기준점을 (0,0)으로 하는 상대 좌표 추가 (ComponentVerifier용)
-                if reference_point:
-                    ref_x, ref_y = reference_point
-                    rel_x = cx - ref_x
-                    rel_y = cy - ref_y
-                    box_data['relative_center'] = [rel_x, rel_y]
-
-                boxes_data.append(box_data)
-
-        elif yolo_model is not None and should_run_yolo:
+        if yolo_model is not None and should_run_yolo:
             try:
                 # YOLO 추론 실행
                 results = yolo_model.predict(left_frame, conf=0.3, iou=0.7, verbose=False)
@@ -1580,37 +1462,16 @@ def predict_dual():
                 cv2.putText(annotated_frame, status_text, (10, img_h - 10),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, status_color, 2)
 
-        # 7. 부품 위치 검증 (ComponentVerifier 통합)
+        # 7. 부품 위치 검증 - 간단하게!
         missing_count = 0
         position_error_count = 0
         extra_count = 0
         correct_count = 0
         verification_result = None
-        verification_possible = False  # ⭐ 검증 가능 여부 플래그 (DB 저장 조건)
+        verification_possible = False
 
-        # 배치 처리 결과가 있으면 사용, 없으면 실시간 검증 실행
-        if session.get('should_save_db') and session.get('best_verification'):
-            # 배치 처리에서 이미 선택된 최적 검증 결과 사용
-            logger.info(f"[DUAL-LEFT] 📦 배치 처리 검증 결과 사용")
-
-            verification_result = session['best_verification']
-            verification_possible = True
-
-            # 검증 결과 추출
-            missing_count = session['best_missing']
-            position_error_count = session['best_position_error']
-            extra_count = verification_result['summary']['extra_count']
-            correct_count = verification_result['summary']['correct_count']
-
-            logger.info(
-                f"✅ 배치 처리 검증: 정상 {correct_count}개, "
-                f"위치오류 {position_error_count}개, "
-                f"누락 {missing_count}개, "
-                f"추가 {extra_count}개"
-            )
-
-        # 제품 코드가 있으면 DB에서 기준 부품 배치 로드 (실시간 검증)
-        elif product_code:
+        # 제품 코드가 있으면 DB에서 기준 부품 배치 로드
+        if product_code:
             try:
                 reference_components = db.get_reference_components(product_code)
 
@@ -1797,32 +1658,20 @@ def predict_dual():
 
         logger.info(f"✅ 양면 검증 완료: 시리얼={serial_number}, 제품={product_code}, 판정={decision}, GPIO={gpio_pin}, 누락={missing_count}, 위치오류={position_error_count}")
 
-        # 9. DB 저장 (조건부) ⭐⭐⭐ SNAPSHOT SYSTEM v2.0
-        # 조건 1: 검증 가능해야 함 (부품 배치 기준 데이터 존재 + 시리얼 넘버 존재)
-        # 조건 2: 판정이 유효해야 함 (decision != None)
-        # 조건 3: ROI 벗어날 때만 저장 (should_save_db 플래그 확인)
-        with snapshot_lock:
-            session = snapshot_sessions['left']
-            should_save_to_db = False
+        # 9. DB 저장 (조건부) - 간단하게!
+        # 조건: 검증 가능 + 시리얼 있음 + 판정 유효 + ROI 안
+        should_save_to_db = False
 
-            # 조건 1: 검증 가능 여부 체크
-            if not verification_possible:
-                logger.warning("⚠️  DB 저장 건너뜀: 부품 배치 기준 데이터 없음 (검증 불가)")
-            elif not serial_number:
-                logger.warning("⚠️  DB 저장 건너뜀: 시리얼 넘버 없음")
-            # 조건 2: 판정이 유효한지 체크
-            elif decision is None:
-                logger.warning("⚠️  DB 저장 건너뜀: 판정 = None (시리얼 없음 또는 ROI 밖)")
-            # 조건 3: ROI 벗어남 플래그 확인 (스냅샷 세션에서 설정)
-            elif session.get('should_save_db', False):
-                should_save_to_db = True
-                logger.info("✅ DB 저장 조건 충족: 검증 가능 + 판정 유효 + ROI 벗어남 (스냅샷 세션 종료)")
-                # 플래그 초기화
-                session['should_save_db'] = False
-            else:
-                # ROI 안에 있거나, 아직 진입하지 않음 → DB 저장 안 함
-                if roi_status == 'in_roi':
-                    logger.debug(f"DB 저장 대기 중: ROI 안에 있음 (프레임 수집 중)")
+        if not verification_possible:
+            logger.warning("⚠️  DB 저장 건너뜀: 부품 배치 기준 데이터 없음 (검증 불가)")
+        elif not serial_number:
+            logger.warning("⚠️  DB 저장 건너뜀: 시리얼 넘버 없음")
+        elif decision is None:
+            logger.warning("⚠️  DB 저장 건너뜀: 판정 = None")
+        elif roi_status == 'in_roi' and len(boxes_data) > 0:
+            # ROI 안에서 YOLO 검출 완료 → 바로 저장!
+            should_save_to_db = True
+            logger.info("✅ DB 저장 조건 충족: 검증 완료 + ROI 안")
 
         if should_save_to_db:
             try:
