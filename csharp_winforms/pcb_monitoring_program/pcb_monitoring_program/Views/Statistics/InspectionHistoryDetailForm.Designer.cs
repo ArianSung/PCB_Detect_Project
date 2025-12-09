@@ -47,7 +47,7 @@
             cardIHD.Dock = DockStyle.Fill;
             cardIHD.Location = new Point(0, 0);
             cardIHD.Name = "cardIHD";
-            cardIHD.Size = new Size(1084, 761);
+            cardIHD.Size = new Size(1234, 761);
             cardIHD.TabIndex = 0;
             // 
             // DGV_IHD_result
@@ -65,7 +65,7 @@
             DGV_IHD_result.ClipboardCopyMode = DataGridViewClipboardCopyMode.Disable;
             DGV_IHD_result.ColumnHeadersHeight = 41;
             DGV_IHD_result.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-            DGV_IHD_result.Location = new Point(718, 67);
+            DGV_IHD_result.Location = new Point(721, 67);
             DGV_IHD_result.Name = "DGV_IHD_result";
             DGV_IHD_result.PaletteMode = ComponentFactory.Krypton.Toolkit.PaletteMode.Office2010Black;
             DGV_IHD_result.ReadOnly = true;
@@ -83,7 +83,7 @@
             DGV_IHD_result.RowTemplate.DefaultCellStyle.SelectionForeColor = Color.White;
             DGV_IHD_result.RowTemplate.Height = 41;
             DGV_IHD_result.ScrollBars = ScrollBars.Vertical;
-            DGV_IHD_result.Size = new Size(310, 640);
+            DGV_IHD_result.Size = new Size(441, 640);
             DGV_IHD_result.StateCommon.Background.Color1 = Color.FromArgb(44, 44, 44);
             DGV_IHD_result.StateCommon.Background.Color2 = Color.FromArgb(44, 44, 44);
             DGV_IHD_result.StateCommon.BackStyle = ComponentFactory.Krypton.Toolkit.PaletteBackStyle.GridBackgroundList;
@@ -226,7 +226,7 @@
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1084, 761);
+            ClientSize = new Size(1234, 761);
             Controls.Add(cardIHD);
             Name = "InspectionHistoryDetailForm";
             Text = "InspectionHistoryDetailForm";

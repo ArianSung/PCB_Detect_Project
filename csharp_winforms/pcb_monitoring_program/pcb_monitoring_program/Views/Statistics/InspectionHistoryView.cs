@@ -31,6 +31,13 @@ namespace pcb_monitoring_program.Views.Statistics
             // 🔹 날짜 바뀔 때마다 자동으로 그리드 새로고침
             DTP_IH_StartDate.ValueChanged += DateRange_ValueChanged;
             DTP_IH_EndDate.ValueChanged += DateRange_ValueChanged;
+
+            // 🔹 그리드 선택 테두리 강조용 이벤트
+            DGV_IH_result.CellPainting += DGV_IH_result_CellPainting;
+            DGV_IH_result.SelectionChanged += DGV_IH_result_SelectionChanged;
+
+            // 🔹 행 더블클릭 → 상세 폼 열기
+            DGV_IH_result.CellDoubleClick += DGV_IH_result_CellDoubleClick;
         }
 
         private void ApplyButtonStyle(Control parent)
@@ -277,6 +284,10 @@ namespace pcb_monitoring_program.Views.Statistics
             // 🔹 DataGridView 컬럼 자동 생성 (DB 컬럼 그대로 출력)
             DGV_IH_result.AutoGenerateColumns = true;
 
+            // ✅ 행 단위 선택 + 단일 선택
+            DGV_IH_result.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            DGV_IH_result.MultiSelect = false;
+
             // 🔹 이 한 줄로 모든 버튼 스타일 적용
             ApplyButtonStyle(this);
 
@@ -292,19 +303,95 @@ namespace pcb_monitoring_program.Views.Statistics
 
             // 🔹 화면 켜자마자 '오늘 하루치' 검사 이력 로드
             LoadInspectionHistoryGridByDateRange();
+
+            // 수정 막기
+            DGV_IH_result.ReadOnly = true;
         }
 
-        private void button1_Click(object sender, EventArgs e)
+        // ✅ 선택된 행에 노란 테두리 그리기
+        private void DGV_IH_result_CellPainting(object sender, DataGridViewCellPaintingEventArgs e)
         {
-            OpenDetailsRequested?.Invoke(this, EventArgs.Empty);
+            var grid = (KryptonDataGridView)sender; // 그냥 DataGridView면 DataGridView로 바꿔도 됨
 
-            if (sender is Button btn)
-                UiStyleHelper.HighlightButton(btn);
+            // 유효한 데이터 셀 + 선택된 행만 처리
+            if (e.RowIndex >= 0 && grid.Rows[e.RowIndex].Selected)
+            {
+                Color highlightColor = Color.FromArgb(255, 180, 0); // 노란색
+                int borderWidth = 2;
 
-            // 🔹 InspectionHistoryForm 열기
-            InspectionHistoryDetailForm form = new InspectionHistoryDetailForm();
-            form.StartPosition = FormStartPosition.CenterParent; // 부모 기준 중앙 정렬
-            form.Show();
+                // 기본 그리기(내용/배경) 먼저, 기본 테두리는 빼고 그림
+                e.Paint(e.CellBounds, DataGridViewPaintParts.All & ~DataGridViewPaintParts.Border);
+
+                using (Pen p = new Pen(highlightColor, borderWidth))
+                {
+                    Rectangle rect = e.CellBounds;
+
+                    // 🔼 위쪽 테두리 (위 행이 선택 안 되어 있을 때만)
+                    if (e.RowIndex == 0 || !grid.Rows[e.RowIndex - 1].Selected)
+                    {
+                        e.Graphics.DrawLine(p, rect.Left, rect.Top, rect.Right, rect.Top);
+                    }
+
+                    // 🔽 아래쪽 테두리 (아래 행이 선택 안 되어 있을 때만)
+                    if (e.RowIndex == grid.RowCount - 1 || !grid.Rows[e.RowIndex + 1].Selected)
+                    {
+                        e.Graphics.DrawLine(p,
+                            rect.Left,
+                            rect.Bottom - borderWidth / 2,
+                            rect.Right,
+                            rect.Bottom - borderWidth / 2);
+                    }
+
+                    // ◀ 왼쪽 테두리 (첫 번째 컬럼일 때만)
+                    if (e.ColumnIndex == 0)
+                    {
+                        e.Graphics.DrawLine(p, rect.Left, rect.Top, rect.Left, rect.Bottom);
+                    }
+
+                    // ▶ 오른쪽 테두리 (마지막 컬럼일 때만)
+                    if (e.ColumnIndex == grid.ColumnCount - 1)
+                    {
+                        e.Graphics.DrawLine(p,
+                            rect.Right - borderWidth / 2,
+                            rect.Top,
+                            rect.Right - borderWidth / 2,
+                            rect.Bottom);
+                    }
+                }
+
+                // 기본 그리기 종료 (우리가 다 했다고 알림)
+                e.Handled = true;
+            }
+        }
+
+        // ✅ 선택 바뀔 때마다 다시 그리기
+        private void DGV_IH_result_SelectionChanged(object sender, EventArgs e)
+        {
+            DGV_IH_result.Invalidate();   // 또는 DGV_IH_result.Refresh();
+        }
+
+        // ✅ 행 더블클릭 → 클릭한 행 DataRow 한 줄 상세 폼으로 전달
+        private void DGV_IH_result_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
+        {
+            // 헤더 더블클릭 방지
+            if (e.RowIndex < 0)
+                return;
+
+            var grid = DGV_IH_result;
+
+            if (grid.DataSource is DataTable dt)
+            {
+                var rowView = grid.Rows[e.RowIndex].DataBoundItem as DataRowView;
+                if (rowView == null) return;
+
+                var row = rowView.Row;   // 여기가 진짜 DataRow
+
+                using (var form = new InspectionHistoryDetailForm(row))
+                {
+                    form.StartPosition = FormStartPosition.CenterParent;
+                    form.ShowDialog();
+                }
+            }
         }
 
         //////////////////////////////////// 불량 유형 : 네 개의 개별 체크박스 상태가 변경될 때마다 All 체크박스 상태 업데이트
@@ -314,7 +401,6 @@ namespace pcb_monitoring_program.Views.Statistics
 
             _isInternalUpdate = true;
 
-            // 네 개가 모두 체크되어 있으면 All 체크, 아니면 All 해제
             CB_IH_DefectType_All.Checked =
                 CB_IH_DefectType_Normal.Checked &&
                 CB_IH_DefectType_ComponentDefect.Checked &&
@@ -326,11 +412,10 @@ namespace pcb_monitoring_program.Views.Statistics
 
         private void CB_DefectType_All_CheckedChanged(object sender, EventArgs e)
         {
-            if (_isInternalUpdate) return; // 내부 업데이트면 무시 (옵션이지만 깔끔)
+            if (_isInternalUpdate) return;
 
             bool isChecked = CB_IH_DefectType_All.Checked;
 
-            // 이벤트 루프 방지 위해 temporarily flag 사용
             _isInternalUpdate = true;
 
             CB_IH_DefectType_Normal.Checked = isChecked;
@@ -376,7 +461,6 @@ namespace pcb_monitoring_program.Views.Statistics
 
             _isInternalUpdate = true;
 
-            // 네 개가 모두 체크되어 있으면 All 체크, 아니면 All 해제
             CB_IH_CameraID_All.Checked =
                 CB_IH_CameraID_CAM01.Checked &&
                 CB_IH_CameraID_CAM02.Checked &&
@@ -387,11 +471,10 @@ namespace pcb_monitoring_program.Views.Statistics
 
         private void CB_CameraID_All_CheckedChanged(object sender, EventArgs e)
         {
-            if (_isInternalUpdate) return; // 내부 업데이트면 무시
+            if (_isInternalUpdate) return;
 
             bool isChecked = CB_IH_CameraID_All.Checked;
 
-            // 이벤트 루프 방지 위해 temporarily flag 사용
             _isInternalUpdate = true;
 
             CB_IH_CameraID_CAM01.Checked = isChecked;
@@ -400,15 +483,7 @@ namespace pcb_monitoring_program.Views.Statistics
 
             _isInternalUpdate = false;
 
-            // 사용자 조작일 때만 필터 적용
-            if (!isChecked) // All를 해제한 경우에도 개별 체크 상태가 바뀌므로 그냥 호출해도 괜찮음
-            {
-                LoadInspectionHistoryGridByDateRange();
-            }
-            else
-            {
-                LoadInspectionHistoryGridByDateRange();
-            }
+            LoadInspectionHistoryGridByDateRange();
         }
 
         private void CB_CameraID_CAM01_CheckedChanged(object sender, EventArgs e)
@@ -432,7 +507,6 @@ namespace pcb_monitoring_program.Views.Statistics
                 LoadInspectionHistoryGridByDateRange();
         }
 
-
         private void btn_filterSearch_Click(object sender, EventArgs e)
         {
             LoadInspectionHistoryGridByDateRange();
@@ -441,11 +515,10 @@ namespace pcb_monitoring_program.Views.Statistics
         private void btn_Last7DaysSearch_Click(object sender, EventArgs e)
         {
             var today = DateTime.Today;
-            var from = today.AddDays(-6);  // 오늘 포함해서 7일
+            var from = today.AddDays(-6);
 
             DTP_IH_StartDate.Value = from;
             DTP_IH_EndDate.Value = today;
-            // 👉 ValueChanged 이벤트에서 자동으로 LoadInspectionHistoryGridByDateRange() 호출됨
         }
 
         private void btn_ThisMonthSearch_Click(object sender, EventArgs e)
@@ -453,19 +526,16 @@ namespace pcb_monitoring_program.Views.Statistics
             var today = DateTime.Today;
 
             var firstDay = new DateTime(today.Year, today.Month, 1);
-            var lastDay = firstDay.AddMonths(1).AddDays(-1); // 말일
+            var lastDay = firstDay.AddMonths(1).AddDays(-1);
 
             DTP_IH_StartDate.Value = firstDay;
             DTP_IH_EndDate.Value = lastDay;
-            // 여기서도 DateRange_ValueChanged가 자동으로 실행돼서 그리드 갱신 됨
         }
 
         private void btn_TodaySearch_Click(object sender, EventArgs e)
         {
-            // 오늘 날짜
             DateTime today = DateTime.Now.Date;
 
-            // 기간 선택 UI가 있다면 자동 설정
             DTP_IH_StartDate.Value = today;
             DTP_IH_EndDate.Value = today;
 
@@ -476,7 +546,6 @@ namespace pcb_monitoring_program.Views.Statistics
         {
             OpenDetailsRequested?.Invoke(this, EventArgs.Empty);
 
-            // 전체 조회 + 기간 표시
             LoadInspectionHistoryGrid();
         }
     }
