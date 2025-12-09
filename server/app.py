@@ -1314,9 +1314,28 @@ def predict_dual():
             # ROI 상태 전환 감지: in_roi → out_of_roi (세션 종료 및 처리)
             if previous_roi_status == 'in_roi' and roi_status == 'out_of_roi':
                 if session['active'] and len(session['frames']) > 0:
-                    logger.info(f"[SNAPSHOT-LEFT] 🎯 ROI 벗어남 → 최고 품질 프레임 선택 및 처리")
-                    # DB 저장 플래그 설정 (이 프레임에서 DB 저장해야 함)
+                    logger.info(f"[SNAPSHOT-LEFT] 🎯 ROI 벗어남 → 최고 품질 프레임 선택 (총 {len(session['frames'])}개)")
+
+                    # 최고 품질 프레임 선택
+                    best_idx = np.argmax(session['qualities'])
+                    best_quality = session['qualities'][best_idx]
+                    best_frame = session['frames'][best_idx]
+                    best_reference_point = session['reference_points'][best_idx]
+
+                    logger.info(f"[SNAPSHOT-LEFT] ✨ 최고 품질 프레임 선택: #{best_idx+1} (품질: {best_quality:.3f})")
+
+                    # 최고 품질 프레임을 현재 프레임으로 교체 (YOLO 검출에 사용됨)
+                    left_frame = best_frame.copy()
+                    reference_point = best_reference_point
+
+                    # ROI 상태를 in_roi로 변경 (YOLO 실행되도록)
+                    roi_status = 'in_roi'
+                    should_run_yolo = True
+
+                    # DB 저장 플래그 설정
                     session['should_save_db'] = True
+
+                    logger.info(f"[SNAPSHOT-LEFT] 🔄 최고 품질 프레임으로 교체 완료 → YOLO 실행")
                 else:
                     # 프레임이 없으면 그냥 세션 종료
                     end_snapshot_session('left')
