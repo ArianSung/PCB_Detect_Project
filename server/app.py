@@ -1300,7 +1300,7 @@ def predict_dual():
                 session['serial_number'] = serial_number
                 session['product_code'] = product_code
 
-            # ROI 안에서 프레임 수집
+            # ROI 안에서 프레임 수집 + 실시간 배치 처리
             if roi_status == 'in_roi' and session['active'] and reference_point:
                 # 템플릿 매칭 신뢰도 획득 (find_reference_point는 내부에서 계산)
                 template_confidence = 0.85  # 기본값 (실제로는 find_reference_point에서 반환해야 함)
@@ -1311,25 +1311,24 @@ def predict_dual():
                 # 스냅샷 프레임 추가
                 add_snapshot_frame('left', left_frame, quality, template_confidence, reference_point)
 
-            # ROI 상태 전환 감지: in_roi → out_of_roi (세션 종료 및 처리)
-            if previous_roi_status == 'in_roi' and roi_status == 'out_of_roi':
-                if session['active'] and len(session['frames']) > 0:
-                    logger.info(f"[SNAPSHOT-LEFT] 🎯 ROI 벗어남 → 배치 처리 시작 (총 {len(session['frames'])}개 프레임)")
+                # 🔥 ROI 안에서 프레임이 충분히 모이면 즉시 배치 처리
+                MIN_FRAMES_FOR_BATCH = 3  # 최소 3개 프레임 수집
+                if len(session['frames']) >= MIN_FRAMES_FOR_BATCH:
+                    logger.info(f"[SNAPSHOT-LEFT] 🔥 ROI 안에서 배치 처리 시작 (총 {len(session['frames'])}개 프레임)")
 
                     # 모든 프레임에 대해 YOLO + 검증 수행
                     batch_results = []
                     for idx, frame in enumerate(session['frames']):
                         ref_point = session['reference_points'][idx]
-                        quality = session['qualities'][idx]
+                        frame_quality = session['qualities'][idx]
 
                         # YOLO 검출
                         if yolo_model is not None:
                             results = yolo_model.predict(frame, conf=0.3, iou=0.7, verbose=False)
                             _, _, raw_boxes = parse_yolo_results(results)
 
-                            # ROI 필터링 및 평활화
+                            # ROI 필터링
                             filtered_boxes = filter_boxes_by_roi(raw_boxes, ref_point, roi_distance_threshold=300)
-                            smoothed_boxes = smooth_detections(filtered_boxes, smoothing_alpha=0.3)
 
                             # 부품 검증
                             missing = 0
@@ -1346,19 +1345,19 @@ def predict_dual():
                                             confidence_threshold=0.25,
                                             reference_point=ref_point
                                         )
-                                        verification = verifier.verify_components(smoothed_boxes, debug=False)
+                                        verification = verifier.verify_components(filtered_boxes, debug=False)
                                         missing = verification['summary']['missing_count']
                                         position_error = verification['summary']['misplaced_count']
                                 except Exception as e:
-                                    logger.error(f"배치 처리 검증 오류 (프레임 #{idx+1}): {e}")
+                                    logger.error(f"ROI 안 배치 처리 오류 (프레임 #{idx+1}): {e}")
 
                             batch_results.append({
                                 'idx': idx,
-                                'quality': quality,
+                                'quality': frame_quality,
                                 'missing': missing,
                                 'position_error': position_error,
                                 'total_error': missing + position_error,
-                                'boxes': smoothed_boxes,
+                                'boxes': filtered_boxes,
                                 'verification': verification,
                                 'frame': frame,
                                 'ref_point': ref_point
@@ -1369,32 +1368,46 @@ def predict_dual():
                         batch_results.sort(key=lambda x: (x['total_error'], -x['quality']))
                         best = batch_results[0]
 
-                        logger.info(f"[SNAPSHOT-LEFT] ✨ 최적 결과 선택: 프레임 #{best['idx']+1} "
+                        logger.info(f"[SNAPSHOT-LEFT] ✨ ROI 안 최적 프레임 선택: #{best['idx']+1} "
                                    f"(누락: {best['missing']}, 위치오류: {best['position_error']}, 품질: {best['quality']:.3f})")
 
-                        # 최적 결과를 현재 결과로 설정
-                        left_frame = best['frame'].copy()
-                        reference_point = best['ref_point']
-
-                        # 검증 결과 저장 (나중에 DB 저장 시 사용)
+                        # 최적 결과 저장 (YOLO 섹션에서 사용)
                         session['best_verification'] = best['verification']
                         session['best_boxes'] = best['boxes']
                         session['best_missing'] = best['missing']
                         session['best_position_error'] = best['position_error']
+                        session['best_frame'] = best['frame']
+                        session['best_ref_point'] = best['ref_point']
 
-                        # ROI 상태를 in_roi로 변경 (판정 로직 통과하도록)
-                        roi_status = 'in_roi'
-                        should_run_yolo = True  # YOLO는 이미 실행했지만 플래그 설정
+                        # 현재 프레임을 최적 프레임으로 교체
+                        left_frame = best['frame'].copy()
+                        reference_point = best['ref_point']
 
-                        # DB 저장 플래그 설정
-                        session['should_save_db'] = True
+                        # YOLO 실행 플래그 설정 (배치 처리 결과 사용)
+                        should_run_yolo = True
 
-                        logger.info(f"[SNAPSHOT-LEFT] 🔄 최적 결과 적용 완료 → DB 저장 준비")
-                    else:
-                        logger.warning("[SNAPSHOT-LEFT] ⚠️ 배치 처리 결과 없음")
-                        end_snapshot_session('left')
+                        logger.info(f"[SNAPSHOT-LEFT] 🔄 ROI 안에서 최적 프레임으로 교체 완료")
+
+            # ROI 상태 전환 감지: in_roi → out_of_roi (DB 저장 준비)
+            if previous_roi_status == 'in_roi' and roi_status == 'out_of_roi':
+                if session['active'] and session.get('best_verification'):
+                    # ROI 안에서 이미 배치 처리 완료 → DB 저장 플래그만 설정
+                    logger.info(f"[SNAPSHOT-LEFT] 🎯 ROI 벗어남 → DB 저장 준비")
+
+                    # 최적 결과를 현재 결과로 설정
+                    if session.get('best_frame') is not None:
+                        left_frame = session['best_frame'].copy()
+                        reference_point = session['best_ref_point']
+                        roi_status = 'in_roi'  # 판정 로직 통과하도록
+                        should_run_yolo = True
+
+                    # DB 저장 플래그 설정
+                    session['should_save_db'] = True
+
+                    logger.info(f"[SNAPSHOT-LEFT] 🔄 DB 저장 준비 완료")
                 else:
-                    # 프레임이 없으면 그냥 세션 종료
+                    # 배치 처리 결과 없으면 세션 종료
+                    logger.warning("[SNAPSHOT-LEFT] ⚠️ 배치 처리 결과 없음 → 세션 종료")
                     end_snapshot_session('left')
 
             # 현재 ROI 상태 저장 (다음 프레임에서 비교용)
