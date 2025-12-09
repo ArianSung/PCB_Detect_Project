@@ -1288,7 +1288,11 @@ def predict_dual():
             roi_status = "no_template_checker"
             logger.warning(f"[DUAL-LEFT] ⚠️ 템플릿 체커 없음 → YOLO 강제 실행")
 
-        # 6-1-1. 🔥 v3.0: PCB가 지나가도 저장된 프레임으로 계속 검출!
+        # 6-1-1. 🔥 v4.0: 화면 전송과 검출을 분리!
+        # - 화면 전송: left_frame (실시간, 계속 흐름)
+        # - 검출: detection_frame (ROI 진입 시 캡처된 정지 프레임)
+        detection_frame = None  # 검출용 프레임 (별도 변수!)
+
         with snapshot_lock:
             session = snapshot_sessions['left']
             previous_roi_status = session['last_roi_status']
@@ -1299,31 +1303,33 @@ def predict_dual():
                 if session.get('saved_frame') is not None:
                     logger.info(f"[SNAPSHOT] 🔄 이전 세션 종료 (새 PCB 진입)")
 
-                logger.info(f"[SNAPSHOT] 🎯 ROI 진입! → 현재 프레임 저장")
+                logger.info(f"[SNAPSHOT] 🎯 ROI 진입! → 현재 프레임 저장 (검출용)")
 
-                # 이 프레임을 저장!
+                # 이 프레임을 저장! (검출용)
                 session['saved_frame'] = left_frame.copy()
                 session['saved_ref_point'] = reference_point
                 session['serial_number'] = serial_number
                 session['product_code'] = product_code
                 session['detection_completed'] = False  # 검출 완료 플래그
-                session['yolo_processed'] = False  # YOLO 처리 플래그
 
                 logger.info(f"[SNAPSHOT] ✅ 프레임 저장 완료 (제품: {product_code})")
 
-            # 저장된 프레임이 있고 아직 검출이 완료되지 않았으면 → 계속 사용!
-            # ⭐ PCB가 ROI를 벗어나도 계속 검출!
+            # 저장된 프레임이 있고 아직 검출이 완료되지 않았으면 → 검출 실행!
+            # ⭐ PCB가 ROI를 벗어나도 저장된 프레임으로 검출!
             if session.get('saved_frame') is not None and not session.get('detection_completed', False):
-                logger.info(f"[SNAPSHOT] 📦 저장된 프레임 사용 (ROI 상태: {roi_status})")
+                logger.info(f"[SNAPSHOT] 📦 저장된 프레임으로 검출 (ROI 상태: {roi_status})")
 
-                # 저장된 프레임으로 교체
-                left_frame = session['saved_frame'].copy()
-                reference_point = session['saved_ref_point']
+                # 검출용 프레임 설정 (left_frame은 그대로 둠!)
+                detection_frame = session['saved_frame'].copy()
+                detection_ref_point = session['saved_ref_point']
                 should_run_yolo = True
 
                 # 저장된 제품 정보 사용
                 serial_number = session.get('serial_number', serial_number)
                 product_code = session.get('product_code', product_code)
+
+                # 검출용 기준점 사용
+                reference_point = detection_ref_point
 
             # 현재 ROI 상태 저장
             session['last_roi_status'] = roi_status
@@ -1337,13 +1343,17 @@ def predict_dual():
         #         logger.info("[CONVEYOR] 🆕 새 PCB 감지 → 스냅샷 캡처")
         #         save_snapshot(left_frame, right_frame, reference_point)
 
-        # 6-2. YOLO 부품 검출 - 간단하게!
+        # 6-2. YOLO 부품 검출 - 검출용 프레임 사용!
         boxes_data = []
 
         if yolo_model is not None and should_run_yolo:
             try:
+                # ⭐ 검출용 프레임 사용 (저장된 정지 프레임!)
+                frame_for_detection = detection_frame if detection_frame is not None else left_frame
+                logger.info(f"[YOLO] 검출 프레임: {'저장된 프레임' if detection_frame is not None else '실시간 프레임'}")
+
                 # YOLO 추론 실행
-                results = yolo_model.predict(left_frame, conf=0.3, iou=0.7, verbose=False)
+                results = yolo_model.predict(frame_for_detection, conf=0.3, iou=0.7, verbose=False)
                 defect_type, confidence, raw_boxes_data = parse_yolo_results(results)
 
                 # 신뢰도 필터링 (낮은 신뢰도 제거)
@@ -1365,6 +1375,7 @@ def predict_dual():
                 smoothed_boxes = smooth_detections('left', filtered_boxes)
 
                 # 평활화된 결과로 바운딩 박스 그리기
+                # ⭐ 화면 전송용은 원본 left_frame 사용 (실시간)
                 annotated_frame = draw_bounding_boxes(left_frame.copy(), smoothed_boxes, None, None)
 
                 logger.info(f"[DUAL-LEFT] YOLO 추론 완료: 원본 {len(raw_boxes_data)}개 → 필터링 {len(filtered_boxes)}개 → 평활화 {len(smoothed_boxes)}개 객체")
