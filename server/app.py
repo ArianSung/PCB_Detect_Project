@@ -1288,13 +1288,17 @@ def predict_dual():
             roi_status = "no_template_checker"
             logger.warning(f"[DUAL-LEFT] ⚠️ 템플릿 체커 없음 → YOLO 강제 실행")
 
-        # 6-1-1. 🔥 간단한 스냅샷 시스템: ROI 진입 → 프레임 저장 → YOLO 검출
+        # 6-1-1. 🔥 v3.0: PCB가 지나가도 저장된 프레임으로 계속 검출!
         with snapshot_lock:
             session = snapshot_sessions['left']
             previous_roi_status = session['last_roi_status']
 
-            # ROI 진입 감지: out_of_roi → in_roi
+            # ROI 진입 감지: 새 PCB 시작!
             if previous_roi_status != 'in_roi' and roi_status == 'in_roi':
+                # 이전 세션이 있다면 먼저 초기화 (새 PCB)
+                if session.get('saved_frame') is not None:
+                    logger.info(f"[SNAPSHOT] 🔄 이전 세션 종료 (새 PCB 진입)")
+
                 logger.info(f"[SNAPSHOT] 🎯 ROI 진입! → 현재 프레임 저장")
 
                 # 이 프레임을 저장!
@@ -1302,27 +1306,24 @@ def predict_dual():
                 session['saved_ref_point'] = reference_point
                 session['serial_number'] = serial_number
                 session['product_code'] = product_code
-                session['frame_saved'] = True
+                session['detection_completed'] = False  # 검출 완료 플래그
+                session['yolo_processed'] = False  # YOLO 처리 플래그
 
                 logger.info(f"[SNAPSHOT] ✅ 프레임 저장 완료 (제품: {product_code})")
 
-            # ROI 안에 있으면: 저장된 프레임 사용 (계속!)
-            if roi_status == 'in_roi' and session.get('saved_frame') is not None:
-                logger.info(f"[SNAPSHOT] 📦 저장된 프레임 사용 (실시간 스트림 무시)")
+            # 저장된 프레임이 있고 아직 검출이 완료되지 않았으면 → 계속 사용!
+            # ⭐ PCB가 ROI를 벗어나도 계속 검출!
+            if session.get('saved_frame') is not None and not session.get('detection_completed', False):
+                logger.info(f"[SNAPSHOT] 📦 저장된 프레임 사용 (ROI 상태: {roi_status})")
 
                 # 저장된 프레임으로 교체
                 left_frame = session['saved_frame'].copy()
                 reference_point = session['saved_ref_point']
                 should_run_yolo = True
 
-                # ⭐ 플래그 유지! ROI 안에서 계속 사용!
-
-            # ROI 벗어남: 세션 초기화
-            if previous_roi_status == 'in_roi' and roi_status == 'out_of_roi':
-                logger.info(f"[SNAPSHOT] 🔄 ROI 벗어남 → 세션 초기화")
-                session['saved_frame'] = None
-                session['saved_ref_point'] = None
-                session['frame_saved'] = False
+                # 저장된 제품 정보 사용
+                serial_number = session.get('serial_number', serial_number)
+                product_code = session.get('product_code', product_code)
 
             # 현재 ROI 상태 저장
             session['last_roi_status'] = roi_status
@@ -1657,20 +1658,26 @@ def predict_dual():
 
         logger.info(f"✅ 양면 검증 완료: 시리얼={serial_number}, 제품={product_code}, 판정={decision}, GPIO={gpio_pin}, 누락={missing_count}, 위치오류={position_error_count}")
 
-        # 9. DB 저장 (조건부) - 간단하게!
-        # 조건: 검증 가능 + 시리얼 있음 + 판정 유효 + ROI 안
+        # 9. DB 저장 (조건부) - v3.0: ROI 상태 무관!
+        # 조건: 검증 가능 + 시리얼 있음 + 판정 유효 + YOLO 검출 완료 + 아직 저장 안 됨
         should_save_to_db = False
 
-        if not verification_possible:
-            logger.warning("⚠️  DB 저장 건너뜀: 부품 배치 기준 데이터 없음 (검증 불가)")
-        elif not serial_number:
-            logger.warning("⚠️  DB 저장 건너뜀: 시리얼 넘버 없음")
-        elif decision is None:
-            logger.warning("⚠️  DB 저장 건너뜀: 판정 = None")
-        elif roi_status == 'in_roi' and len(boxes_data) > 0:
-            # ROI 안에서 YOLO 검출 완료 → 바로 저장!
-            should_save_to_db = True
-            logger.info("✅ DB 저장 조건 충족: 검증 완료 + ROI 안")
+        with snapshot_lock:
+            session = snapshot_sessions['left']
+            already_saved = session.get('detection_completed', False)
+
+            if not verification_possible:
+                logger.warning("⚠️  DB 저장 건너뜀: 부품 배치 기준 데이터 없음 (검증 불가)")
+            elif not serial_number:
+                logger.warning("⚠️  DB 저장 건너뜀: 시리얼 넘버 없음")
+            elif decision is None:
+                logger.warning("⚠️  DB 저장 건너뜀: 판정 = None")
+            elif already_saved:
+                logger.info("ℹ️  DB 저장 건너뜀: 이미 저장됨")
+            elif len(boxes_data) > 0:
+                # ⭐ YOLO 검출 완료 → 저장! (ROI 상태 무관!)
+                should_save_to_db = True
+                logger.info(f"✅ DB 저장 조건 충족: 검증 완료 (ROI: {roi_status}, 누락: {missing_count}, 위치오류: {position_error_count})")
 
         if should_save_to_db:
             try:
@@ -1716,8 +1723,14 @@ def predict_dual():
 
                 logger.info(f"✅ 검사 이력 DB 저장 완료 (ID: {inspection_id})")
 
-                # 스냅샷 세션 종료 (메모리 해제)
-                end_snapshot_session('left')
+                # 검출 완료 플래그 설정 (중복 저장 방지)
+                with snapshot_lock:
+                    session = snapshot_sessions['left']
+                    session['detection_completed'] = True
+                    logger.info(f"[SNAPSHOT] 🏁 검출 완료 플래그 설정 (다음 PCB까지 재검출 안 함)")
+
+                # 스냅샷 세션 종료는 다음 PCB가 들어올 때 (1299-1300줄)
+                # end_snapshot_session('left')  # 주석 처리
 
             except Exception as db_error:
                 logger.error(f"❌ DB 저장 실패: {db_error}", exc_info=True)

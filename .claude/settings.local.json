@@ -34,7 +34,8 @@
       "Bash(conda activate:*)",
       "Bash(pip install:*)",
       "Bash(source:*)",
-      "Bash(kill:*)"
+      "Bash(kill:*)",
+      "Bash(pgrep:*)"
     ],
     "deny": [],
     "ask": []
