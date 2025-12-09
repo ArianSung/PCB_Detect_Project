@@ -259,6 +259,9 @@ namespace pcb_monitoring_program.Views.UserManagement
                 {
                     MessageBox.Show($"'{username}'은(는) 사용 가능한 아이디입니다.", "확인 완료",
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    // ✅ 이 아이디로 중복확인 성공
+                    _isIdChecked = true;
+                    _checkedUsername = username;
                 }
             }
             catch (Exception ex)

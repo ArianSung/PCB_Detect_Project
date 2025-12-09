@@ -1,24 +1,28 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using MySql.Data.MySqlClient;
 using System.Data;
+using MySql.Data.MySqlClient;
 using BCrypt.Net;
 
 namespace pcb_monitoring_program.DatabaseManager.Repositories
 {
     public class UserRepository
     {
+        // 🔌 DB 연결 헬퍼
+        private MySqlConnection GetConnection()
+        {
+            // 기존에 쓰던 DB 헬퍼 클래스 그대로 사용
+            return DB.GetConnection();
+        }
+
+        // ✅ 전체 사용자 조회 (id 안 가져옴)
         public DataTable GetAllUsers()
         {
-            using (var conn = DB.GetConnection())
+            using (var conn = GetConnection())
             {
                 conn.Open();
 
-                string query = @"
-                    SELECT 
+                string sql = @"
+                    SELECT
                         username,
                         full_name,
                         role,
@@ -26,142 +30,106 @@ namespace pcb_monitoring_program.DatabaseManager.Repositories
                         last_login,
                         created_at
                     FROM users
-                    ORDER BY id;
+                    ORDER BY username;
                 ";
 
-                using (var cmd = new MySqlCommand(query, conn))
-                using (var adapter = new MySqlDataAdapter(cmd))
+                using (var cmd = new MySqlCommand(sql, conn))
+                using (var da = new MySqlDataAdapter(cmd))
                 {
-                    DataTable dt = new DataTable();
-                    adapter.Fill(dt);
+                    var dt = new DataTable();
+                    da.Fill(dt);
                     return dt;
                 }
             }
         }
 
-        public DataTable GetUserById(int id)
+        // ✅ 검색 (아이디 부분검색 + 권한 필터)
+        public DataTable SearchUsers(string usernameKeyword, string roleFilter)
         {
-            using (var conn = DB.GetConnection())
-            {
-                conn.Open();
-                string query = @"
-            SELECT 
-                username,
-                full_name,
-                role,
-                CASE WHEN is_active THEN '활성' ELSE '비활성' END AS status_text,
-                last_login,
-                created_at
-            FROM users
-            WHERE id = @id;
-        ";
-
-                using (var cmd = new MySqlCommand(query, conn))
-                {
-                    cmd.Parameters.AddWithValue("@id", id);
-
-                    using (var adapter = new MySqlDataAdapter(cmd))
-                    {
-                        DataTable dt = new DataTable();
-                        adapter.Fill(dt);
-                        return dt;
-                    }
-                }
-            }
-        }
-        public DataTable GetUserByUsername(string username)
-        {
-            using (var conn = DB.GetConnection())
+            using (var conn = GetConnection())
             {
                 conn.Open();
 
-                string query = @"
-            SELECT 
-                username,
-                full_name,
-                role,
-                CASE WHEN is_active THEN '활성' ELSE '비활성' END AS status_text,
-                last_login,
-                created_at
-            FROM users
-            WHERE username = @username;
-        ";
+                string sql = @"
+                    SELECT
+                        username,
+                        full_name,
+                        role,
+                        CASE WHEN is_active THEN '활성' ELSE '비활성' END AS status_text,
+                        last_login,
+                        created_at
+                    FROM users
+                    WHERE 1 = 1
+                ";
 
-                using (var cmd = new MySqlCommand(query, conn))
+                if (!string.IsNullOrWhiteSpace(usernameKeyword))
                 {
-                    cmd.Parameters.AddWithValue("@username", username);
-
-                    using (var adapter = new MySqlDataAdapter(cmd))
-                    {
-                        DataTable dt = new DataTable();
-                        adapter.Fill(dt);
-                        return dt;
-                    }
-                }
-            }
-        }
-        public DataTable SearchUsers(string username, string roleFilter)
-        {
-            using (var conn = DB.GetConnection())
-            {
-                conn.Open();
-
-                string query = @"
-            SELECT 
-                username,
-                full_name,
-                role,
-                CASE WHEN is_active THEN '활성' ELSE '비활성' END AS status_text,
-                last_login,
-                created_at
-            FROM users
-            WHERE 1 = 1
-        ";
-
-                var cmd = new MySqlCommand();
-                cmd.Connection = conn;
-
-                // username 부분 검색 (LIKE '%값%')
-                if (!string.IsNullOrWhiteSpace(username))
-                {
-                    query += " AND username LIKE @username";
-                    cmd.Parameters.AddWithValue("@username", "%" + username + "%");
+                    sql += " AND username LIKE @username ";
                 }
 
-                // role 조건 (전체는 필터 안 함)
                 if (!string.IsNullOrWhiteSpace(roleFilter) && roleFilter != "전체")
                 {
-                    query += " AND role = @role";
-                    cmd.Parameters.AddWithValue("@role", roleFilter);
+                    sql += " AND role = @role ";
                 }
 
-                query += " ORDER BY id;";
+                sql += " ORDER BY username;";
 
-                cmd.CommandText = query;
-
-                using (var adapter = new MySqlDataAdapter(cmd))
+                using (var cmd = new MySqlCommand(sql, conn))
                 {
-                    DataTable dt = new DataTable();
-                    adapter.Fill(dt);
-                    return dt;
+                    if (!string.IsNullOrWhiteSpace(usernameKeyword))
+                        cmd.Parameters.AddWithValue("@username", "%" + usernameKeyword + "%");
+
+                    if (!string.IsNullOrWhiteSpace(roleFilter) && roleFilter != "전체")
+                        cmd.Parameters.AddWithValue("@role", roleFilter);
+
+                    using (var da = new MySqlDataAdapter(cmd))
+                    {
+                        var dt = new DataTable();
+                        da.Fill(dt);
+                        return dt;
+                    }
                 }
             }
         }
 
-        public bool AddUser(string username, string passwordHash, string fullName, string role, bool isActive)
+        // ✅ 아이디 중복 확인 (추가/수정 공통)
+        // 두 번째 파라미터는 기존 시그니처 맞추려고 남겨둔 더미 파라미터야
+        public bool IsUsernameTaken(string username, int ignore = 0)
         {
-            using (var conn = DB.GetConnection())
+            using (var conn = GetConnection())
             {
                 conn.Open();
 
-                string query = @"
-                INSERT INTO users 
-                    (username, password_hash, full_name, role, is_active, created_at)
-                VALUES 
-                    (@username, @password_hash, @full_name, @role, @is_active, NOW());
-            ";
+                string sql = @"
+                    SELECT COUNT(*)
+                    FROM users
+                    WHERE username = @username;
+                ";
 
-                using (var cmd = new MySqlCommand(query, conn))
+                using (var cmd = new MySqlCommand(sql, conn))
+                {
+                    cmd.Parameters.AddWithValue("@username", username);
+                    long count = (long)cmd.ExecuteScalar();
+                    return count > 0;
+                }
+            }
+        }
+
+        // ✅ 사용자 추가
+        public bool AddUser(string username, string passwordHash, string fullName, string role, bool isActive)
+        {
+            using (var conn = GetConnection())
+            {
+                conn.Open();
+
+                string sql = @"
+                    INSERT INTO users
+                        (username, password_hash, full_name, role, is_active, created_at)
+                    VALUES
+                        (@username, @password_hash, @full_name, @role, @is_active, NOW());
+                ";
+
+                using (var cmd = new MySqlCommand(sql, conn))
                 {
                     cmd.Parameters.AddWithValue("@username", username);
                     cmd.Parameters.AddWithValue("@password_hash", passwordHash);
@@ -169,133 +137,87 @@ namespace pcb_monitoring_program.DatabaseManager.Repositories
                     cmd.Parameters.AddWithValue("@role", role);
                     cmd.Parameters.AddWithValue("@is_active", isActive);
 
-                    return cmd.ExecuteNonQuery() == 1;
+                    int affected = cmd.ExecuteNonQuery();
+                    return affected > 0;
                 }
             }
         }
 
-        public bool UpdateUser(int id, string username, string fullName, string role, bool isActive)
+        // ✅ username 기준 정보 수정 (EditUser 폼에서 사용 예정)
+        public bool UpdateUserByUsername(string username, string fullName, string role, bool isActive)
         {
-            using (var conn = DB.GetConnection())
+            using (var conn = GetConnection())
             {
                 conn.Open();
 
-                string query = @"
-            UPDATE users
-            SET 
-                username   = @username,
-                full_name  = @full_name,
-                role       = @role,
-                is_active  = @is_active
-            WHERE id = @id;
-        ";
+                string sql = @"
+                    UPDATE users
+                    SET 
+                        full_name = @full_name,
+                        role      = @role,
+                        is_active = @is_active
+                    WHERE username = @username;
+                ";
 
-                using (var cmd = new MySqlCommand(query, conn))
+                using (var cmd = new MySqlCommand(sql, conn))
                 {
-                    cmd.Parameters.AddWithValue("@id", id);
-                    cmd.Parameters.AddWithValue("@username", username);
                     cmd.Parameters.AddWithValue("@full_name", fullName);
                     cmd.Parameters.AddWithValue("@role", role);
                     cmd.Parameters.AddWithValue("@is_active", isActive);
+                    cmd.Parameters.AddWithValue("@username", username);
 
-                    return cmd.ExecuteNonQuery() == 1;
+                    int affected = cmd.ExecuteNonQuery();
+                    return affected > 0;
                 }
             }
         }
 
-        public bool DeleteUser(int id)
+        // ✅ username 기준 삭제 (지금 View에서 쓰는 DeleteUser(username)용)
+        public bool DeleteUser(string username)
         {
-            const string query = @"DELETE FROM users WHERE id = @id;";
-
-            using (var conn = DB.GetConnection())
-            using (var cmd = new MySqlCommand(query, conn))
-            {
-                cmd.Parameters.AddWithValue("@id", id);
-
-                conn.Open();
-                int affected = cmd.ExecuteNonQuery();
-
-                return affected > 0; // 삭제된 행이 1개 이상이면 성공
-            }
-        }
-
-        public static class PasswordHelper
-        {
-            // 비밀번호 해시 생성
-            public static string HashPassword(string password)
-            {
-                return BCrypt.Net.BCrypt.HashPassword(password);
-            }
-
-            // 비밀번호 검증
-            public static bool VerifyPassword(string password, string hashedPassword)
-            {
-                return BCrypt.Net.BCrypt.Verify(password, hashedPassword);
-            }
-        }
-
-        public bool ResetPassword(int userId, string newPlainPassword)
-        {
-            // 1) 평문 → 해시
-            string newPasswordHash = PasswordHelper.HashPassword(newPlainPassword);
-
-            const string query = @"
-        UPDATE users
-        SET password_hash = @NewPasswordHash
-        WHERE id = @UserId;
-    ";
-
-            using (var conn = DB.GetConnection())
-            {
-                try
-                {
-                    conn.Open();
-
-                    using (var cmd = new MySql.Data.MySqlClient.MySqlCommand(query, conn))
-                    {
-                        cmd.Parameters.AddWithValue("@NewPasswordHash", newPasswordHash);
-                        cmd.Parameters.AddWithValue("@UserId", userId);
-
-                        int rowsAffected = cmd.ExecuteNonQuery();
-                        return rowsAffected > 0;
-                    }
-                }
-                catch (MySql.Data.MySqlClient.MySqlException ex)
-                {
-                    Console.WriteLine($"[DB Error] 비밀번호 초기화 실패 (MySQL): {ex.Message}");
-                    return false;
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[Error] 비밀번호 초기화 중 일반 오류 발생: {ex.Message}");
-                    return false;
-                }
-            }
-        }
-
-        public bool IsUsernameTaken(string username, int excludeUserId = 0)
-        {
-            using (var conn = DB.GetConnection())
+            using (var conn = GetConnection())
             {
                 conn.Open();
 
-                // 특정 ID(수정 중인 사용자)는 제외하고 중복 검사
-                string query = @"
-            SELECT COUNT(*) 
-            FROM users 
-            WHERE username = @username AND id != @excludeUserId;
-        ";
+                string sql = @"
+                    DELETE FROM users
+                    WHERE username = @username;
+                ";
 
-                using (var cmd = new MySqlCommand(query, conn))
+                using (var cmd = new MySqlCommand(sql, conn))
                 {
                     cmd.Parameters.AddWithValue("@username", username);
-                    cmd.Parameters.AddWithValue("@excludeUserId", excludeUserId);
-
-                    long count = (long)cmd.ExecuteScalar();
-                    return count > 0; // 0보다 크면 중복
+                    int affected = cmd.ExecuteNonQuery();
+                    return affected > 0;
                 }
             }
         }
 
+        // ✅ username 기준 비밀번호 초기화
+        public bool ResetPassword(string username, string newPlainPassword)
+        {
+            // AddUser 때와 동일하게 Bcrypt 해시
+            string hash = BCrypt.Net.BCrypt.HashPassword(newPlainPassword, workFactor: 12);
+
+            using (var conn = GetConnection())
+            {
+                conn.Open();
+
+                string sql = @"
+                    UPDATE users
+                    SET password_hash = @hash
+                    WHERE username = @username;
+                ";
+
+                using (var cmd = new MySqlCommand(sql, conn))
+                {
+                    cmd.Parameters.AddWithValue("@hash", hash);
+                    cmd.Parameters.AddWithValue("@username", username);
+
+                    int affected = cmd.ExecuteNonQuery();
+                    return affected > 0;
+                }
+            }
+        }
     }
 }
