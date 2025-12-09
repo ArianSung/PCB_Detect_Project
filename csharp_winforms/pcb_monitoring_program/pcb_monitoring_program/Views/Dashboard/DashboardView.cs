@@ -96,7 +96,7 @@ namespace pcb_monitoring_program.Views.Dashboard
             UiStyleHelper.MakeRoundedPanel(cardBackPCB, radius: 16, back: Color.FromArgb(44, 44, 44));
             UiStyleHelper.MakeRoundedPanel(cardHourly, radius: 16, back: Color.FromArgb(44, 44, 44));
             UiStyleHelper.MakeRoundedPanel(cardLog, radius: 16, back: Color.FromArgb(44, 44, 44));
-            UiStyleHelper.MakeRoundedPanel(cardTop, radius: 16, back: Color.FromArgb(44, 44, 44));
+
 
             UiStyleHelper.AddShadowRoundedPanel(cardRate, 16);
             UiStyleHelper.AddShadowRoundedPanel(cardCategory, 16);
@@ -107,7 +107,7 @@ namespace pcb_monitoring_program.Views.Dashboard
             UiStyleHelper.AddShadowRoundedPanel(cardBackPCB, 16);
             UiStyleHelper.AddShadowRoundedPanel(cardHourly, 16);
             UiStyleHelper.AddShadowRoundedPanel(cardLog, 16);
-            UiStyleHelper.AddShadowRoundedPanel(cardTop, 16);
+
 
             ReloadHourlyDataFromDb();
 
