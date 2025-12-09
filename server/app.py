@@ -105,11 +105,11 @@ template_alignment = None
 try:
     template_path = Path(__file__).parent / 'reference_hole.jpg'
     if template_path.exists():
-        template_alignment = TemplateBasedAlignment(str(template_path), threshold=0.87)  # 신뢰도 임계값 0.87 (87%) ⭐
+        template_alignment = TemplateBasedAlignment(str(template_path), threshold=0.85)  # 신뢰도 임계값 0.85 (85%) ⭐ (0.87에서 낮춤 - 블러 개선 후 안정화)
         logger.info(f"✅ 템플릿 기반 정렬 시스템 로드 완료")
         logger.info(f"   - 템플릿 경로: {template_path}")
         logger.info(f"   - 템플릿 크기: {template_alignment.template.shape if template_alignment.template is not None else 'N/A'}")
-        logger.info(f"   - 신뢰도 임계값: {template_alignment.threshold:.2f} (87%)")
+        logger.info(f"   - 신뢰도 임계값: {template_alignment.threshold:.2f} (85%)")
     else:
         logger.warning(f"⚠️  템플릿 파일 없음: {template_path}")
         logger.warning("   - 템플릿 매칭 기능 비활성화")
@@ -248,17 +248,25 @@ previous_frames = {
     'right': None
 }
 
-# 컨베이어 벨트용 스냅샷 캡처 시스템 (중복 처리 방지) ⭐⭐⭐ CONVEYOR MODE
-pcb_snapshot_state = {
-    'last_snapshot_time': 0,          # 마지막 스냅샷 캡처 시간
-    'last_reference_point': None,     # 마지막 기준점 (x, y) 좌표
-    'snapshot_frames': {              # 캡처된 스냅샷 프레임
-        'left': None,
-        'right': None
-    },
-    'processing_in_progress': False,  # 현재 처리 중 여부
-    'cooldown_time': 3.0,             # 쿨다운 시간 (초) - 같은 PCB 재감지 방지
-    'position_threshold': 100         # 위치 임계값 (픽셀) - 새 PCB 판별
+# 컨베이어 벨트용 스냅샷 캡처 시스템 (품질 기반 프레임 선택) ⭐⭐⭐ CONVEYOR MODE v2.0
+MAX_SNAPSHOT_FRAMES = 10  # 최대 저장 프레임 수 (메모리 최적화)
+SNAPSHOT_TIMEOUT = 5.0    # 타임아웃 시간 (초) - ROI 진입 후 5초 이내 처리
+
+snapshot_sessions = {
+    'left': {
+        'active': False,                  # 스냅샷 세션 활성 여부
+        'frames': [],                     # 캡처된 프레임 리스트 (numpy arrays)
+        'qualities': [],                  # 각 프레임의 품질 점수
+        'template_confidences': [],       # 각 프레임의 템플릿 매칭 신뢰도
+        'reference_points': [],           # 각 프레임의 기준점 좌표
+        'last_update': None,              # 마지막 업데이트 시간
+        'last_roi_status': 'out_of_roi',  # 이전 ROI 상태 (상태 전환 감지용)
+        'serial_number': None,            # 뒷면에서 받은 시리얼 넘버
+        'product_code': None,             # 뒷면에서 받은 제품 코드
+        'best_frame': None,               # 최종 선택된 프레임
+        'best_result': None,              # 최종 YOLO 검출 결과
+        'verification_possible': False,   # 검증 가능 여부 (부품 배치 기준 데이터 존재)
+    }
 }
 snapshot_lock = threading.Lock()  # 스냅샷 상태 동기화
 
@@ -934,26 +942,129 @@ def is_new_pcb(current_ref_point, current_time):
             return False
 
 
+# ==================================================================================
+# 스냅샷 시스템 헬퍼 함수들 (품질 기반 프레임 선택) ⭐⭐⭐
+# ==================================================================================
+
+def calculate_frame_quality(frame, template_confidence):
+    """
+    프레임 품질 평가 (블러 측정 + 템플릿 매칭 신뢰도)
+
+    Args:
+        frame: OpenCV 이미지 (numpy array)
+        template_confidence: 템플릿 매칭 신뢰도 (0.0 ~ 1.0)
+
+    Returns:
+        quality_score: 품질 점수 (0.0 ~ 1.0, 높을수록 좋음)
+    """
+    # 1. 블러 측정 (Laplacian Variance)
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+
+    # 2. 블러 점수 정규화 (0~1 범위)
+    # 라플라시안 분산이 500 이상이면 매우 선명 (1.0)
+    # 100 미만이면 매우 블러 (0.0)
+    blur_score = min(laplacian_var / 500.0, 1.0)
+
+    # 3. 템플릿 신뢰도 점수 (이미 0~1 범위)
+    template_score = template_confidence
+
+    # 4. 복합 점수 계산 (블러 70%, 템플릿 30% 가중치)
+    quality_score = blur_score * 0.7 + template_score * 0.3
+
+    return quality_score
+
+
+def start_snapshot_session(camera_id):
+    """
+    스냅샷 세션 시작 (ROI 진입 시 호출)
+
+    Args:
+        camera_id: 'left' or 'right'
+    """
+    session = snapshot_sessions[camera_id]
+    session['active'] = True
+    session['frames'] = []
+    session['qualities'] = []
+    session['template_confidences'] = []
+    session['reference_points'] = []
+    session['last_update'] = time.time()
+    session['last_roi_status'] = 'in_roi'
+
+    logger.info(f"[SNAPSHOT-{camera_id.upper()}] 🎬 세션 시작 (ROI 진입)")
+
+
+def add_snapshot_frame(camera_id, frame, quality, template_confidence, reference_point):
+    """
+    스냅샷 프레임 추가 (ROI 안에서 수집)
+
+    Args:
+        camera_id: 'left' or 'right'
+        frame: OpenCV 이미지
+        quality: 품질 점수 (0.0 ~ 1.0)
+        template_confidence: 템플릿 매칭 신뢰도
+        reference_point: (x, y) 기준점 좌표
+    """
+    session = snapshot_sessions[camera_id]
+
+    # 프레임 추가
+    session['frames'].append(frame.copy())
+    session['qualities'].append(quality)
+    session['template_confidences'].append(template_confidence)
+    session['reference_points'].append(reference_point)
+    session['last_update'] = time.time()
+
+    # 최대 개수 초과 시 가장 낮은 품질의 프레임 제거
+    if len(session['frames']) > MAX_SNAPSHOT_FRAMES:
+        min_idx = np.argmin(session['qualities'])
+        session['frames'].pop(min_idx)
+        session['qualities'].pop(min_idx)
+        session['template_confidences'].pop(min_idx)
+        session['reference_points'].pop(min_idx)
+
+        logger.debug(f"[SNAPSHOT-{camera_id.upper()}] 최대 개수 초과 → 최저 품질 프레임 제거")
+
+    logger.debug(
+        f"[SNAPSHOT-{camera_id.upper()}] 프레임 추가 "
+        f"(총 {len(session['frames'])}개, 품질: {quality:.3f}, 블러: {quality:.3f})"
+    )
+
+
+def end_snapshot_session(camera_id):
+    """
+    스냅샷 세션 종료 및 메모리 해제
+
+    Args:
+        camera_id: 'left' or 'right'
+    """
+    session = snapshot_sessions[camera_id]
+    session['active'] = False
+    session['frames'] = []
+    session['qualities'] = []
+    session['template_confidences'] = []
+    session['reference_points'] = []
+    session['best_frame'] = None
+    session['best_result'] = None
+    session['last_roi_status'] = 'out_of_roi'
+
+    logger.info(f"[SNAPSHOT-{camera_id.upper()}] 🏁 세션 종료 (메모리 해제)")
+
+
+# ==================================================================================
+# 기존 스냅샷 함수들 (레거시, 호환성 유지)
+# ==================================================================================
+
 def save_snapshot(left_frame, right_frame, reference_point):
     """
-    스냅샷 저장 (새 PCB 진입 시 첫 프레임만 캡처)
+    스냅샷 저장 (새 PCB 진입 시 첫 프레임만 캡처) - LEGACY
 
     Args:
         left_frame: 좌측 프레임 (앞면)
         right_frame: 우측 프레임 (뒷면)
         reference_point: (x, y) 템플릿 기준점
     """
-    with snapshot_lock:
-        state = pcb_snapshot_state
-
-        # 스냅샷 저장
-        state['snapshot_frames']['left'] = left_frame.copy()
-        state['snapshot_frames']['right'] = right_frame.copy()
-        state['last_reference_point'] = reference_point
-        state['last_snapshot_time'] = time.time()
-        state['processing_in_progress'] = True
-
-        logger.info(f"[CONVEYOR] 📸 스냅샷 캡처 완료 (기준점: {reference_point})")
+    # 레거시 함수 - 새 시스템으로 대체 예정
+    logger.warning("[LEGACY] save_snapshot() 호출됨 - 새 시스템으로 마이그레이션 필요")
 
 
 def mark_snapshot_processed():
@@ -1167,6 +1278,41 @@ def predict_dual():
             roi_status = "no_template_checker"
             logger.warning(f"[DUAL-LEFT] ⚠️ 템플릿 체커 없음 → YOLO 강제 실행")
 
+        # 6-1-1. ROI 상태 전환 감지 및 스냅샷 세션 관리 ⭐⭐⭐ SNAPSHOT SYSTEM v2.0
+        with snapshot_lock:
+            session = snapshot_sessions['left']
+            previous_roi_status = session['last_roi_status']
+
+            # ROI 상태 전환 감지: out_of_roi → in_roi (세션 시작)
+            if previous_roi_status != 'in_roi' and roi_status == 'in_roi':
+                start_snapshot_session('left')
+                # 뒷면 정보 저장 (앞면 검증 시 사용)
+                session['serial_number'] = serial_number
+                session['product_code'] = product_code
+
+            # ROI 안에서 프레임 수집
+            if roi_status == 'in_roi' and session['active'] and reference_point:
+                # 템플릿 매칭 신뢰도 획득 (find_reference_point는 내부에서 계산)
+                template_confidence = 0.85  # 기본값 (실제로는 find_reference_point에서 반환해야 함)
+
+                # 프레임 품질 평가
+                quality = calculate_frame_quality(left_frame, template_confidence)
+
+                # 스냅샷 프레임 추가
+                add_snapshot_frame('left', left_frame, quality, template_confidence, reference_point)
+
+            # ROI 상태 전환 감지: in_roi → out_of_roi (세션 종료 및 처리)
+            if previous_roi_status == 'in_roi' and roi_status == 'out_of_roi':
+                if session['active'] and len(session['frames']) > 0:
+                    logger.info(f"[SNAPSHOT-LEFT] 🎯 ROI 벗어남 → 최고 품질 프레임 선택 및 처리")
+                    # 세션 종료는 아래 검증 로직 이후에 수행
+                else:
+                    # 프레임이 없으면 그냥 세션 종료
+                    end_snapshot_session('left')
+
+            # 현재 ROI 상태 저장 (다음 프레임에서 비교용)
+            session['last_roi_status'] = roi_status
+
         # 6-1-CONVEYOR. 컨베이어 벨트 모드: 스냅샷 캡처 로직 ⭐⭐⭐
         # 템플릿이 ROI 안에 있을 때만 스냅샷 시스템 동작
         if roi_status == "in_roi" and reference_point:
@@ -1318,13 +1464,15 @@ def predict_dual():
         extra_count = 0
         correct_count = 0
         verification_result = None
+        verification_possible = False  # ⭐ 검증 가능 여부 플래그 (DB 저장 조건)
 
         # 제품 코드가 있으면 DB에서 기준 부품 배치 로드
         if product_code:
             try:
                 reference_components = db.get_reference_components(product_code)
 
-                if reference_components:
+                if reference_components and len(reference_components) > 0:
+                    verification_possible = True  # ⭐ 부품 배치 기준 데이터 존재 → 검증 가능
                     logger.info(f"✅ 제품 '{product_code}' 기준 부품 {len(reference_components)}개 로드 완료")
 
                     # ComponentVerifier 동적 생성 (템플릿 기준 상대좌표 사용)
@@ -1351,14 +1499,16 @@ def predict_dual():
                         f"추가 {extra_count}개"
                     )
                 else:
-                    logger.warning(f"⚠️ 제품 코드 '{product_code}'의 기준 데이터가 DB에 없습니다")
-                    correct_count = len(boxes_data)
+                    verification_possible = False  # ⭐ 부품 배치 기준 데이터 없음 → 검증 불가
+                    logger.warning(f"⚠️ 제품 코드 '{product_code}'의 기준 데이터가 DB에 없습니다 → 검증 불가")
+                    logger.warning(f"   → DB 저장 건너뜀 (부품 배치 기준 없음)")
             except Exception as e:
-                logger.error(f"부품 검증 중 오류: {e}", exc_info=True)
-                correct_count = len(boxes_data)
+                verification_possible = False
+                logger.error(f"부품 검증 중 오류: {e} → 검증 불가", exc_info=True)
         else:
-            logger.warning("⚠️ 제품 코드가 없어 부품 검증을 건너뜁니다")
-            correct_count = len(boxes_data)
+            verification_possible = False
+            logger.warning("⚠️ 제품 코드가 없어 부품 검증을 건너뜁니다 → 검증 불가")
+            logger.warning(f"   → DB 저장 건너뜀 (제품 코드 없음)")
 
         # 8. 최종 판정
         if missing_count >= 3 or position_error_count >= 5 or (missing_count + position_error_count) >= 7:
@@ -1491,53 +1641,76 @@ def predict_dual():
 
         logger.info(f"✅ 양면 검증 완료: 시리얼={serial_number}, 제품={product_code}, 판정={decision}, GPIO={gpio_pin}, 누락={missing_count}, 위치오류={position_error_count}")
 
-        # DB 저장 (v3.0 스키마)
-        try:
-            # 평균 신뢰도 계산
-            avg_confidence = (
-                sum(box['confidence'] for box in boxes_data) / len(boxes_data)
-                if boxes_data else 0.0
-            )
+        # 9. DB 저장 (조건부) ⭐⭐⭐ SNAPSHOT SYSTEM v2.0
+        # 조건 1: 검증 가능해야 함 (부품 배치 기준 데이터 존재 + 시리얼 넘버 존재)
+        # 조건 2: ROI 벗어날 때만 저장 (스냅샷 세션 종료 시)
+        with snapshot_lock:
+            session = snapshot_sessions['left']
+            should_save_to_db = False
 
-            # verification_result가 있을 때만 상세 정보 저장
-            if verification_result:
-                missing_components_list = verification_result.get('missing', [])
-                position_errors_list = verification_result.get('misplaced', [])
-                extra_components_list = verification_result.get('extra', [])
+            # 조건 1: 검증 가능 여부 체크
+            if not verification_possible:
+                logger.warning("⚠️  DB 저장 건너뜀: 부품 배치 기준 데이터 없음 (검증 불가)")
+            elif not serial_number:
+                logger.warning("⚠️  DB 저장 건너뜀: 시리얼 넘버 없음")
+            # 조건 2: ROI 벗어날 때만 저장 (스냅샷 세션 종료 시)
+            elif session['last_roi_status'] == 'in_roi' and roi_status == 'out_of_roi':
+                should_save_to_db = True
+                logger.info("✅ DB 저장 조건 충족: 검증 가능 + ROI 벗어남 (스냅샷 세션 종료)")
             else:
-                missing_components_list = []
-                position_errors_list = []
-                extra_components_list = []
+                # ROI 안에 있거나, 아직 진입하지 않음 → DB 저장 안 함
+                logger.debug(f"DB 저장 대기 중 (ROI 상태: {roi_status}, 이전: {session['last_roi_status']})")
 
-            inspection_id = db.insert_inspection_v3(
-                serial_number=serial_number,
-                product_code=product_code,
-                decision=decision,
-                missing_count=missing_count,
-                position_error_count=position_error_count,
-                extra_count=extra_count,
-                correct_count=correct_count,
-                missing_components=missing_components_list,
-                position_errors=position_errors_list,
-                extra_components=extra_components_list,
-                yolo_detections=boxes_data,
-                detection_count=len(boxes_data),
-                avg_confidence=avg_confidence,
-                inference_time_ms=inference_time_ms,
-                verification_time_ms=0.0,  # predict_dual에서는 별도 측정 안 함
-                total_time_ms=inference_time_ms,
-                image_width=left_frame.shape[1] if left_frame is not None else 0,
-                image_height=left_frame.shape[0] if left_frame is not None else 0,
-                camera_id='dual',
-                serial_detected=(serial_number is not None),
-                server_version='1.0.0-v3'
-            )
+        if should_save_to_db:
+            try:
+                # 평균 신뢰도 계산
+                avg_confidence = (
+                    sum(box['confidence'] for box in boxes_data) / len(boxes_data)
+                    if boxes_data else 0.0
+                )
 
-            logger.info(f"✅ 검사 이력 DB 저장 완료 (ID: {inspection_id})")
+                # verification_result가 있을 때만 상세 정보 저장
+                if verification_result:
+                    missing_components_list = verification_result.get('missing', [])
+                    position_errors_list = verification_result.get('misplaced', [])
+                    extra_components_list = verification_result.get('extra', [])
+                else:
+                    missing_components_list = []
+                    position_errors_list = []
+                    extra_components_list = []
 
-        except Exception as db_error:
-            logger.error(f"❌ DB 저장 실패: {db_error}", exc_info=True)
-            # DB 저장 실패해도 응답은 반환
+                inspection_id = db.insert_inspection_v3(
+                    serial_number=serial_number,
+                    product_code=product_code,
+                    decision=decision,
+                    missing_count=missing_count,
+                    position_error_count=position_error_count,
+                    extra_count=extra_count,
+                    correct_count=correct_count,
+                    missing_components=missing_components_list,
+                    position_errors=position_errors_list,
+                    extra_components=extra_components_list,
+                    yolo_detections=boxes_data,
+                    detection_count=len(boxes_data),
+                    avg_confidence=avg_confidence,
+                    inference_time_ms=inference_time_ms,
+                    verification_time_ms=0.0,  # predict_dual에서는 별도 측정 안 함
+                    total_time_ms=inference_time_ms,
+                    image_width=left_frame.shape[1] if left_frame is not None else 0,
+                    image_height=left_frame.shape[0] if left_frame is not None else 0,
+                    camera_id='dual',
+                    serial_detected=(serial_number is not None),
+                    server_version='1.0.0-v3'
+                )
+
+                logger.info(f"✅ 검사 이력 DB 저장 완료 (ID: {inspection_id})")
+
+                # 스냅샷 세션 종료
+                end_snapshot_session('left')
+
+            except Exception as db_error:
+                logger.error(f"❌ DB 저장 실패: {db_error}", exc_info=True)
+                # DB 저장 실패해도 응답은 반환
 
         # 컨베이어 벨트 모드: 스냅샷 처리 완료 표시 ⭐⭐⭐
         if roi_status == "in_roi" and reference_point:
