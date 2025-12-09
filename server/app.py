@@ -77,10 +77,10 @@ logger = logging.getLogger(__name__)
 # 데이터베이스 매니저 초기화
 # 환경 변수 또는 설정 파일에서 읽기 (나중에 config.yaml로 이동)
 DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
+    'host': os.getenv('DB_HOST', '100.80.24.53'),
     'port': int(os.getenv('DB_PORT', 3306)),
-    'user': os.getenv('DB_USER', 'root'),
-    'password': os.getenv('DB_PASSWORD', 'your_password'),
+    'user': os.getenv('DB_USER', 'pcb_admin'),
+    'password': os.getenv('DB_PASSWORD', '1234'),
     'database': os.getenv('DB_NAME', 'pcb_inspection')
 }
 
