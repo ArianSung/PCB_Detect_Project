@@ -1313,26 +1313,14 @@ def predict_dual():
             # 현재 ROI 상태 저장 (다음 프레임에서 비교용)
             session['last_roi_status'] = roi_status
 
-        # 6-1-CONVEYOR. 컨베이어 벨트 모드: 스냅샷 캡처 로직 ⭐⭐⭐
-        # 템플릿이 ROI 안에 있을 때만 스냅샷 시스템 동작
-        if roi_status == "in_roi" and reference_point:
-            current_time = time.time()
-
-            # 새 PCB 진입 여부 판단
-            if is_new_pcb(reference_point, current_time):
-                logger.info("[CONVEYOR] 🆕 새 PCB 감지 → 스냅샷 캡처")
-                save_snapshot(left_frame, right_frame, reference_point)
-
-            # 스냅샷이 있으면 스냅샷으로 처리, 없으면 실시간 프레임 사용
-            with snapshot_lock:
-                if pcb_snapshot_state['snapshot_frames']['left'] is not None:
-                    # 스냅샷 사용 (중복 처리 방지)
-                    left_frame = pcb_snapshot_state['snapshot_frames']['left'].copy()
-                    right_frame = pcb_snapshot_state['snapshot_frames']['right'].copy()
-                    logger.debug("[CONVEYOR] 📸 스냅샷 프레임 사용 (중복 방지)")
-                else:
-                    # 실시간 프레임 사용 (스냅샷 대기 중)
-                    logger.debug("[CONVEYOR] 🎥 실시간 프레임 사용 (스냅샷 대기 중)")
+        # 6-1-CONVEYOR. 레거시 스냅샷 로직 (SNAPSHOT SYSTEM v2.0으로 대체됨) ⭐⭐⭐
+        # 새 시스템: lines 1281-1314 (ROI 상태 전환 감지)
+        # 레거시 코드는 주석 처리
+        # if roi_status == "in_roi" and reference_point:
+        #     current_time = time.time()
+        #     if is_new_pcb(reference_point, current_time):
+        #         logger.info("[CONVEYOR] 🆕 새 PCB 감지 → 스냅샷 캡처")
+        #         save_snapshot(left_frame, right_frame, reference_point)
 
         # 6-2. YOLO 부품 검출 (원래 /predict_test 방식)
         boxes_data = []
@@ -1712,9 +1700,9 @@ def predict_dual():
                 logger.error(f"❌ DB 저장 실패: {db_error}", exc_info=True)
                 # DB 저장 실패해도 응답은 반환
 
-        # 컨베이어 벨트 모드: 스냅샷 처리 완료 표시 ⭐⭐⭐
-        if roi_status == "in_roi" and reference_point:
-            mark_snapshot_processed()
+        # 레거시: 스냅샷 처리 완료 표시 (SNAPSHOT SYSTEM v2.0에서는 end_snapshot_session()으로 대체)
+        # if roi_status == "in_roi" and reference_point:
+        #     mark_snapshot_processed()
 
         return jsonify(response)
 
