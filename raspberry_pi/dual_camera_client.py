@@ -56,8 +56,11 @@ ARDUINO_BAUDRATE = int(os.getenv('ARDUINO_BAUDRATE', 115200))
 CAM_BRIGHTNESS = int(os.getenv('CAM_BRIGHTNESS', 41))
 CAM_CONTRAST = int(os.getenv('CAM_CONTRAST', 52))
 CAM_SATURATION = int(os.getenv('CAM_SATURATION', 59))
-CAM_EXPOSURE_ABS = int(os.getenv('CAM_EXPOSURE', 1521))
+CAM_EXPOSURE_ABS = int(os.getenv('CAM_EXPOSURE', 600))  # 블러 감소: 1521 → 600 (빠른 셔터 속도)
 CAM_FOCUS_ABS = int(os.getenv('CAM_FOCUS', 402))
+
+# 버퍼 플러시 설정 (오래된 프레임 버리기)
+BUFFER_FLUSH_FRAMES = int(os.getenv('BUFFER_FLUSH_FRAMES', 3))  # 캡처 전 버릴 프레임 수
 
 # 로깅 설정
 logging.basicConfig(
@@ -137,6 +140,7 @@ class DualCameraClient:
                 self.left_cap = None
             else:
                 # 좌측 카메라 설정
+                self.left_cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))  # MJPEG 코덱 (저지연)
                 self.left_cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
                 self.left_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
                 self.left_cap.set(cv2.CAP_PROP_FPS, TARGET_FPS)
@@ -144,6 +148,7 @@ class DualCameraClient:
                 self.left_cap.set(cv2.CAP_PROP_CONTRAST, CAM_CONTRAST)
                 self.left_cap.set(cv2.CAP_PROP_SATURATION, CAM_SATURATION)
                 self.left_cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+                self.left_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # 버퍼 크기 최소화 (최신 프레임 유지)
 
                 # v4l2 고급 설정
                 self.setup_camera_v4l2(self.left_camera_index)
@@ -164,6 +169,7 @@ class DualCameraClient:
                 self.right_cap = None
             else:
                 # 우측 카메라 설정
+                self.right_cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))  # MJPEG 코덱 (저지연)
                 self.right_cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
                 self.right_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
                 self.right_cap.set(cv2.CAP_PROP_FPS, TARGET_FPS)
@@ -171,6 +177,7 @@ class DualCameraClient:
                 self.right_cap.set(cv2.CAP_PROP_CONTRAST, CAM_CONTRAST)
                 self.right_cap.set(cv2.CAP_PROP_SATURATION, CAM_SATURATION)
                 self.right_cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+                self.right_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # 버퍼 크기 최소화 (최신 프레임 유지)
 
                 # v4l2 고급 설정
                 self.setup_camera_v4l2(self.right_camera_index)
@@ -209,6 +216,13 @@ class DualCameraClient:
         try:
             left_frame = None
             right_frame = None
+
+            # 버퍼 플러시: 오래된 프레임 버리기 (처리 지연 시 누적된 프레임 제거)
+            for _ in range(BUFFER_FLUSH_FRAMES):
+                if self.left_cap:
+                    self.left_cap.grab()  # 프레임을 읽지 않고 버림 (빠름)
+                if self.right_cap:
+                    self.right_cap.grab()
 
             # 좌측 프레임 (앞면)
             if self.left_cap:

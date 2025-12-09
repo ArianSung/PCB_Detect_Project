@@ -19,17 +19,19 @@ logger = logging.getLogger(__name__)
 class TemplateBasedAlignment:
     """템플릿 매칭 기반 PCB 정렬 클래스"""
 
-    def __init__(self, template_path: Optional[str] = None, threshold: float = 0.8):
+    def __init__(self, template_path: Optional[str] = None, threshold: float = 0.8, downscale_factor: float = 0.5):
         """
         초기화
 
         Args:
             template_path: 기준점 템플릿 이미지 경로 (나사 구멍 등)
             threshold: 템플릿 매칭 최소 신뢰도 (0.0~1.0, 기본값: 0.8)
+            downscale_factor: 이미지 다운스케일 비율 (0.0~1.0, 기본값: 0.5) - 처리 속도 향상
         """
         self.template = None
         self.template_path = template_path
         self.threshold = threshold  # 신뢰도 임계값 추가
+        self.downscale_factor = downscale_factor  # 다운스케일 비율
 
         if template_path:
             self.load_template(template_path)
@@ -84,7 +86,7 @@ class TemplateBasedAlignment:
         roi: Optional[Tuple[int, int, int, int]] = None
     ) -> Optional[Tuple[int, int]]:
         """
-        템플릿 매칭으로 기준점 찾기 (ROI 검증 포함)
+        템플릿 매칭으로 기준점 찾기 (ROI 검증 포함, 다운스케일 최적화)
 
         Args:
             image: 검색할 이미지
@@ -103,8 +105,16 @@ class TemplateBasedAlignment:
             img_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             template_gray = cv2.cvtColor(self.template, cv2.COLOR_BGR2GRAY)
 
+            # 다운스케일 적용 (처리 속도 향상) ⭐
+            if self.downscale_factor < 1.0:
+                img_gray_small = cv2.resize(img_gray, None, fx=self.downscale_factor, fy=self.downscale_factor)
+                template_gray_small = cv2.resize(template_gray, None, fx=self.downscale_factor, fy=self.downscale_factor)
+            else:
+                img_gray_small = img_gray
+                template_gray_small = template_gray
+
             # 템플릿 매칭
-            result = cv2.matchTemplate(img_gray, template_gray, method)
+            result = cv2.matchTemplate(img_gray_small, template_gray_small, method)
             min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
 
             # TM_SQDIFF, TM_SQDIFF_NORMED는 최소값이 최적 매칭
@@ -121,6 +131,13 @@ class TemplateBasedAlignment:
                     f"템플릿 매칭 신뢰도가 임계값보다 낮음: {confidence:.3f} < {self.threshold:.3f}"
                 )
                 return None
+
+            # 다운스케일된 좌표를 원본 스케일로 변환 ⭐
+            if self.downscale_factor < 1.0:
+                match_loc = (
+                    int(match_loc[0] / self.downscale_factor),
+                    int(match_loc[1] / self.downscale_factor)
+                )
 
             # 템플릿 중심점 계산 (기준점)
             template_h, template_w = self.template.shape[:2]
