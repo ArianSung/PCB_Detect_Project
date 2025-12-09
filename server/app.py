@@ -1306,8 +1306,8 @@ def predict_dual():
 
                 logger.info(f"[SNAPSHOT] ✅ 프레임 저장 완료 (제품: {product_code})")
 
-            # ROI 안에 있으면: 저장된 프레임 사용
-            if roi_status == 'in_roi' and session.get('frame_saved'):
+            # ROI 안에 있으면: 저장된 프레임 사용 (계속!)
+            if roi_status == 'in_roi' and session.get('saved_frame') is not None:
                 logger.info(f"[SNAPSHOT] 📦 저장된 프레임 사용 (실시간 스트림 무시)")
 
                 # 저장된 프레임으로 교체
@@ -1315,8 +1315,7 @@ def predict_dual():
                 reference_point = session['saved_ref_point']
                 should_run_yolo = True
 
-                # 한번만 사용하도록 플래그 해제
-                session['frame_saved'] = False
+                # ⭐ 플래그 유지! ROI 안에서 계속 사용!
 
             # ROI 벗어남: 세션 초기화
             if previous_roi_status == 'in_roi' and roi_status == 'out_of_roi':
