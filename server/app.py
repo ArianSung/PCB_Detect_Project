@@ -1312,6 +1312,12 @@ def predict_dual():
                 session['product_code'] = product_code
                 session['detection_completed'] = False  # 검출 완료 플래그
 
+                # ⭐ 프레임을 디스크에 저장!
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+                snapshot_path = f"/tmp/snapshot_{timestamp}.jpg"
+                cv2.imwrite(snapshot_path, left_frame)
+                logger.info(f"[SNAPSHOT] 💾 프레임 파일 저장: {snapshot_path}")
+
                 logger.info(f"[SNAPSHOT] ✅ 프레임 저장 완료 (제품: {product_code})")
 
             # 저장된 프레임이 있고 아직 검출이 완료되지 않았으면 → 검출 실행!
