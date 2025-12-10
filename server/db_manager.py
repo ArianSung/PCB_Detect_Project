@@ -571,53 +571,59 @@ class DatabaseManager:
         Returns:
             int: 삽입된 레코드 ID, 실패 시 None
         """
-        try:
-            conn = self.get_connection()
-            with conn.cursor() as cursor:
-                sql = """
-                    INSERT INTO inspections (
-                        serial_number, product_code, qr_data, qr_detected, serial_detected,
-                        decision, missing_count, position_error_count, extra_count, correct_count,
-                        missing_components, position_errors, extra_components,
-                        yolo_detections, detection_count, avg_confidence,
-                        inference_time_ms, verification_time_ms, total_time_ms,
-                        left_image_path, right_image_path, image_width, image_height,
-                        camera_id, client_ip, server_version,
-                        inspection_time
-                    ) VALUES (
-                        %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s,
-                        %s, %s, %s,
-                        %s, %s, %s,
-                        %s, %s, %s,
-                        %s, %s, %s, %s,
-                        %s, %s, %s,
-                        NOW()
-                    )
-                """
-                cursor.execute(sql, (
-                    serial_number, product_code, qr_data, qr_detected, serial_detected,
-                    decision, missing_count, position_error_count, extra_count, correct_count,
-                    json.dumps(missing_components, ensure_ascii=False) if missing_components else None,
-                    json.dumps(position_errors, ensure_ascii=False) if position_errors else None,
-                    json.dumps(extra_components, ensure_ascii=False) if extra_components else None,
-                    json.dumps(yolo_detections, ensure_ascii=False) if yolo_detections else None,
-                    detection_count, avg_confidence,
-                    inference_time_ms, verification_time_ms, total_time_ms,
-                    left_image_path, right_image_path, image_width, image_height,
-                    camera_id, client_ip, server_version
-                ))
+        # ========================================
+        # DB 저장 비활성화 (임시)
+        # ========================================
+        logger.info(f"[임시 비활성화] DB 저장 스킵 (시리얼: {serial_number}, 제품: {product_code}, 판정: {decision})")
+        return 99999  # 더미 ID 반환
 
-                inspection_id = cursor.lastrowid
-                logger.info(
-                    f"검사 이력 저장 완료 (ID: {inspection_id}, "
-                    f"시리얼: {serial_number}, 제품: {product_code}, 판정: {decision})"
-                )
-                return inspection_id
+        # try:
+        #     conn = self.get_connection()
+        #     with conn.cursor() as cursor:
+        #         sql = """
+        #             INSERT INTO inspections (
+        #                 serial_number, product_code, qr_data, qr_detected, serial_detected,
+        #                 decision, missing_count, position_error_count, extra_count, correct_count,
+        #                 missing_components, position_errors, extra_components,
+        #                 yolo_detections, detection_count, avg_confidence,
+        #                 inference_time_ms, verification_time_ms, total_time_ms,
+        #                 left_image_path, right_image_path, image_width, image_height,
+        #                 camera_id, client_ip, server_version,
+        #                 inspection_time
+        #             ) VALUES (
+        #                 %s, %s, %s, %s, %s,
+        #                 %s, %s, %s, %s, %s,
+        #                 %s, %s, %s,
+        #                 %s, %s, %s,
+        #                 %s, %s, %s,
+        #                 %s, %s, %s, %s,
+        #                 %s, %s, %s,
+        #                 NOW()
+        #             )
+        #         """
+        #         cursor.execute(sql, (
+        #             serial_number, product_code, qr_data, qr_detected, serial_detected,
+        #             decision, missing_count, position_error_count, extra_count, correct_count,
+        #             json.dumps(missing_components, ensure_ascii=False) if missing_components else None,
+        #             json.dumps(position_errors, ensure_ascii=False) if position_errors else None,
+        #             json.dumps(extra_components, ensure_ascii=False) if extra_components else None,
+        #             json.dumps(yolo_detections, ensure_ascii=False) if yolo_detections else None,
+        #             detection_count, avg_confidence,
+        #             inference_time_ms, verification_time_ms, total_time_ms,
+        #             left_image_path, right_image_path, image_width, image_height,
+        #             camera_id, client_ip, server_version
+        #         ))
 
-        except pymysql.Error as e:
-            logger.error(f"검사 이력 저장 실패 (v3.0): {e}")
-            return None
+        #         inspection_id = cursor.lastrowid
+        #         logger.info(
+        #             f"검사 이력 저장 완료 (ID: {inspection_id}, "
+        #             f"시리얼: {serial_number}, 제품: {product_code}, 판정: {decision})"
+        #         )
+        #         return inspection_id
+
+        # except pymysql.Error as e:
+        #     logger.error(f"검사 이력 저장 실패 (v3.0): {e}")
+        #     return None
 
     # ========================================
     # 헬스 체크

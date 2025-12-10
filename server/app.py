@@ -89,12 +89,11 @@ db = DatabaseManager(**DB_CONFIG)
 # YOLO 모델 로드
 try:
     from ultralytics import YOLO
-    model_path = '../models/component_detector_v4_9class_best.pt'  # 9 클래스 모델 (mAP50=93.1%) ⭐
+    model_path = '../models/component_detector_v5_best.pt'  # v5 모델 ⭐
     yolo_model = YOLO(model_path)
     logger.info(f"✅ YOLO 모델 로드 완료: {model_path}")
     logger.info(f"   - 모델 타입: YOLOv11l")
     logger.info(f"   - 클래스 수: 9개 (PCB 부품 검출)")
-    logger.info(f"   - 성능: mAP@0.5=93.1%, Precision=93.3%")
 except Exception as e:
     logger.error(f"⚠️  YOLO 모델 로드 실패: {e}")
     logger.warning("   - 추론 시 더미 결과 반환됨")
@@ -105,11 +104,11 @@ template_alignment = None
 try:
     template_path = Path(__file__).parent / 'reference_hole.jpg'
     if template_path.exists():
-        template_alignment = TemplateBasedAlignment(str(template_path), threshold=0.87)  # 신뢰도 임계값 0.87 (87%) ⭐
+        template_alignment = TemplateBasedAlignment(str(template_path), threshold=0.82)  # 신뢰도 임계값 0.82 (82%) ⭐
         logger.info(f"✅ 템플릿 기반 정렬 시스템 로드 완료")
         logger.info(f"   - 템플릿 경로: {template_path}")
         logger.info(f"   - 템플릿 크기: {template_alignment.template.shape if template_alignment.template is not None else 'N/A'}")
-        logger.info(f"   - 신뢰도 임계값: {template_alignment.threshold:.2f} (87%)")
+        logger.info(f"   - 신뢰도 임계값: {template_alignment.threshold:.2f} (82%)")
     else:
         logger.warning(f"⚠️  템플릿 파일 없음: {template_path}")
         logger.warning("   - 템플릿 매칭 기능 비활성화")

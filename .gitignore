@@ -70,6 +70,16 @@ csharp_winforms/**/obj/
 # 로그 디렉토리
 logs/
 
+# Node.js (절대 커밋 금지!)
+node_modules/
+package-lock.json
+
+# 실험 및 임시 디렉토리
+workspace/
+temp_frames/
+*_results/
+PCB_defect_detect-*/
+
 # 기타
 *.zip
 *.tar.gz
