@@ -56,7 +56,6 @@
             label_IH_DatelRange = new Label();
             DTP_IH_StartDate = new ComponentFactory.Krypton.Toolkit.KryptonDateTimePicker();
             cardSearchresult = new Panel();
-            button1 = new Button();
             DGV_IH_result = new ComponentFactory.Krypton.Toolkit.KryptonDataGridView();
             iGrid1DefaultCellStyle1 = new TenTec.Windows.iGridLib.iGCellStyle(true);
             iGrid1DefaultColHdrStyle1 = new TenTec.Windows.iGridLib.iGColHdrStyle(true);
@@ -88,7 +87,7 @@
             // btn_AllSearch
             // 
             btn_AllSearch.Font = new Font("Arial", 12F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btn_AllSearch.Location = new Point(607, 8);
+            btn_AllSearch.Location = new Point(1508, 4);
             btn_AllSearch.Name = "btn_AllSearch";
             btn_AllSearch.Size = new Size(81, 34);
             btn_AllSearch.TabIndex = 15;
@@ -99,7 +98,7 @@
             // btn_TodaySearch
             // 
             btn_TodaySearch.Font = new Font("Arial", 12F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btn_TodaySearch.Location = new Point(238, 8);
+            btn_TodaySearch.Location = new Point(1139, 4);
             btn_TodaySearch.Name = "btn_TodaySearch";
             btn_TodaySearch.Size = new Size(100, 34);
             btn_TodaySearch.TabIndex = 14;
@@ -110,7 +109,7 @@
             // btn_ThisMonthSearch
             // 
             btn_ThisMonthSearch.Font = new Font("Arial", 12F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btn_ThisMonthSearch.Location = new Point(361, 8);
+            btn_ThisMonthSearch.Location = new Point(1262, 4);
             btn_ThisMonthSearch.Name = "btn_ThisMonthSearch";
             btn_ThisMonthSearch.Size = new Size(100, 34);
             btn_ThisMonthSearch.TabIndex = 13;
@@ -121,7 +120,7 @@
             // btn_Last7DaysSearch
             // 
             btn_Last7DaysSearch.Font = new Font("Arial", 12F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btn_Last7DaysSearch.Location = new Point(484, 8);
+            btn_Last7DaysSearch.Location = new Point(1385, 4);
             btn_Last7DaysSearch.Name = "btn_Last7DaysSearch";
             btn_Last7DaysSearch.Size = new Size(100, 34);
             btn_Last7DaysSearch.TabIndex = 12;
@@ -296,7 +295,7 @@
             // btn_filterSearch
             // 
             btn_filterSearch.Font = new Font("Arial", 12F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btn_filterSearch.Location = new Point(142, 8);
+            btn_filterSearch.Location = new Point(1043, 4);
             btn_filterSearch.Name = "btn_filterSearch";
             btn_filterSearch.Size = new Size(73, 34);
             btn_filterSearch.TabIndex = 5;
@@ -364,22 +363,11 @@
             // 
             // cardSearchresult
             // 
-            cardSearchresult.Controls.Add(button1);
             cardSearchresult.Controls.Add(DGV_IH_result);
             cardSearchresult.Location = new Point(0, 162);
             cardSearchresult.Name = "cardSearchresult";
             cardSearchresult.Size = new Size(1600, 600);
             cardSearchresult.TabIndex = 5;
-            // 
-            // button1
-            // 
-            button1.Location = new Point(1506, -16);
-            button1.Name = "button1";
-            button1.Size = new Size(75, 23);
-            button1.TabIndex = 6;
-            button1.Text = "button1";
-            button1.UseVisualStyleBackColor = true;
-            button1.Click += button1_Click;
             // 
             // DGV_IH_result
             // 
@@ -594,7 +582,6 @@
         private TenTec.Windows.iGridLib.iGCellStyle iGrid1DefaultCellStyle1;
         private TenTec.Windows.iGridLib.iGColHdrStyle iGrid1DefaultColHdrStyle1;
         private ComponentFactory.Krypton.Toolkit.KryptonDataGridView DGV_IH_result;
-        private Button button1;
         private CheckBox CB_IH_CameraID_CAM03;
         private Button btn_Last7DaysSearch;
         private Button btn_ThisMonthSearch;
