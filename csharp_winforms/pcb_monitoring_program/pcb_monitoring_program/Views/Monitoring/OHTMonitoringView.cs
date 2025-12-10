@@ -63,12 +63,12 @@ namespace pcb_monitoring_program.Views.Monitoring
         {
             UiStyleHelper.MakeRoundedPanel(cardOHTMonitoring, radius: 16, back: Color.FromArgb(44, 44, 44));
             UiStyleHelper.MakeRoundedPanel(cardOHTCall, radius: 16, back: Color.FromArgb(44, 44, 44));
-            UiStyleHelper.MakeRoundedPanel(cardOHTWaitingQue, radius: 16, back: Color.FromArgb(44, 44, 44));
+
             UiStyleHelper.MakeRoundedPanel(cardOHTCallLog, radius: 16, back: Color.FromArgb(44, 44, 44));
 
             UiStyleHelper.AddShadowRoundedPanel(cardOHTMonitoring, 16);
             UiStyleHelper.AddShadowRoundedPanel(cardOHTCall, 16);
-            UiStyleHelper.AddShadowRoundedPanel(cardOHTWaitingQue, 16);
+
             UiStyleHelper.AddShadowRoundedPanel(cardOHTCallLog, 16);
 
             UiStyleHelper.MakeRoundedButton(btnAutoCall, 24);

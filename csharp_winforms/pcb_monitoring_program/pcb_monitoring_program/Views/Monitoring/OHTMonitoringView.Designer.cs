@@ -36,7 +36,6 @@
             columnHeader2 = new ColumnHeader();
             columnHeader3 = new ColumnHeader();
             columnHeader4 = new ColumnHeader();
-            cardOHTWaitingQue = new Panel();
             cardOHTMonitoring = new Panel();
             dgvOhtStatus = new DataGridView();
             colOhtId = new DataGridViewTextBoxColumn();
@@ -57,7 +56,6 @@
             lblAutoCallStatus = new Label();
             btnAutoCall = new Button();
             label1 = new Label();
-            label3 = new Label();
             label8 = new Label();
             cardOHTCallLog.SuspendLayout();
             cardOHTMonitoring.SuspendLayout();
@@ -70,7 +68,7 @@
             label2.AutoSize = true;
             label2.Font = new Font("맑은 고딕", 12F, FontStyle.Bold, GraphicsUnit.Point, 129);
             label2.ForeColor = SystemColors.Window;
-            label2.Location = new Point(33, 59);
+            label2.Location = new Point(445, 59);
             label2.Name = "label2";
             label2.Size = new Size(81, 21);
             label2.TabIndex = 4;
@@ -119,13 +117,6 @@
             // 
             columnHeader4.Text = "작업";
             columnHeader4.Width = 80;
-            // 
-            // cardOHTWaitingQue
-            // 
-            cardOHTWaitingQue.Location = new Point(587, 83);
-            cardOHTWaitingQue.Name = "cardOHTWaitingQue";
-            cardOHTWaitingQue.Size = new Size(535, 284);
-            cardOHTWaitingQue.TabIndex = 9;
             // 
             // cardOHTMonitoring
             // 
@@ -214,7 +205,7 @@
             cardOHTCall.Controls.Add(label4);
             cardOHTCall.Controls.Add(lblAutoCallStatus);
             cardOHTCall.Controls.Add(btnAutoCall);
-            cardOHTCall.Location = new Point(33, 83);
+            cardOHTCall.Location = new Point(445, 83);
             cardOHTCall.Name = "cardOHTCall";
             cardOHTCall.Size = new Size(535, 284);
             cardOHTCall.TabIndex = 8;
@@ -338,17 +329,6 @@
             label1.TabIndex = 12;
             label1.Text = "OHT Monitoring";
             // 
-            // label3
-            // 
-            label3.AutoSize = true;
-            label3.Font = new Font("맑은 고딕", 12F, FontStyle.Bold, GraphicsUnit.Point, 129);
-            label3.ForeColor = SystemColors.Window;
-            label3.Location = new Point(587, 59);
-            label3.Name = "label3";
-            label3.Size = new Size(64, 21);
-            label3.TabIndex = 13;
-            label3.Text = "대기 큐";
-            // 
             // label8
             // 
             label8.AutoSize = true;
@@ -366,10 +346,8 @@
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(64, 64, 64);
             Controls.Add(label8);
-            Controls.Add(label3);
             Controls.Add(label1);
             Controls.Add(cardOHTCallLog);
-            Controls.Add(cardOHTWaitingQue);
             Controls.Add(cardOHTMonitoring);
             Controls.Add(cardOHTCall);
             Controls.Add(label2);
@@ -388,7 +366,6 @@
         #endregion
         private Label label2;
         private Panel cardOHTCallLog;
-        private Panel cardOHTWaitingQue;
         private Panel cardOHTMonitoring;
         private Panel cardOHTCall;
         private Label lblAutoCallStatus;
@@ -409,7 +386,6 @@
         private DataGridViewTextBoxColumn colTarget;
         private DataGridViewTextBoxColumn colJob;
         private DataGridViewTextBoxColumn colUpdatedAt;
-        private Label label3;
         private Label label8;
         private ListView lvCallHistory;
         private ColumnHeader columnHeader1;

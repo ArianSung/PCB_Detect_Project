@@ -183,6 +183,10 @@ namespace pcb_monitoring_program
             btnStop.UseVisualStyleBackColor = false;
             btnStop.ForeColor = Color.FromArgb(255, 128, 128);
             ApplyRolePermissions();
+
+            pnlStatus.BackColor = Color.Gold;  // 초록
+            lblStatus.Text = "대기중";
+            lblStatus.ForeColor = Color.White;
         }
 
         private void timerClock_Tick(object sender, EventArgs e)
@@ -205,6 +209,12 @@ namespace pcb_monitoring_program
             pnlStatus.BackColor = Color.LimeGreen;  // 초록
             lblStatus.Text = "가동중";
             lblStatus.ForeColor = Color.White;
+            MessageBox.Show(
+        "검출 프로그램을 시작합니다.",
+        "알림",
+        MessageBoxButtons.OK,
+        MessageBoxIcon.Information
+    );
         }
 
         private void btnStop_Click(object sender, EventArgs e)
