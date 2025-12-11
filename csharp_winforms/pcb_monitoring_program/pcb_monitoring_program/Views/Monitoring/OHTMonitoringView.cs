@@ -31,7 +31,7 @@ namespace pcb_monitoring_program.Views.Monitoring
             {
                 ["BOX-001"] = "정상",
                 ["BOX-002"] = "부품불량",
-                ["BOX-003"] = "납땜불량",
+                ["BOX-003"] = "S/N 불량",
                 ["BOX-004"] = "폐기",
             };
 
@@ -63,12 +63,12 @@ namespace pcb_monitoring_program.Views.Monitoring
         {
             UiStyleHelper.MakeRoundedPanel(cardOHTMonitoring, radius: 16, back: Color.FromArgb(44, 44, 44));
             UiStyleHelper.MakeRoundedPanel(cardOHTCall, radius: 16, back: Color.FromArgb(44, 44, 44));
-            UiStyleHelper.MakeRoundedPanel(cardOHTWaitingQue, radius: 16, back: Color.FromArgb(44, 44, 44));
+
             UiStyleHelper.MakeRoundedPanel(cardOHTCallLog, radius: 16, back: Color.FromArgb(44, 44, 44));
 
             UiStyleHelper.AddShadowRoundedPanel(cardOHTMonitoring, 16);
             UiStyleHelper.AddShadowRoundedPanel(cardOHTCall, 16);
-            UiStyleHelper.AddShadowRoundedPanel(cardOHTWaitingQue, 16);
+
             UiStyleHelper.AddShadowRoundedPanel(cardOHTCallLog, 16);
 
             UiStyleHelper.MakeRoundedButton(btnAutoCall, 24);
@@ -157,7 +157,7 @@ namespace pcb_monitoring_program.Views.Monitoring
                 {
                     case 0: return "정상";
                     case 1: return "부품불량";
-                    case 2: return "납땜불량";
+                    case 2: return "S/N 불량";
                     case 3: return "폐기";
                 }
             }

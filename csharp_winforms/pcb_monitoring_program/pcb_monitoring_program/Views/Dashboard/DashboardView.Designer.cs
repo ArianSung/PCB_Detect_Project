@@ -58,21 +58,19 @@
             DefectTrendChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
             label5 = new Label();
             cardFrontPCB = new Panel();
-            pictureBox2 = new PictureBox();
+            pb_DashFront = new PictureBox();
             label6 = new Label();
-            cardBackPCB = new Panel();
-            pictureBox3 = new PictureBox();
             label7 = new Label();
+            cardBackPCB = new Panel();
+            pb_DashBack = new PictureBox();
             cardHourly = new Panel();
             panel2 = new Panel();
             panel1 = new Panel();
             HourlyInspectionChart = new System.Windows.Forms.DataVisualization.Charting.Chart();
             label8 = new Label();
             cardLog = new Panel();
-            dataGridView1 = new DataGridView();
+            listBox1 = new ListBox();
             label9 = new Label();
-            cardTop = new Panel();
-            label10 = new Label();
             ((System.ComponentModel.ISupportInitialize)DefectRateChart).BeginInit();
             ((System.ComponentModel.ISupportInitialize)DefectCategoryChart).BeginInit();
             ((System.ComponentModel.ISupportInitialize)DailyTargetChart).BeginInit();
@@ -84,14 +82,12 @@
             cardTrend.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)DefectTrendChart).BeginInit();
             cardFrontPCB.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox2).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)pb_DashFront).BeginInit();
             cardBackPCB.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox3).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)pb_DashBack).BeginInit();
             cardHourly.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)HourlyInspectionChart).BeginInit();
             cardLog.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)dataGridView1).BeginInit();
-            cardTop.SuspendLayout();
             SuspendLayout();
             // 
             // DefectRateChart
@@ -310,22 +306,22 @@
             // 
             // cardFrontPCB
             // 
-            cardFrontPCB.Controls.Add(pictureBox2);
+            cardFrontPCB.Controls.Add(pb_DashFront);
             cardFrontPCB.Controls.Add(label6);
-            cardFrontPCB.Location = new Point(540, 299);
+            cardFrontPCB.Location = new Point(540, 306);
             cardFrontPCB.Name = "cardFrontPCB";
             cardFrontPCB.Size = new Size(500, 250);
             cardFrontPCB.TabIndex = 5;
             // 
-            // pictureBox2
+            // pb_DashFront
             // 
-            pictureBox2.Image = Properties.Resources.PCBFrontEx;
-            pictureBox2.Location = new Point(84, 7);
-            pictureBox2.Name = "pictureBox2";
-            pictureBox2.Size = new Size(400, 240);
-            pictureBox2.SizeMode = PictureBoxSizeMode.StretchImage;
-            pictureBox2.TabIndex = 2;
-            pictureBox2.TabStop = false;
+            pb_DashFront.BackColor = Color.FromArgb(128, 128, 255);
+            pb_DashFront.Location = new Point(140, 7);
+            pb_DashFront.Name = "pb_DashFront";
+            pb_DashFront.Size = new Size(240, 240);
+            pb_DashFront.SizeMode = PictureBoxSizeMode.StretchImage;
+            pb_DashFront.TabIndex = 2;
+            pb_DashFront.TabStop = false;
             // 
             // label6
             // 
@@ -338,25 +334,6 @@
             label6.TabIndex = 1;
             label6.Text = "PCB 앞면";
             // 
-            // cardBackPCB
-            // 
-            cardBackPCB.Controls.Add(pictureBox3);
-            cardBackPCB.Controls.Add(label7);
-            cardBackPCB.Location = new Point(1073, 299);
-            cardBackPCB.Name = "cardBackPCB";
-            cardBackPCB.Size = new Size(500, 250);
-            cardBackPCB.TabIndex = 6;
-            // 
-            // pictureBox3
-            // 
-            pictureBox3.Image = Properties.Resources.PCBBackEx;
-            pictureBox3.Location = new Point(84, 7);
-            pictureBox3.Name = "pictureBox3";
-            pictureBox3.Size = new Size(400, 240);
-            pictureBox3.SizeMode = PictureBoxSizeMode.StretchImage;
-            pictureBox3.TabIndex = 3;
-            pictureBox3.TabStop = false;
-            // 
             // label7
             // 
             label7.AutoSize = true;
@@ -367,6 +344,25 @@
             label7.Size = new Size(78, 21);
             label7.TabIndex = 1;
             label7.Text = "PCB 뒷면";
+            // 
+            // cardBackPCB
+            // 
+            cardBackPCB.Controls.Add(pb_DashBack);
+            cardBackPCB.Controls.Add(label7);
+            cardBackPCB.Location = new Point(1073, 299);
+            cardBackPCB.Name = "cardBackPCB";
+            cardBackPCB.Size = new Size(500, 250);
+            cardBackPCB.TabIndex = 6;
+            // 
+            // pb_DashBack
+            // 
+            pb_DashBack.BackColor = Color.FromArgb(128, 128, 255);
+            pb_DashBack.Location = new Point(143, 7);
+            pb_DashBack.Name = "pb_DashBack";
+            pb_DashBack.Size = new Size(240, 240);
+            pb_DashBack.SizeMode = PictureBoxSizeMode.StretchImage;
+            pb_DashBack.TabIndex = 3;
+            pb_DashBack.TabStop = false;
             // 
             // cardHourly
             // 
@@ -424,20 +420,25 @@
             // 
             // cardLog
             // 
-            cardLog.Controls.Add(dataGridView1);
+            cardLog.Controls.Add(listBox1);
             cardLog.Controls.Add(label9);
-            cardLog.Location = new Point(1073, 579);
+            cardLog.Location = new Point(540, 579);
             cardLog.Name = "cardLog";
-            cardLog.Size = new Size(500, 250);
+            cardLog.Size = new Size(1033, 250);
             cardLog.TabIndex = 8;
             // 
-            // dataGridView1
+            // listBox1
             // 
-            dataGridView1.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            dataGridView1.Location = new Point(15, 36);
-            dataGridView1.Name = "dataGridView1";
-            dataGridView1.Size = new Size(468, 202);
-            dataGridView1.TabIndex = 2;
+            listBox1.BackColor = Color.FromArgb(44, 44, 44);
+            listBox1.BorderStyle = BorderStyle.None;
+            listBox1.ForeColor = SystemColors.Window;
+            listBox1.FormattingEnabled = true;
+            listBox1.ItemHeight = 15;
+            listBox1.Items.AddRange(new object[] { "[2025-12-09 16:32:57,640] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:58,015] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:58,392] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:58,764] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:59,218] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:59,656] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:33:00,044] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:33:00,489] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:33:00,913] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:57,640] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:58,015] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:58,392] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:58,764] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:59,218] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:59,656] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:33:00,044] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:33:00,489] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:33:00,913] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:57,640] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:58,015] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:58,392] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:58,764] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:59,218] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:59,656] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:33:00,044] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:33:00,489] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:33:00,913] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:57,640] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:58,015] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:58,392] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:58,764] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:59,218] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:59,656] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:33:00,044] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:33:00,489] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:33:00,913] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:57,640] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:58,015] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:58,392] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:58,764] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:59,218] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:32:59,656] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:33:00,044] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:33:00,489] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0", "[2025-12-09 16:33:00,913] [INFO] [Arduino-Serial] - ✅ 검증 완료: 시리얼=None, 제품=None, 판정=normal, GPIO=23, 누락=0, 위치오류=0" });
+            listBox1.Location = new Point(133, 37);
+            listBox1.Name = "listBox1";
+            listBox1.Size = new Size(783, 210);
+            listBox1.TabIndex = 2;
             // 
             // label9
             // 
@@ -450,31 +451,11 @@
             label9.TabIndex = 1;
             label9.Text = "실시간 검사 로그 기록";
             // 
-            // cardTop
-            // 
-            cardTop.Controls.Add(label10);
-            cardTop.Location = new Point(540, 579);
-            cardTop.Name = "cardTop";
-            cardTop.Size = new Size(500, 250);
-            cardTop.TabIndex = 8;
-            // 
-            // label10
-            // 
-            label10.AutoSize = true;
-            label10.Font = new Font("맑은 고딕", 12F, FontStyle.Bold, GraphicsUnit.Point, 129);
-            label10.ForeColor = SystemColors.Window;
-            label10.Location = new Point(0, 0);
-            label10.Name = "label10";
-            label10.Size = new Size(170, 21);
-            label10.TabIndex = 1;
-            label10.Text = "상위 불량 원인 TOP 7";
-            // 
             // DashboardView
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(64, 64, 64);
-            Controls.Add(cardTop);
             Controls.Add(cardLog);
             Controls.Add(cardHourly);
             Controls.Add(cardBackPCB);
@@ -504,18 +485,15 @@
             ((System.ComponentModel.ISupportInitialize)DefectTrendChart).EndInit();
             cardFrontPCB.ResumeLayout(false);
             cardFrontPCB.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();
+            ((System.ComponentModel.ISupportInitialize)pb_DashFront).EndInit();
             cardBackPCB.ResumeLayout(false);
             cardBackPCB.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox3).EndInit();
+            ((System.ComponentModel.ISupportInitialize)pb_DashBack).EndInit();
             cardHourly.ResumeLayout(false);
             cardHourly.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)HourlyInspectionChart).EndInit();
             cardLog.ResumeLayout(false);
             cardLog.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)dataGridView1).EndInit();
-            cardTop.ResumeLayout(false);
-            cardTop.PerformLayout();
             ResumeLayout(false);
         }
 
@@ -542,18 +520,16 @@
         private Label label6;
         private Panel cardBackPCB;
         private Label label7;
-        private PictureBox pictureBox2;
-        private PictureBox pictureBox3;
+        private PictureBox pb_DashFront;
+        private PictureBox pb_DashBack;
         private Panel cardHourly;
         private Label label8;
         private System.Windows.Forms.DataVisualization.Charting.Chart HourlyInspectionChart;
         private Panel cardLog;
-        private DataGridView dataGridView1;
         private Label label9;
-        private Panel cardTop;
-        private Label label10;
         private Panel panel2;
         private Panel panel1;
         private FlowLayoutPanel flowLegendRate;
+        private ListBox listBox1;
     }
 }

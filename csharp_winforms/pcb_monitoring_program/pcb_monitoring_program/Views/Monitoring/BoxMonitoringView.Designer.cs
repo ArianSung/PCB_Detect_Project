@@ -66,9 +66,11 @@
             // pictureBox1
             // 
             pictureBox1.BackColor = Color.FromArgb(128, 128, 255);
+            pictureBox1.Image = Properties.Resources.박스사진;
             pictureBox1.Location = new Point(51, 43);
             pictureBox1.Name = "pictureBox1";
             pictureBox1.Size = new Size(640, 616);
+            pictureBox1.SizeMode = PictureBoxSizeMode.StretchImage;
             pictureBox1.TabIndex = 0;
             pictureBox1.TabStop = false;
             // 

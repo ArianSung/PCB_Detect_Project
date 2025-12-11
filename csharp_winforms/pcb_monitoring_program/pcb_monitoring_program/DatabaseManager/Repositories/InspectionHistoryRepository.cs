@@ -18,13 +18,28 @@ namespace pcb_monitoring_program.DatabaseManager.Repositories
 
                 string query = @"
             SELECT
-                inspection_time  AS '검사 시각',
-                camera_id        AS '카메라 ID',
-                defect_type      AS '불량 유형',
-                confidence       AS '정확도',
-                boxes            AS '박스',
-                image_path       AS '이미지 경로',
-                notes            AS '내용'
+                inspection_time        AS `검사 시각`,
+                camera_id              AS `카메라 ID`,
+                product_code           AS `제품 코드`,    -- 여기 추가됨
+
+                CASE decision
+                    WHEN 'normal' THEN '정상'
+                    WHEN 'missing' THEN '부품불량'
+                    WHEN 'position_error' THEN 'S/N 불량'
+                    WHEN 'discard' THEN '폐기'
+                    ELSE decision
+                END AS `불량 유형`,
+
+                detection_count        AS `검출 개수`,
+                avg_confidence         AS `평균 정확도`,
+
+                left_image_path        AS `좌측 이미지`,
+                right_image_path       AS `우측 이미지`,
+
+                missing_count          AS `누락 개수`,
+                position_error_count   AS `위치오류 개수`,
+                extra_count            AS `추가 부품 개수`,
+                notes                  AS `내용`
             FROM inspections
             ORDER BY inspection_time DESC;
         ";

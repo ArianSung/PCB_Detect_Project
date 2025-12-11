@@ -23,6 +23,10 @@ namespace pcb_monitoring_program.Views.UserManagement
         // 👀 비밀번호 보이기 상태
         private bool _isPasswordVisible = false;
 
+        // ✅ 아이디 중복확인 상태
+        private bool _isIdChecked = false;
+        private string _checkedUsername = string.Empty;
+
         public UserManagementForm_AddUser()
         {
             InitializeComponent();
@@ -58,6 +62,16 @@ namespace pcb_monitoring_program.Views.UserManagement
             btn_UM_Add_PW.BackColor = Color.Transparent;
             btn_UM_Add_PW.Text = "";
             btn_UM_Add_PW.ImageAlign = ContentAlignment.MiddleCenter;
+
+            // 아이디가 바뀌면 중복확인 상태 초기화
+            textbox_UM_ADD_ID.TextChanged += textbox_UM_ADD_ID_TextChanged;
+        }
+
+        private void textbox_UM_ADD_ID_TextChanged(object sender, EventArgs e)
+        {
+            // 아이디가 한 글자라도 바뀌면 다시 중복확인 필요
+            _isIdChecked = false;
+            _checkedUsername = string.Empty;
         }
 
         // ✅ 비밀번호 해시 (SHA256)
@@ -75,6 +89,15 @@ namespace pcb_monitoring_program.Views.UserManagement
             string fullName = textbox_UM_ADD_Name.Text.Trim();   // ← 실제 텍스트박스 이름에 맞게 수정
             string role = kComboBox_UM_ADD_Role.SelectedItem?.ToString();
             bool isActive = CB_UM_ADD_Active_True.Checked;
+
+            // 0) 중복확인 성공했는지 먼저 체크
+            if (!_isIdChecked || !string.Equals(_checkedUsername, username, StringComparison.Ordinal))
+            {
+                MessageBox.Show("아이디 중복확인을 먼저 진행하세요.", "알림",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                textbox_UM_ADD_ID.Focus();
+                return;
+            }
 
             // 1) 기본 검증
             if (string.IsNullOrWhiteSpace(username))
@@ -236,6 +259,9 @@ namespace pcb_monitoring_program.Views.UserManagement
                 {
                     MessageBox.Show($"'{username}'은(는) 사용 가능한 아이디입니다.", "확인 완료",
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    // ✅ 이 아이디로 중복확인 성공
+                    _isIdChecked = true;
+                    _checkedUsername = username;
                 }
             }
             catch (Exception ex)

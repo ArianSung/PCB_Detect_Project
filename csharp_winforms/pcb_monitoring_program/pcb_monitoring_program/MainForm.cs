@@ -33,15 +33,18 @@ namespace pcb_monitoring_program
         public MainForm()
         {
             InitializeComponent();
+
+            pnlStatus.Resize += pnlStatus_Resize;
+            pnlStatus_Resize(pnlStatus, EventArgs.Empty);
         }
 
         // ⭐ 새로 추가된 생성자: 로그인 폼에서 호출될 예정
-        public MainForm(string username, string role) : this() // 기존 기본 생성자(InitializeComponent)를 호출
+        public MainForm(string full_name, string role) : this() // 기존 기본 생성자(InitializeComponent)를 호출
         {
-            _currentUsername = username;
+            _currentUsername = full_name;
             _currentUserRole = role;
 
-            labelusername.Text = username;
+            labelusername.Text = full_name;
             labeluserauthority.Text = $"[ {role} ]";
         }
 
@@ -128,8 +131,11 @@ namespace pcb_monitoring_program
 
         private void MainForm_Load(object sender, EventArgs e)
         {
+            UiStyleHelper.MakeRoundedPanel(cardStatus, radius: 16, back: Color.FromArgb(44, 44, 44));
             UiStyleHelper.MakeRoundedPanel(cardLogout, radius: 16, back: Color.FromArgb(44, 44, 44));
+
             UiStyleHelper.AddShadowRoundedPanel(cardLogout, 16);
+            UiStyleHelper.AddShadowRoundedPanel(cardStatus, 16);
 
             labelTitle.Text = "Dashboard";
             UiStyleHelper.MakeRoundedButton(btnDashboard);
@@ -138,6 +144,8 @@ namespace pcb_monitoring_program
             UiStyleHelper.MakeRoundedButton(btnUserManagement);
             UiStyleHelper.MakeRoundedButton(btnSetting);
             UiStyleHelper.MakeRoundedLogoutButton(btnLogout);
+            UiStyleHelper.MakeRoundedButton(btnStart);
+            UiStyleHelper.MakeRoundedButton(btnStop);
 
             // 우하단 드롭섀도우 적용(버튼이 놓인 같은 부모 컨테이너 기준)
             UiStyleHelper.AttachDropShadow(btnDashboard, radius: 20, offset: 6);
@@ -146,11 +154,14 @@ namespace pcb_monitoring_program
             UiStyleHelper.AttachDropShadow(btnUserManagement, 20, 6);
             UiStyleHelper.AttachDropShadow(btnSetting, 20, 6);
             UiStyleHelper.AttachDropShadow(btnLogout, 20, 5);
+            UiStyleHelper.AttachDropShadow(btnStart, 20, 5);
+            UiStyleHelper.AttachDropShadow(btnStop, 20, 5);
 
             timerClock.Start();
 
             foreach (Control ctrl in this.Controls)
             {
+
                 if (ctrl is Button btn)
                 {
                     btn.BackColor = Color.Gray;
@@ -162,13 +173,55 @@ namespace pcb_monitoring_program
             }
             UiStyleHelper.HighlightButton(btnDashboard);
             ShowInPanel(_UcDashboard);
+            btnStart.Tag = "nohighlight";
+            btnStop.Tag = "nohighlight";
 
+            // 색을 명시적으로 고정 (UseVisualStyleBackColor 끄기)
+            btnStart.UseVisualStyleBackColor = false;
+            btnStart.ForeColor = Color.FromArgb(128, 255, 128);
+
+            btnStop.UseVisualStyleBackColor = false;
+            btnStop.ForeColor = Color.FromArgb(255, 128, 128);
             ApplyRolePermissions();
+
+            pnlStatus.BackColor = Color.Gold;  // 초록
+            lblStatus.Text = "대기중";
+            lblStatus.ForeColor = Color.White;
         }
 
         private void timerClock_Tick(object sender, EventArgs e)
         {
             labelTime.Text = DateTime.Now.ToString("yyyy '/' MM '/' dd\n HH : mm");
+        }
+        private void pnlStatus_Resize(object sender, EventArgs e)
+        {
+            var p = (Panel)sender;
+
+            using (var path = new GraphicsPath())
+            {
+                path.AddEllipse(0, 0, p.Width - 1, p.Height - 1);
+                p.Region = new Region(path);
+            }
+        }
+
+        private void btnStart_Click(object sender, EventArgs e)
+        {
+            pnlStatus.BackColor = Color.LimeGreen;  // 초록
+            lblStatus.Text = "가동중";
+            lblStatus.ForeColor = Color.White;
+            MessageBox.Show(
+        "검출 프로그램을 시작합니다.",
+        "알림",
+        MessageBoxButtons.OK,
+        MessageBoxIcon.Information
+    );
+        }
+
+        private void btnStop_Click(object sender, EventArgs e)
+        {
+            pnlStatus.BackColor = Color.Red; // 빨강
+            lblStatus.Text = "비상정지";
+            lblStatus.ForeColor = Color.White;
         }
     }
 }
