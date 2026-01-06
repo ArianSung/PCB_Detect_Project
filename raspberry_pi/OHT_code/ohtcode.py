@@ -1,19 +1,16 @@
 import pigpio
 import time
 import sys
+import requests
 
-# ==========================================
-# 1. 핀 맵핑 & 하드웨어 설정
-# ==========================================
+# 1. 핀 맵핑 및 하드웨어 설정
 X_DIR = 17; X_STEP = 27
 Z_DIR = 22; Z_STEP = 23
 SERVO_PIN = 18
 LIMIT_PIN = 5
 
-# ==========================================
-# 2. 설정값
-# ==========================================
-X_CW = 1; X_CCW = 0
+# 2. 동작 설정값
+X_CW = 1; X_CCW = 0  # CW: 오른쪽(슬롯 방향), CCW: 왼쪽(창고 방향)
 Z_UP = 1; Z_DOWN = 0
 
 LIFT_STEPS = 925
@@ -26,26 +23,37 @@ Z_ACCEL_STEPS = 50
 ANGLE_OPEN = 500
 ANGLE_LOCK = 1500
 
+# 서버 설정
+FLASK_IP = "http://100.80.24.53:5000"
+URL_GET_COMMAND = f"{FLASK_IP}/get_oht_command"
+URL_UPDATE_STATUS = f"{FLASK_IP}/update_oht_status" # 상태 보고용 엔드포인트
+
 pi = pigpio.pi()
 
 if not pi.connected:
-    exit()
+    print("pigpio daemon 연결 실패")
+    sys.exit()
 
 def setup():
     for pin in [X_DIR, X_STEP, Z_DIR, Z_STEP]:
         pi.set_mode(pin, pigpio.OUTPUT)
-
-    # 리미트 스위치 (풀다운: 평소 0, 눌리면 1)
-    pi.set_mode(LIMIT_PIN, pigpio.INPUT)
+    pi.set_mode(LIMIT_PIN, pi.INPUT)
     pi.set_pull_up_down(LIMIT_PIN, pigpio.PUD_DOWN)
-
     pi.write(X_STEP, 0); pi.write(Z_STEP, 0)
     pi.set_servo_pulsewidth(SERVO_PIN, ANGLE_OPEN)
     time.sleep(0.5)
 
-# ==========================================
+# 서버에 현재 상태를 보고하는 함수
+def report_status(status, slot=None):
+    try:
+        data = {"status": status, "slot": slot}
+        response = requests.post(URL_UPDATE_STATUS, json=data, timeout=2)
+        if response.status_code == 200:
+            print(f"[상태 보고 완료] {status} (Slot: {slot})")
+    except Exception as e:
+        print(f"[상태 보고 실패] {e}")
+
 # 3. 단위 동작 함수
-# ==========================================
 def control_servo(action):
     if action == "LOCK":
         pi.set_servo_pulsewidth(SERVO_PIN, ANGLE_LOCK)
@@ -62,101 +70,97 @@ def move_z(direction, total_steps):
     current_delay = 1.0 / Z_MIN_SPEED
     min_delay = 1.0 / Z_TARGET_SPEED
 
-    # 가속
     for i in range(accel_dist):
         pi.write(Z_STEP, 1); time.sleep(0.000005); pi.write(Z_STEP, 0)
         current_delay = current_delay - ((current_delay - min_delay) / (accel_dist - i + 1))
         time.sleep(current_delay)
-    
-    # 등속
     for _ in range(const_dist):
         pi.write(Z_STEP, 1); time.sleep(0.000005); pi.write(Z_STEP, 0)
         time.sleep(min_delay)
-    
-    # 감속
     for i in range(accel_dist):
         pi.write(Z_STEP, 1); time.sleep(0.000005); pi.write(Z_STEP, 0)
         current_delay = current_delay + ((1.0/Z_MIN_SPEED - min_delay) / (accel_dist - i + 1))
         time.sleep(current_delay)
 
-# ==========================================
-# [핵심] 스마트 타겟팅 이동 함수 (엣지 검출)
-# ==========================================
+# 목표 슬롯으로 이동 (오른쪽 방향)
 def move_x_to_target(target_count):
-    pi.write(X_DIR, X_CW) # 오른쪽 이동
-    print(f" [이동] 목표: {target_count}번째 위치로 출발!")
-
+    pi.write(X_DIR, X_CW)
     current_count = 0
-    last_state = pi.read(LIMIT_PIN) # 초기 상태 읽기
+    last_state = pi.read(LIMIT_PIN)
 
     while True:
-        # 1. 모터 계속 회전 (멈추지 않음)
-        pi.write(X_STEP, 1)
-        time.sleep(0.00001)
-        pi.write(X_STEP, 0)
+        pi.write(X_STEP, 1); time.sleep(0.00001); pi.write(X_STEP, 0)
         time.sleep(X_SPEED_DELAY)
-
-        # 2. 현재 스위치 상태 확인
         current_state = pi.read(LIMIT_PIN)
-
-        # 3. 엣지 검출 (0 -> 1 : 눌리는 순간)
         if last_state == 0 and current_state == 1:
             current_count += 1
-            print(f" 🔔 딸! (현재 위치: {current_count}번)")
-
-            # [중요] 여기가 목표인지 확인 (눌렸을 때만 체크)
             if current_count == target_count:
-                print(f" 🛑 목표({target_count}번) 도착! 정지합니다.")
                 break
-            else:
-                print(f" -> 목표 아님 ({target_count}번 아님). 계속 갑니다.")
-
-        # 4. 상태 업데이트
         last_state = current_state
-
     time.sleep(0.5)
 
-# ==========================================
-# 4. 메인 실행 (Flask 명령 시뮬레이션)
-# ==========================================
+# 창고(홈) 위치로 이동 (왼쪽 방향)
+def move_x_to_home(current_slot):
+    pi.write(X_DIR, X_CCW)
+    print(f"창고로 복귀 시작 (현재 위치: {current_slot})")
+    
+    passed_count = 0
+    last_state = pi.read(LIMIT_PIN)
+
+    while passed_count < current_slot:
+        pi.write(X_STEP, 1); time.sleep(0.00001); pi.write(X_STEP, 0)
+        time.sleep(X_SPEED_DELAY)
+        current_state = pi.read(LIMIT_PIN)
+        if last_state == 0 and current_state == 1:
+            passed_count += 1
+        last_state = current_state
+    time.sleep(0.5)
+
+# 4. 메인 시퀀스
 try:
     setup()
+    is_working = False
 
-    # ----------------------------------------------------
-    FLASK_COMMAND = 3
+    print(f"OHT 시스템 가동 (Server: {FLASK_IP})")
     
-    print(f"\n=== OHT 스마트 타겟팅 테스트 (목표: {FLASK_COMMAND}) ===")
-    time.sleep(2)
+    while True:
+        if not is_working:
+            try:
+                response = requests.get(URL_GET_COMMAND, timeout=2)
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('command') == 'START':
+                        target_slot = data.get('slot')
+                        is_working = True
+                        
+                        # [시작 보고]
+                        report_status("MOVING_TO_SLOT", target_slot)
 
-    # 1. 초기화
-    print("\n1️⃣ [초기화]")
-    control_servo("OPEN")
-    move_z(Z_UP, LIFT_STEPS)
-    time.sleep(1)
+                        # 1. 목표 슬롯으로 이동
+                        move_x_to_target(target_slot)
+                        report_status("ARRIVED_AT_SLOT", target_slot)
 
-    # 2. X축 이동 (엣지 검출 & 타겟팅)
-    print(f"\n2️⃣ [이동] {FLASK_COMMAND}번 위치까지 이동")
-    move_x_to_target(FLASK_COMMAND)
-    
-    time.sleep(1)
+                        # 2. 적재(Pick-up) 작업
+                        move_z(Z_DOWN, LIFT_STEPS)
+                        control_servo("LOCK")
+                        move_z(Z_UP, LIFT_STEPS)
+                        report_status("LOAD_COMPLETE", target_slot)
 
-    # 3. 픽업
-    print("\n3️⃣ [픽업]")
-    move_z(Z_DOWN, LIFT_STEPS)
-    control_servo("LOCK")
-    move_z(Z_UP, LIFT_STEPS)
-    time.sleep(2)
+                        # 3. 창고로 이동 및 도착 보고
+                        report_status("MOVING_TO_WAREHOUSE")
+                        move_x_to_home(target_slot)
+                        report_status("ARRIVED_AT_WAREHOUSE")
 
-    # 4. 하차 (제자리)
-    print("\n4️⃣ [하차]")
-    move_z(Z_DOWN, LIFT_STEPS)
-    control_servo("OPEN")
-    move_z(Z_UP, LIFT_STEPS)
-
-    print("\n✨ 종료.")
+                        is_working = False
+                        print("전체 공정 완료. 대기 모드.")
+                
+            except Exception as e:
+                time.sleep(1)
+        
+        time.sleep(0.5)
 
 except KeyboardInterrupt:
-    print("\n>> 비상 정지!")
+    print("\n종료")
 finally:
     pi.write(X_STEP, 0); pi.write(Z_STEP, 0)
     pi.set_servo_pulsewidth(SERVO_PIN, 0)
